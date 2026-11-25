@@ -1,0 +1,475 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #020617;
+}
+
+canvas {
+  display: block;
+  outline: none;
+}
+
+@keyframes float-damage {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -20%) scale(0.65);
+  }
+  16% {
+    opacity: 1;
+    transform: translate(-50%, -55%) scale(1.16);
+  }
+  32% {
+    opacity: 1;
+    transform: translate(-50%, -72%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -145%) scale(0.92);
+  }
+}
+
+@keyframes perfect-dodge-flash {
+  0% {
+    opacity: 0.72;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-float-damage {
+  animation: float-damage 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-perfect-dodge-flash {
+  animation: perfect-dodge-flash 0.65s ease-out forwards;
+}
+
+@keyframes reaction-banner-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.82) skewX(-6deg);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06) skewX(-6deg);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(0) scale(1) skewX(-6deg);
+  }
+  85% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1) skewX(-6deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96) skewX(-6deg);
+  }
+}
+
+.animate-reaction-banner {
+  animation: reaction-banner-pop 2.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ===== Tokusatsu Game Armory HUD Primitives ===== */
+.font-game-display {
+  font-family: 'Orbitron', 'Chakra Petch', ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-game-ui {
+  font-family: 'Chakra Petch', ui-sans-serif, system-ui, sans-serif;
+}
+
+.game-chamfer {
+  clip-path: polygon(
+    14px 0%,
+    100% 0%,
+    100% calc(100% - 14px),
+    calc(100% - 14px) 100%,
+    0% 100%,
+    0% 14px
+  );
+}
+
+.game-chamfer-sm {
+  clip-path: polygon(
+    9px 0%,
+    100% 0%,
+    100% calc(100% - 9px),
+    calc(100% - 9px) 100%,
+    0% 100%,
+    0% 9px
+  );
+}
+
+.game-chamfer-tr {
+  clip-path: polygon(
+    0% 0%,
+    calc(100% - 10px) 0%,
+    100% 10px,
+    100% 100%,
+    8px 100%,
+    0% calc(100% - 8px)
+  );
+}
+
+.game-skew-cta {
+  clip-path: polygon(16px 0%, 100% 0%, calc(100% - 16px) 100%, 0% 100%);
+}
+
+.game-hex {
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0% 50%);
+}
+
+.game-hud-surface {
+  background:
+    linear-gradient(145deg, rgba(10, 17, 34, 0.84) 0%, rgba(5, 9, 20, 0.78) 100%),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.015) 0px,
+      rgba(255, 255, 255, 0.015) 2px,
+      transparent 2px,
+      transparent 6px
+    );
+  backdrop-filter: blur(10px);
+}
+
+.game-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.025) 0px,
+    rgba(255, 255, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+@keyframes henshin-sheen {
+  0% {
+    transform: translateX(-140%) skewX(-24deg);
+  }
+  55%,
+  100% {
+    transform: translateX(260%) skewX(-24deg);
+  }
+}
+
+.animate-henshin-sheen {
+  animation: henshin-sheen 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.game-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 189, 248, 0.4) transparent;
+}
+
+.game-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.game-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.game-scroll::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.4);
+  border-radius: 2px;
+}
+
+.game-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.75);
+}
+
+/* ===== Hybrid Tokusatsu Ultimate Finisher Cut-In (3.5s 3-Beat Timeline) ===== */
+@keyframes cutin-stage-timeline {
+  0% {
+    opacity: 0;
+    clip-path: polygon(0 46%, 100% 42%, 100% 58%, 0 54%);
+  }
+  6% {
+    opacity: 1;
+    clip-path: polygon(0 8%, 100% 0%, 100% 92%, 0 100%);
+  }
+  39% {
+    opacity: 1;
+    clip-path: polygon(0 8%, 100% 0%, 100% 92%, 0 100%);
+  }
+  44% {
+    opacity: 0;
+    clip-path: polygon(100% 0%, 100% 0%, 100% 100%, 100% 100%);
+  }
+  100% {
+    opacity: 0;
+    clip-path: polygon(100% 0%, 100% 0%, 100% 100%, 100% 100%);
+  }
+}
+
+@keyframes cutin-visor-pan {
+  0% {
+    transform: scale(1.26) translateX(-4%) skewX(-4deg);
+    filter: brightness(1.6) contrast(1.25);
+  }
+  12% {
+    transform: scale(1.06) translateX(0%) skewX(-2deg);
+    filter: brightness(1.12) contrast(1.18);
+  }
+  40% {
+    transform: scale(1.13) translateX(2.5%) skewX(-2deg);
+    filter: brightness(1.25) contrast(1.22);
+  }
+  100% {
+    transform: scale(1.18) translateX(4%) skewX(-2deg);
+  }
+}
+
+@keyframes cutin-title-slam {
+  0% {
+    opacity: 0;
+    transform: translateX(-5%) scale(1.24) skewX(-10deg);
+    letter-spacing: 0.24em;
+  }
+  10% {
+    opacity: 1;
+    transform: translateX(0%) scale(1) skewX(-8deg);
+    letter-spacing: 0.12em;
+  }
+  38% {
+    opacity: 1;
+    transform: translateX(1.5%) scale(1.02) skewX(-8deg);
+    letter-spacing: 0.14em;
+  }
+  44% {
+    opacity: 0;
+    transform: translateX(12%) scale(1.12) skewX(-10deg);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cutin-slash-wipe {
+  0%,
+  37% {
+    opacity: 0;
+    transform: translateX(-120%) rotate(-18deg) scaleY(0.15);
+  }
+  40% {
+    opacity: 1;
+    transform: translateX(-10%) rotate(-18deg) scaleY(1.35);
+  }
+  44% {
+    opacity: 1;
+    transform: translateX(25%) rotate(-18deg) scaleY(2.6);
+  }
+  49% {
+    opacity: 0;
+    transform: translateX(120%) rotate(-18deg) scaleY(0.4);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cutin-impact-flash {
+  0%,
+  40.5% {
+    opacity: 0;
+  }
+  42% {
+    opacity: 0.92;
+  }
+  44.5% {
+    opacity: 0.12;
+  }
+  46% {
+    opacity: 0.72;
+  }
+  53% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes cutin-speedlines-scroll {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: -320px 140px;
+  }
+}
+
+@keyframes cutin-letterbox-in {
+  0% {
+    transform: scaleY(0);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes cutin-climax-caption {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.92);
+  }
+  48% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  92% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+.animate-cutin-stage {
+  animation: cutin-stage-timeline 3.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-cutin-visor {
+  animation: cutin-visor-pan 3.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-cutin-title {
+  animation: cutin-title-slam 3.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-cutin-slash {
+  animation: cutin-slash-wipe 3.5s ease-out forwards;
+}
+
+.animate-cutin-impact-flash {
+  animation: cutin-impact-flash 3.5s linear forwards;
+}
+
+.animate-cutin-speedlines {
+  background-image: repeating-linear-gradient(
+    -18deg,
+    rgba(255, 255, 255, 0.16) 0px,
+    rgba(255, 255, 255, 0.16) 2px,
+    transparent 2px,
+    transparent 16px,
+    rgba(255, 255, 255, 0.08) 16px,
+    rgba(255, 255, 255, 0.08) 21px,
+    transparent 21px,
+    transparent 44px
+  );
+  background-size: 320px 140px;
+  animation: cutin-speedlines-scroll 0.28s linear infinite;
+}
+
+.animate-cutin-letterbox {
+  animation: cutin-letterbox-in 0.22s ease-out forwards;
+}
+
+.animate-cutin-climax-caption {
+  animation: cutin-climax-caption 3.5s ease-out forwards;
+}
+
+/* ===== Stage Cleared / Mission Failed Cut-In & Gaming Result HUD ===== */
+@keyframes outcome-ribbon-slam {
+  0% {
+    opacity: 0;
+    clip-path: polygon(0 48%, 100% 46%, 100% 54%, 0 52%);
+    transform: scaleX(1.18);
+  }
+  12% {
+    opacity: 1;
+    clip-path: polygon(0 18%, 100% 10%, 100% 82%, 0 90%);
+    transform: scaleX(1);
+  }
+  84% {
+    opacity: 1;
+    clip-path: polygon(0 18%, 100% 10%, 100% 82%, 0 90%);
+    transform: scaleX(1.02);
+  }
+  100% {
+    opacity: 0;
+    clip-path: polygon(0 0%, 100% 0%, 100% 100%, 0 100%);
+    transform: scaleX(1.06);
+  }
+}
+
+@keyframes outcome-title-slam {
+  0% {
+    opacity: 0;
+    transform: translateX(-10%) scale(1.32) skewX(-10deg);
+    letter-spacing: 0.34em;
+  }
+  16% {
+    opacity: 1;
+    transform: translateX(0%) scale(1) skewX(-8deg);
+    letter-spacing: 0.14em;
+  }
+  84% {
+    opacity: 1;
+    transform: translateX(1.5%) scale(1.03) skewX(-8deg);
+    letter-spacing: 0.18em;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(6%) scale(1.08) skewX(-8deg);
+  }
+}
+
+@keyframes outcome-rank-stamp {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) rotate(-16deg);
+  }
+  58% {
+    opacity: 1;
+    transform: scale(0.92) rotate(3deg);
+  }
+  78% {
+    opacity: 1;
+    transform: scale(1.05) rotate(-1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes outcome-panel-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-outcome-ribbon {
+  animation: outcome-ribbon-slam 2.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-outcome-title {
+  animation: outcome-title-slam 2.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-outcome-rank {
+  animation: outcome-rank-stamp 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
+}
+
+.animate-outcome-panel {
+  animation: outcome-panel-enter 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

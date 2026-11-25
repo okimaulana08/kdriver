@@ -1,0 +1,269 @@
+export type ElementId =
+  | 'pyro'
+  | 'volt'
+  | 'aqua'
+  | 'terra'
+  | 'aero'
+  | 'flora'
+  | 'solar'
+  | 'lunar'
+  | 'umbra'
+  | 'lux';
+
+export type StarterElementId = Extract<ElementId, 'pyro' | 'volt' | 'aqua'>;
+
+export type WeaponArchetype = 'FAST_MELEE' | 'HEAVY_MELEE' | 'POLEARM' | 'RANGED';
+export type StatusEffectId = 'BURN' | 'SHOCK' | 'WET' | 'ROOT' | 'MARK';
+export type ReactionId = 'ELECTRO_SURGE' | 'STEAM_BURST' | 'OVERLOAD' | 'WILDFIRE' | 'ECLIPSE';
+export type FormTier = 'BASIC' | 'SUPER' | 'ULTIMATE';
+export type EnemyTier = 'MINION' | 'ELITE' | 'MINI_BOSS' | 'BOSS';
+
+export type ScreenMode = 'HUB' | 'ARENA' | 'RESULT';
+export type RankGrade = 'S' | 'A' | 'B' | 'C';
+
+export type PlayerStateId =
+  | 'IDLE'
+  | 'MOVE'
+  | 'ATTACK_1'
+  | 'ATTACK_2'
+  | 'ATTACK_3'
+  | 'ELEMENT_SKILL'
+  | 'FORM_SWITCH'
+  | 'DODGE'
+  | 'HENSHIN_SUPER'
+  | 'ULTIMATE_CINEMATIC'
+  | 'HITSTUN'
+  | 'DEAD';
+
+export type InputAction =
+  | 'ATTACK'
+  | 'DODGE'
+  | 'SKILL'
+  | 'PET'
+  | 'HENSHIN'
+  | 'FINISHER'
+  | 'SWITCH_1'
+  | 'SWITCH_2'
+  | 'SWITCH_3'
+  | 'LOCK_ON';
+
+export interface WeaponConfig {
+  id: string;
+  name: string;
+  archetype: WeaponArchetype;
+  baseDamage: number;
+  comboMultipliers: [number, number, number];
+  attackSpeed: number;
+  hitStopMs: number;
+  range: number;
+  gaugePerHit: number;
+  modelPath?: string; // Opsional di fase Greybox (fallback ke procedural mesh)
+}
+
+export interface PetConfig {
+  id: string;
+  name: string;
+  passiveDescription: string;
+  passiveBonus: { stat: 'atk' | 'speed' | 'gaugeGain' | 'regen'; value: number };
+  assistCooldown: number;
+  assistDamageMultiplier: number;
+  appliesStatus: StatusEffectId;
+  modelPath?: string;
+}
+
+export interface ElementConfig {
+  id: ElementId;
+  name: string;
+  primaryColor: string;
+  emissiveColor: string;
+  statusApplied: StatusEffectId;
+  weapon: WeaponConfig;
+  pet: PetConfig;
+  skill: {
+    name: string;
+    cooldown: number;
+    damageMultiplier: number;
+    radius: number;
+  };
+  finisherName: string;
+}
+
+export interface EnemyConfig {
+  id: string;
+  name: string;
+  tier: EnemyTier;
+  maxHp: number;
+  maxGuard: number; // 0 jika tidak punya Super Armor
+  defense: number;
+  moveSpeed: number;
+  attackDamage: number;
+  telegraphDurationSec: number;
+  scale: number;
+  color: string;
+}
+
+export type StageId =
+  | 'stage_01_nexus_arena'
+  | 'stage_02_volcanic_crater'
+  | 'stage_03_forest_ruins';
+
+export type ArenaThemeId = 'coastal_quarry' | 'volcanic_crater' | 'forest_ruins';
+
+export interface WaveSpawnEntry {
+  enemyId:
+    | 'shadow_grunt'
+    | 'armored_brute'
+    | 'obsidian_kaijin'
+    | 'magma_overlord'
+    | 'sylvan_sovereign';
+  count: number;
+}
+
+export interface WaveConfig {
+  waveNumber: number;
+  title: string;
+  subtitle: string;
+  spawns: readonly WaveSpawnEntry[];
+}
+
+export interface StageConfig {
+  id: StageId;
+  name: string;
+  subtitle: string;
+  arenaTheme: ArenaThemeId;
+  accentColor: string;
+  recommendedLevel: number;
+  shardReward: number;
+  bossDropPool: readonly ElementId[];
+  waves: readonly WaveConfig[];
+}
+
+export interface StageStats {
+  stageId?: StageId;
+  victory: boolean;
+  clearTimeSec: number;
+  damageTaken: number;
+  reactionsTriggered: number;
+  perfectDodges: number;
+  maxCombo: number;
+  defeatedBossWithFinisher: boolean;
+}
+
+export interface StageResult extends StageStats {
+  score: number;
+  rank: RankGrade;
+  isNewBest: boolean;
+  shardsEarned: number;
+  unlockedElementDrop: ElementId | null;
+}
+
+export interface SaveRecord {
+  bestRank: RankGrade | null;
+  bestScore: number;
+  fastestClearSec: number | null;
+  totalClears: number;
+  loadoutOrder: [ElementId, ElementId, ElementId];
+  selectedStageId: StageId;
+  unlockedElements: ElementId[];
+  gemLevels: Partial<Record<ElementId, number>>;
+  gemShards: number;
+  clearedStageIds: StageId[];
+}
+
+export interface EnemyHudSnapshot {
+  id: string;
+  name: string;
+  tier: EnemyTier;
+  hp: number;
+  maxHp: number;
+  guard: number;
+  maxGuard: number;
+  isStaggered: boolean;
+  isTelegraphing: boolean;
+  bossPhase: 1 | 2;
+  statuses: ActiveStatusSnapshot[];
+}
+
+export interface Vec3Snapshot {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface ActiveStatusSnapshot {
+  id: StatusEffectId;
+  remainingSec: number;
+  durationSec: number;
+}
+
+export interface ReactionSpec {
+  readonly id: ReactionId;
+  readonly displayName: string;
+  readonly subtitle: string;
+  readonly requiredStatus: StatusEffectId;
+  readonly triggerElement: ElementId;
+  readonly damageMultiplier: number;
+  readonly guardDamageMultiplier: number;
+  readonly gaugeMultiplier: number;
+  readonly radius: number;
+  readonly knockbackForce: number;
+  readonly microExplosionCount: number;
+  readonly ignoresDefense: boolean;
+  readonly accentColor: string;
+}
+
+export interface ReactionBannerEvent {
+  id: number;
+  reactionId: ReactionId;
+  title: string;
+  subtitle: string;
+  accentColor: string;
+  createdAtMs: number;
+}
+
+export interface DamageCalculationInput {
+  baseDamage: number;
+  skillMultiplier: number;
+  formTier: FormTier;
+  reactionMultiplier?: number;
+  targetDefense: number;
+  targetStaggered?: boolean;
+  targetStatuses?: readonly StatusEffectId[];
+  baseCritChance?: number;
+  ignoresDefense?: boolean;
+  /** Deterministic roll in [0, 1) for unit tests; defaults to Math.random(). */
+  critRoll?: number;
+}
+
+export interface DamageCalculationResult {
+  finalDamage: number;
+  isCrit: boolean;
+  critChance: number;
+  effectiveDefense: number;
+}
+
+export type FloatingTextKind =
+  | 'normal'
+  | 'crit'
+  | 'dodge'
+  | 'playerHit'
+  | 'reaction'
+  | 'heal'
+  | 'info';
+
+export interface FloatingCombatText {
+  id: number;
+  text: string;
+  subtext?: string;
+  xPct: number;
+  yPct: number;
+  kind: FloatingTextKind;
+  createdAtMs: number;
+}
+
+export interface HurtboxTarget {
+  readonly id: string;
+  readonly radius: number;
+  readonly isAlive: boolean;
+  getPosition(out: Vec3Snapshot): Vec3Snapshot;
+}

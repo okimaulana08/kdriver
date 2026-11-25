@@ -1,0 +1,96 @@
+{
+  "rider": {
+    "modelUrl": "/assets/models/custom/rider.glb",
+    "targetHeightMeters": 1.84,
+    "animationUrls": {
+      "idle": null,
+      "move": null,
+      "attack1": null,
+      "attack2": null,
+      "attack3": null,
+      "dodge": null,
+      "skill": null,
+      "hitstun": null,
+      "henshin": null,
+      "ultimate": null,
+      "death": null
+    }
+  },
+  "rider_super": {
+    "modelUrl": "/assets/models/custom/rider_super.glb",
+    "targetHeightMeters": 1.94,
+    "animationUrls": {}
+  },
+  "rider_ultimate": {
+    "modelUrl": "/assets/models/custom/rider_ultimate.glb",
+    "targetHeightMeters": 2.02,
+    "animationUrls": {}
+  },
+  "enemy_grunt": {
+    "modelUrl": "/assets/models/custom/kaijin_grunt.glb",
+    "targetHeightMeters": 1.82,
+    "animationUrls": {}
+  },
+  "enemy_brute": {
+    "modelUrl": "/assets/models/custom/kaijin_brute.glb",
+    "targetHeightMeters": 2.25,
+    "animationUrls": {}
+  },
+  "enemy_boss": {
+    "modelUrl": "/assets/models/custom/kaijin_boss.glb",
+    "targetHeightMeters": 2.75,
+    "animationUrls": {}
+  },
+  "weapon_pyro": {
+    "modelUrl": "/assets/models/custom/weapon_pyro.glb",
+    "targetHeightMeters": 2.1
+  },
+  "weapon_volt": {
+    "modelUrl": "/assets/models/custom/weapon_volt.glb",
+    "targetHeightMeters": 1.28
+  },
+  "weapon_aqua": {
+    "modelUrl": "/assets/models/custom/weapon_aqua.glb",
+    "targetHeightMeters": 2.65
+  },
+  "weapon_terra": {
+    "modelUrl": "/assets/models/custom/weapon_terra.glb",
+    "targetHeightMeters": 2.15
+  },
+  "weapon_aero": {
+    "modelUrl": "/assets/models/custom/weapon_aero.glb",
+    "targetHeightMeters": 1.72
+  },
+  "weapon_flora": {
+    "modelUrl": "/assets/models/custom/weapon_flora.glb",
+    "targetHeightMeters": 1.68
+  },
+  "weapon_solar": {
+    "modelUrl": "/assets/models/custom/weapon_solar.glb",
+    "targetHeightMeters": 2.55
+  },
+  "weapon_lunar": {
+    "modelUrl": "/assets/models/custom/weapon_lunar.glb",
+    "targetHeightMeters": 2.45
+  },
+  "weapon_umbra": {
+    "modelUrl": "/assets/models/custom/weapon_umbra.glb",
+    "targetHeightMeters": 0.4
+  },
+  "weapon_lux": {
+    "modelUrl": "/assets/models/custom/weapon_lux.glb",
+    "targetHeightMeters": 2.65
+  },
+  "pet_phoenix": {
+    "modelUrl": "/assets/models/custom/pet_phoenix.glb",
+    "targetHeightMeters": 1.6
+  },
+  "pet_raiju": {
+    "modelUrl": "/assets/models/custom/pet_raiju.glb",
+    "targetHeightMeters": 1.55
+  },
+  "pet_leviathan": {
+    "modelUrl": "/assets/models/custom/pet_leviathan.glb",
+    "targetHeightMeters": 1.85
+  }
+}

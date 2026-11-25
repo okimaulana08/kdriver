@@ -1,0 +1,23 @@
+# Dependencies & Build Output
+node_modules/
+dist/
+.vercel/
+
+# Uncompressed raw Meshy/Mixamo staging assets & concept sheets
+# (Compressed Draco+WebP runtime assets live in public/assets/)
+docs/raw-models/
+docs/mixamo-ready/
+docs/concept-art/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Editor, OS & Logs
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
