@@ -764,7 +764,7 @@ export class AudioManager {
     this.announceDriverVoice('ULTIMATE AWAKENING!', 0.74, 1.12);
   }
 
-  public playUltimateFinisher(): void {
+  public playUltimateFinisher(isGrandUltimate = false): void {
     const ready = this.ensureReady();
     if (!ready) return;
     const { ctx, out } = ready;
@@ -772,32 +772,55 @@ export class AudioManager {
 
     const riser = ctx.createOscillator();
     riser.type = 'sawtooth';
-    riser.frequency.setValueAtTime(140, now);
-    riser.frequency.exponentialRampToValueAtTime(1280, now + 1.05);
+    riser.frequency.setValueAtTime(isGrandUltimate ? 110 : 140, now);
+    riser.frequency.exponentialRampToValueAtTime(isGrandUltimate ? 1560 : 1280, now + 1.05);
     const rGain = ctx.createGain();
     rGain.gain.setValueAtTime(0.02, now);
-    rGain.gain.linearRampToValueAtTime(0.3, now + 1.0);
+    rGain.gain.linearRampToValueAtTime(isGrandUltimate ? 0.36 : 0.3, now + 1.0);
     rGain.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
     riser.connect(rGain);
     rGain.connect(out);
     riser.start(now);
     riser.stop(now + 1.3);
 
-    const chord = [523.25, 659.25, 783.99, 1046.5];
+    const chord = isGrandUltimate
+      ? [293.66, 440.0, 587.33, 739.99, 880.0, 1174.66]
+      : [523.25, 659.25, 783.99, 1046.5];
     for (let i = 0; i < chord.length; i++) {
       const osc = ctx.createOscillator();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(chord[i]!, now + 1.15);
+      osc.type = isGrandUltimate && i % 2 === 0 ? 'sawtooth' : 'triangle';
+      const onset = now + 1.08 + (isGrandUltimate ? i * 0.045 : 0.07);
+      osc.frequency.setValueAtTime(chord[i]!, onset);
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.24, now + 1.15);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 2.4);
+      gain.gain.setValueAtTime(isGrandUltimate ? 0.2 : 0.24, onset);
+      gain.gain.exponentialRampToValueAtTime(0.001, onset + (isGrandUltimate ? 1.55 : 1.25));
       osc.connect(gain);
       gain.connect(out);
-      osc.start(now + 1.15);
-      osc.stop(now + 2.45);
+      osc.start(onset);
+      osc.stop(onset + 1.6);
     }
 
-    this.announceDriverVoice('MAXIMUM DRIVE! RIDER KICK!', 0.78, 1.16);
+    // Grand Ultimate ONLY: dramatic sub-bass Reality Implosion Drop right before Supernova impact!
+    if (isGrandUltimate) {
+      const drop = ctx.createOscillator();
+      drop.type = 'sine';
+      drop.frequency.setValueAtTime(190, now + 1.66);
+      drop.frequency.exponentialRampToValueAtTime(24, now + 2.38);
+      const dGain = ctx.createGain();
+      dGain.gain.setValueAtTime(0.001, now + 1.66);
+      dGain.gain.linearRampToValueAtTime(0.88, now + 1.88);
+      dGain.gain.exponentialRampToValueAtTime(0.001, now + 2.42);
+      drop.connect(dGain);
+      dGain.connect(out);
+      drop.start(now + 1.66);
+      drop.stop(now + 2.46);
+    }
+
+    this.announceDriverVoice(
+      isGrandUltimate ? 'GRAND ULTIMATE! SOVEREIGN FINISHER!' : 'MAXIMUM DRIVE! RIDER KICK!',
+      isGrandUltimate ? 0.72 : 0.78,
+      isGrandUltimate ? 1.08 : 1.16
+    );
   }
 
   public playRiderKickLaunch(): void {

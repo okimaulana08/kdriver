@@ -278,6 +278,33 @@ canvas {
   }
 }
 
+@keyframes cutin-slash-wipe-counter {
+  0%,
+  26% {
+    opacity: 0;
+    transform: translateX(120%) rotate(18deg) scaleY(0.15);
+  }
+  29% {
+    opacity: 1;
+    transform: translateX(10%) rotate(18deg) scaleY(1.35);
+  }
+  32% {
+    opacity: 1;
+    transform: translateX(-25%) rotate(18deg) scaleY(2.4);
+  }
+  37% {
+    opacity: 0;
+    transform: translateX(-120%) rotate(18deg) scaleY(0.4);
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-cutin-slash-counter {
+  animation: cutin-slash-wipe-counter 3.5s linear forwards;
+}
+
 @keyframes cutin-impact-flash {
   0%,
   52% {

@@ -41,27 +41,50 @@ export function FinisherCutIn({
   const emissive = cfg.emissiveColor;
   const hueDeg = CUTIN_HUE_ROTATE_DEG[elementId];
 
+  const borderAccent = fromUltimate ? '#fde047' : emissive;
+  const displayTitle = fromUltimate ? `OMEGA ${finisherTitle}` : finisherTitle;
+
   return (
     <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden select-none">
-      {/* Beat 1 (0.0s - 1.45s): Full-Screen Slanted Tokusatsu Cut-In Stage */}
+      {/* Beat 1 (0.0s - 1.08s): Full-Screen Slanted Tokusatsu Cut-In Stage */}
       <div
         className="animate-cutin-stage absolute inset-0 flex items-center justify-center overflow-hidden"
         style={{
-          background: `radial-gradient(ellipse at 52% 48%, ${primary}cc 0%, #030712f2 68%, #020617 100%)`,
+          background: fromUltimate
+            ? `radial-gradient(ellipse at 52% 48%, #f59e0bcc 0%, ${primary}99 38%, #020617f6 76%, #020617 100%)`
+            : `radial-gradient(ellipse at 52% 48%, ${primary}cc 0%, #030712f2 68%, #020617 100%)`,
         }}
       >
         {/* High-Velocity Diagonal Tokusatsu Speedlines */}
-        <div className="animate-cutin-speedlines absolute inset-[-10%] opacity-65 mix-blend-screen" />
+        <div className="animate-cutin-speedlines absolute inset-[-10%] opacity-70 mix-blend-screen" />
+
+        {/* Grand Ultimate Form ONLY: Imperial Golden Reality-Shatter Prism Rays */}
+        {fromUltimate && (
+          <div
+            className="absolute inset-0 opacity-55 mix-blend-screen"
+            style={{
+              background: `conic-gradient(from 18deg at 64% 48%, transparent 0deg, #fef08a88 12deg, transparent 26deg, ${emissive}77 64deg, transparent 84deg, #fde047aa 142deg, transparent 165deg, ${emissive}66 220deg, transparent 250deg, #fef08a99 310deg, transparent 340deg)`,
+            }}
+          />
+        )}
 
         {/* Elemental Energy Bands Framing the Cut-In Strip */}
         <div
           className="absolute inset-x-[-8%] top-[14%] h-[72%] -skew-y-3 overflow-hidden border-y-4 shadow-[0_0_80px_rgba(0,0,0,0.9)]"
           style={{
-            borderColor: emissive,
-            background: `linear-gradient(105deg, #020617f5 0%, ${primary}55 48%, #020617f5 100%)`,
-            boxShadow: `0 0 60px ${emissive}88, inset 0 0 90px ${primary}66`,
+            borderColor: borderAccent,
+            background: fromUltimate
+              ? `linear-gradient(105deg, #020617f8 0%, #78350f66 36%, ${primary}66 62%, #020617f8 100%)`
+              : `linear-gradient(105deg, #020617f5 0%, ${primary}55 48%, #020617f5 100%)`,
+            boxShadow: fromUltimate
+              ? `0 0 95px #f59e0baa, 0 0 45px ${emissive}99, inset 0 0 110px #fde04755`
+              : `0 0 60px ${emissive}88, inset 0 0 90px ${primary}66`,
           }}
         >
+          {/* Grand Ultimate Form ONLY: Inner Imperial Gold Rail Trim */}
+          {fromUltimate && (
+            <div className="pointer-events-none absolute inset-x-0 top-2 bottom-2 z-20 border-y border-amber-200/70" />
+          )}
           {/* Layer A: Live-Action Photorealistic Ultimate Rider Visor Illustration (with automatic fallback) */}
           <div className="animate-cutin-visor absolute inset-0 flex items-center justify-center">
             {hasCustomArt ? (
@@ -78,13 +101,31 @@ export function FinisherCutIn({
                         : `hue-rotate(${hueDeg}deg) contrast(1.14) saturate(1.22)`,
                   }}
                 />
-                {/* Subtle Elemental Back-Rim & Spark Accent (preserves rich obsidian blacks & gold metallic speculars!) */}
+                {/* Subtle Elemental Back-Rim & Spark Accent (plus Imperial Gold Anamorphic Flare in Ultimate Form!) */}
                 <div
                   className="absolute inset-0 mix-blend-screen opacity-28"
                   style={{
                     background: `radial-gradient(circle at 66% 45%, ${emissive} 0%, transparent 52%)`,
                   }}
                 />
+                {fromUltimate && (
+                  <>
+                    <div
+                      className="absolute inset-x-0 top-[44%] h-2.5 mix-blend-screen opacity-90"
+                      style={{
+                        background:
+                          'linear-gradient(90deg, transparent 5%, #fde047 38%, #ffffff 64%, #f59e0b 85%, transparent 100%)',
+                        boxShadow: '0 0 38px #fde047, 0 0 72px #ffffff',
+                      }}
+                    />
+                    <div
+                      className="absolute inset-x-0 top-[47%] h-1 mix-blend-screen opacity-75"
+                      style={{
+                        background: `linear-gradient(90deg, transparent 10%, ${emissive} 50%, #ffffff 68%, transparent 95%)`,
+                      }}
+                    />
+                  </>
+                )}
               </div>
             ) : (
               <svg
@@ -204,50 +245,78 @@ export function FinisherCutIn({
             <div className="flex items-center gap-3">
               <span
                 className="game-skew-cta px-4 py-1 font-game-display text-[11px] font-black tracking-[0.28em] text-slate-950 uppercase"
-                style={{ backgroundColor: emissive }}
+                style={{
+                  background: fromUltimate
+                    ? 'linear-gradient(90deg, #fef08a, #f59e0b, #fef08a)'
+                    : emissive,
+                  boxShadow: fromUltimate ? '0 0 24px #fde047' : undefined,
+                }}
               >
-                {fromUltimate ? 'GRAND ULTIMATE DRIVE' : 'MAXIMUM OVERDRIVE'}
+                {fromUltimate ? 'GRAND SOVEREIGN DRIVE // FINAL FORM' : 'MAXIMUM OVERDRIVE'}
               </span>
               <span className="font-game-ui text-xs font-bold tracking-[0.24em] text-slate-200 uppercase">
-                {cfg.name} // {cfg.pet.name}
+                {fromUltimate ? `${cfg.name} // TRINITY CONTRACT BEASTS` : `${cfg.name} // ${cfg.pet.name}`}
               </span>
             </div>
 
             <h1
-              className="mt-3 max-w-3xl font-game-display text-5xl leading-none font-black tracking-wider text-white uppercase italic md:text-7xl"
-              style={{
-                textShadow: `0 0 28px ${emissive}, 0 6px 24px rgba(0,0,0,0.95)`,
-              }}
+              className="mt-3 max-w-3xl font-game-display text-5xl leading-none font-black tracking-wider uppercase italic md:text-7xl"
+              style={
+                fromUltimate
+                  ? {
+                      color: '#fefce8',
+                      textShadow: `0 0 32px #facc15, 0 0 58px ${emissive}, 0 6px 26px rgba(0,0,0,0.98)`,
+                    }
+                  : {
+                      color: '#ffffff',
+                      textShadow: `0 0 28px ${emissive}, 0 6px 24px rgba(0,0,0,0.95)`,
+                    }
+              }
             >
-              {finisherTitle}
+              {displayTitle}
             </h1>
 
             <div className="mt-4 flex items-center gap-3">
               <div
-                className="h-1.5 w-44 rounded-full"
+                className="h-1.5 w-48 rounded-full"
                 style={{
-                  background: `linear-gradient(90deg, #ffffff, ${emissive}, transparent)`,
+                  background: fromUltimate
+                    ? `linear-gradient(90deg, #ffffff, #fde047, ${emissive}, transparent)`
+                    : `linear-gradient(90deg, #ffffff, ${emissive}, transparent)`,
                 }}
               />
               <span
                 className="font-game-display text-xs font-bold tracking-[0.34em] uppercase"
-                style={{ color: emissive }}
+                style={{ color: borderAccent }}
               >
-                SYNCHRONIZED FINISHER ENGAGED
+                {fromUltimate ? 'ORBITAL CATACLYSM SUPERNOVA ENGAGED' : 'SYNCHRONIZED FINISHER ENGAGED'}
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Beat 1 -> Beat 2 Diagonal Blazing Slash Wipe (t = 1.40s - 1.65s) */}
+      {/* Beat 1 -> Beat 2 Diagonal Blazing Slash Wipe (Twin Golden X-Slash for Ultimate Form!) */}
       <div
         className="animate-cutin-slash fixed inset-x-[-20%] top-1/2 -mt-12 h-24"
         style={{
-          background: `linear-gradient(180deg, transparent 0%, ${emissive} 28%, #ffffff 50%, ${emissive} 72%, transparent 100%)`,
-          boxShadow: `0 0 60px ${emissive}, 0 0 110px #ffffff`,
+          background: fromUltimate
+            ? `linear-gradient(180deg, transparent 0%, #f59e0b 24%, #ffffff 50%, #fde047 76%, transparent 100%)`
+            : `linear-gradient(180deg, transparent 0%, ${emissive} 28%, #ffffff 50%, ${emissive} 72%, transparent 100%)`,
+          boxShadow: fromUltimate
+            ? `0 0 80px #fde047, 0 0 130px #ffffff`
+            : `0 0 60px ${emissive}, 0 0 110px #ffffff`,
         }}
       />
+      {fromUltimate && (
+        <div
+          className="animate-cutin-slash-counter fixed inset-x-[-20%] top-1/2 -mt-10 h-20"
+          style={{
+            background: `linear-gradient(180deg, transparent 0%, ${emissive} 25%, #ffffff 50%, ${emissive} 75%, transparent 100%)`,
+            boxShadow: `0 0 70px ${emissive}, 0 0 120px #fef08a`,
+          }}
+        />
+      )}
 
       {/* Beat 2 Climax 2-Frame Anime Impact Flash (t = 1.47s - 1.75s) */}
       <div

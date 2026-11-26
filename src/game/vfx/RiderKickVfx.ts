@@ -4,10 +4,25 @@ import type { ElementId } from '../types/schema';
 
 const MAX_MACH_RINGS = 5;
 const MAX_CRATERS = 3;
+const MAX_AIR_SEALS = 3;
 const MACH_RING_INTERVAL_SEC = 0.075;
 const MACH_RING_DURATION_SEC = 0.36;
 const CRATER_DURATION_SEC = 2.6;
-const SEAL_DURATION_SEC = 0.95;
+const SEAL_DURATION_SEC = 1.05;
+
+interface PooledAirSeal {
+  active: boolean;
+  elapsed: number;
+  delay: number;
+  baseScale: number;
+  mesh: THREE.Mesh;
+  uniforms: {
+    uTime: { value: number };
+    uProgress: { value: number };
+    uColorA: { value: THREE.Color };
+    uColorB: { value: THREE.Color };
+  };
+}
 
 function getElementVfxStyle(elementId: ElementId): number {
   if (elementId === 'pyro' || elementId === 'solar') return 0; // Roaring flame plasma
@@ -472,17 +487,8 @@ export class RiderKickVfx {
     uColorB: { value: THREE.Color };
   };
 
-  // Layer 4: Floating Air-Hang K-Driver Seal
-  private readonly airSealMesh: THREE.Mesh;
-  private readonly airSealUniforms: {
-    uTime: { value: number };
-    uProgress: { value: number };
-    uColorA: { value: THREE.Color };
-    uColorB: { value: THREE.Color };
-  };
-  private sealActive = false;
-  private sealElapsed = 0;
-  private sealBaseScale = 2.4;
+  // Layer 4: Pooled Floating Air-Hang K-Driver Seals (1 for standard/Super, 3 stacked orbital seals for Grand Ultimate!)
+  private readonly airSeals: PooledAirSeal[] = [];
 
   // Layer 5 & 6 Pools
   private readonly machRings: PooledMachRing[] = [];
@@ -491,6 +497,7 @@ export class RiderKickVfx {
 
   private active = false;
   private activeElement: ElementId = 'pyro';
+  private activeGrandGold = false;
   private vfxTime = 0;
 
   // Pre-allocated scratch math objects (Zero-Allocation Hot Path)
@@ -499,6 +506,7 @@ export class RiderKickVfx {
   private readonly scratchQuat = new THREE.Quaternion();
   private readonly scratchColorA = new THREE.Color();
   private readonly scratchColorB = new THREE.Color();
+  private readonly scratchGoldColor = new THREE.Color(0xfef08a);
 
   constructor() {
     this.root.name = 'RiderKickVfxRoot';
@@ -528,8 +536,11 @@ export class RiderKickVfx {
     this.bootCoreMesh.scale.set(1.0, 1.0, 1.45);
     this.bootAnchor.add(this.bootCoreMesh);
 
-    this.bootLight = new THREE.PointLight(0xff5722, 0, 14, 1.6);
-    this.bootAnchor.add(this.bootLight);
+    // IMPORTANT: Keep bootLight attached directly to always-visible `this.root` (intensity=0 when idle)
+    // so Three.js NEVER toggles NUM_POINT_LIGHTS and triggers a mid-jump PBR shader recompile glitch!
+    this.bootLight = new THREE.PointLight(0xff5722, 0, 15, 1.6);
+    this.bootLight.position.set(0, -100, 0);
+    this.root.add(this.bootLight);
 
     // Layer 2: Volumetric Turbulent Plasma / Flame / Lightning Vortex Sheath
     const vortexGeo = buildParabolicVortexGeometry(2.45, 0.64);
@@ -578,28 +589,39 @@ export class RiderKickVfx {
     this.helixMeshB = new THREE.Mesh(helixGeoB, helixMat);
     this.bootAnchor.add(this.helixMeshA, this.helixMeshB);
 
-    // Layer 4: Floating Air-Hang K-Driver Geometric Seal
+    // Layer 4: Pooled Floating Air-Hang K-Driver Geometric Seals (1 for Rider Kick, 3 stacked for Grand Ultimate!)
     const planeGeo = new THREE.PlaneGeometry(2.0, 2.0);
     this.ownedGeometries.push(planeGeo);
-    this.airSealUniforms = {
-      uTime: { value: 0 },
-      uProgress: { value: 0 },
-      uColorA: { value: new THREE.Color(0xe11d48) },
-      uColorB: { value: new THREE.Color(0xff5722) },
-    };
-    const sealMat = new THREE.ShaderMaterial({
-      vertexShader: COMMON_VERT,
-      fragmentShader: SEAL_FRAG,
-      uniforms: this.airSealUniforms,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-    });
-    this.ownedMaterials.push(sealMat);
-    this.airSealMesh = new THREE.Mesh(planeGeo, sealMat);
-    this.airSealMesh.visible = false;
-    this.root.add(this.airSealMesh);
+    for (let i = 0; i < MAX_AIR_SEALS; i++) {
+      const uniforms = {
+        uTime: { value: 0 },
+        uProgress: { value: 0 },
+        uColorA: { value: new THREE.Color(0xe11d48) },
+        uColorB: { value: new THREE.Color(0xff5722) },
+      };
+      const sealMat = new THREE.ShaderMaterial({
+        vertexShader: COMMON_VERT,
+        fragmentShader: SEAL_FRAG,
+        uniforms,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      });
+      this.ownedMaterials.push(sealMat);
+      const mesh = new THREE.Mesh(planeGeo, sealMat);
+      mesh.frustumCulled = false;
+      mesh.visible = false;
+      this.root.add(mesh);
+      this.airSeals.push({
+        active: false,
+        elapsed: 0,
+        delay: 0,
+        baseScale: 2.4,
+        mesh,
+        uniforms,
+      });
+    }
 
     // Layer 5: Pooled Supersonic Mach Shockwave Rings
     for (let i = 0; i < MAX_MACH_RINGS; i++) {
@@ -667,7 +689,34 @@ export class RiderKickVfx {
   }
 
   /**
-   * Summons the floating K-Driver geometric energy seal ahead of the Rider's aerial dive path!
+   * Temporarily shows 1 representative mesh of every GLSL shader layer so `renderer.compile()` pre-warms
+   * all Rider Kick shaders during loading — guaranteeing ZERO glitch/stutter on the very first Rider Kick!
+   */
+  public setWarmupVisible(visible: boolean): void {
+    this.bootAnchor.visible = visible;
+    if (visible) {
+      this.bootAnchor.position.set(0, -40, 0);
+      this.bootAnchor.scale.setScalar(0.01);
+    }
+    const seal = this.airSeals[0];
+    if (seal) {
+      seal.mesh.visible = visible;
+      if (visible) seal.mesh.position.set(0, -40, 0);
+    }
+    const ring = this.machRings[0];
+    if (ring) {
+      ring.mesh.visible = visible;
+      if (visible) ring.mesh.position.set(0, -40, 0);
+    }
+    const crater = this.craters[0];
+    if (crater) {
+      crater.mesh.visible = visible;
+      if (visible) crater.mesh.position.set(0, -40, 0);
+    }
+  }
+
+  /**
+   * Summons a single floating K-Driver geometric energy seal ahead of the Rider's aerial dive path!
    */
   public spawnAirSeal(
     elementId: ElementId,
@@ -677,29 +726,74 @@ export class RiderKickVfx {
     facingYaw: number,
     isHyper = false
   ): void {
+    const seal = this.airSeals[0]!;
     const cfg = getElementConfig(elementId);
     this.scratchColorA.set(cfg.primaryColor);
     this.scratchColorB.set(cfg.emissiveColor);
-    this.airSealUniforms.uColorA.value.copy(this.scratchColorA);
-    this.airSealUniforms.uColorB.value.copy(this.scratchColorB);
-    this.airSealUniforms.uProgress.value = 0;
+    seal.uniforms.uColorA.value.copy(this.scratchColorA);
+    seal.uniforms.uColorB.value.copy(this.scratchColorB);
+    seal.uniforms.uProgress.value = 0;
 
     const fx = Math.sin(facingYaw);
     const fz = Math.cos(facingYaw);
     this.scratchDiveDir.set(fx * 0.84, -0.54, fz * 0.84).normalize();
     this.scratchQuat.setFromUnitVectors(this.scratchForwardZ, this.scratchDiveDir);
 
-    this.sealBaseScale = isHyper ? 2.85 : 2.1;
-    this.airSealMesh.position.set(
+    seal.baseScale = isHyper ? 2.85 : 2.1;
+    seal.mesh.position.set(
       riderX + fx * (isHyper ? 1.45 : 1.85),
       Math.max(1.4, riderY + (isHyper ? 1.85 : 1.65)),
       riderZ + fz * (isHyper ? 1.45 : 1.85)
     );
-    this.airSealMesh.quaternion.copy(this.scratchQuat);
-    this.airSealMesh.scale.setScalar(this.sealBaseScale * 0.35);
-    this.airSealMesh.visible = true;
-    this.sealActive = true;
-    this.sealElapsed = 0;
+    seal.mesh.quaternion.copy(this.scratchQuat);
+    seal.mesh.scale.setScalar(seal.baseScale * 0.35);
+    seal.mesh.visible = true;
+    seal.active = true;
+    seal.elapsed = 0;
+    seal.delay = 0;
+  }
+
+  /**
+   * Grand Sovereign Ultimate Form [R]: Summons 3 giant stacked Golden-Elemental Orbital Seals
+   * cascading along the Rider's supersonic dive path — pierced one by one!
+   */
+  public spawnTripleOrbitalSeals(
+    elementId: ElementId,
+    riderX: number,
+    riderY: number,
+    riderZ: number,
+    facingYaw: number
+  ): void {
+    const cfg = getElementConfig(elementId);
+    this.scratchColorA.set(cfg.emissiveColor);
+    this.scratchColorB.set(cfg.emissiveColor).lerp(this.scratchGoldColor, 0.58);
+
+    const fx = Math.sin(facingYaw);
+    const fz = Math.cos(facingYaw);
+    this.scratchDiveDir.set(fx * 0.84, -0.54, fz * 0.84).normalize();
+    this.scratchQuat.setFromUnitVectors(this.scratchForwardZ, this.scratchDiveDir);
+
+    for (let i = 0; i < MAX_AIR_SEALS; i++) {
+      const seal = this.airSeals[i]!;
+      const forwardStep = 0.55 + i * 1.15;
+      const heightStep = 2.95 - i * 0.85;
+      seal.uniforms.uColorA.value.copy(i === 1 ? this.scratchGoldColor : this.scratchColorA);
+      seal.uniforms.uColorB.value.copy(this.scratchColorB);
+      seal.uniforms.uProgress.value = 0;
+
+      seal.baseScale = 2.55 + i * 0.62;
+      seal.mesh.position.set(
+        riderX + fx * forwardStep,
+        Math.max(1.1, riderY + heightStep),
+        riderZ + fz * forwardStep
+      );
+      seal.mesh.quaternion.copy(this.scratchQuat);
+      seal.mesh.scale.setScalar(seal.baseScale * 0.25);
+      seal.mesh.visible = false;
+      seal.active = true;
+      seal.elapsed = 0;
+      seal.delay = i * 0.11;
+    }
   }
 
   /**
@@ -746,7 +840,8 @@ export class RiderKickVfx {
     facingYaw: number,
     intensity: number,
     scaleMult: number,
-    dt: number
+    dt: number,
+    isGrandUltimate = false
   ): void {
     if (!isDiveActive || intensity <= 0.01) {
       this.active = false;
@@ -756,17 +851,22 @@ export class RiderKickVfx {
       return;
     }
 
-    if (!this.active || this.activeElement !== elementId) {
+    if (!this.active || this.activeElement !== elementId || this.activeGrandGold !== isGrandUltimate) {
       this.active = true;
       this.activeElement = elementId;
+      this.activeGrandGold = isGrandUltimate;
       const cfg = getElementConfig(elementId);
       this.scratchColorA.set(cfg.primaryColor);
       this.scratchColorB.set(cfg.emissiveColor);
+      if (isGrandUltimate) {
+        this.scratchColorA.lerp(this.scratchGoldColor, 0.35);
+        this.scratchColorB.lerp(this.scratchGoldColor, 0.62);
+      }
       this.bootCoreUniforms.uColorA.value.copy(this.scratchColorA);
       this.bootCoreUniforms.uColorB.value.copy(this.scratchColorB);
       this.vortexUniforms.uColorA.value.copy(this.scratchColorA);
       this.vortexUniforms.uColorB.value.copy(this.scratchColorB);
-      this.vortexUniforms.uStyle.value = getElementVfxStyle(elementId);
+      this.vortexUniforms.uStyle.value = isGrandUltimate ? 1 : getElementVfxStyle(elementId);
       this.helixUniforms.uColorA.value.copy(this.scratchColorA);
       this.helixUniforms.uColorB.value.copy(this.scratchColorB);
       this.bootLight.color.copy(this.scratchColorB);
@@ -783,10 +883,11 @@ export class RiderKickVfx {
     this.bootAnchor.quaternion.copy(this.scratchQuat);
     this.bootAnchor.scale.setScalar(scaleMult);
 
+    this.bootLight.position.copy(bootWorldPos);
     this.bootCoreUniforms.uIntensity.value = intensity;
     this.vortexUniforms.uOpacity.value = intensity * 0.96;
     this.helixUniforms.uOpacity.value = intensity * 0.92;
-    this.bootLight.intensity = 12.5 * intensity * scaleMult;
+    this.bootLight.intensity = (isGrandUltimate ? 17.5 : 12.5) * intensity * scaleMult;
 
     // Spin vortex & double-helix counter-rotational for blazing tokusatsu energy drill look!
     this.vortexMesh.rotation.z += dt * 13.0;
@@ -807,17 +908,27 @@ export class RiderKickVfx {
     this.vortexUniforms.uTime.value = this.vfxTime;
     this.helixUniforms.uTime.value = this.vfxTime;
 
-    // Update Floating Air-Hang K-Driver Seal
-    if (this.sealActive) {
-      this.sealElapsed += dt;
-      const p = Math.min(1, this.sealElapsed / SEAL_DURATION_SEC);
-      this.airSealUniforms.uTime.value = this.vfxTime;
-      this.airSealUniforms.uProgress.value = p;
-      const pop = p < 0.16 ? 0.35 + (p / 0.16) * 0.65 : 1.0 + Math.max(0, p - 0.42) * 1.45;
-      this.airSealMesh.scale.setScalar(this.sealBaseScale * pop);
+    // Update Pooled Floating Air-Hang K-Driver Seals (supports both single & Grand Triple Orbital Seals!)
+    for (let i = 0; i < this.airSeals.length; i++) {
+      const seal = this.airSeals[i]!;
+      if (!seal.active) continue;
+      if (seal.delay > 0) {
+        seal.delay -= dt;
+        if (seal.delay <= 0) {
+          seal.mesh.visible = true;
+        }
+        continue;
+      }
+      seal.mesh.visible = true;
+      seal.elapsed += dt;
+      const p = Math.min(1, seal.elapsed / SEAL_DURATION_SEC);
+      seal.uniforms.uTime.value = this.vfxTime + i * 1.4;
+      seal.uniforms.uProgress.value = p;
+      const pop = p < 0.16 ? 0.32 + (p / 0.16) * 0.68 : 1.0 + Math.max(0, p - 0.42) * 1.5;
+      seal.mesh.scale.setScalar(seal.baseScale * pop);
       if (p >= 1) {
-        this.sealActive = false;
-        this.airSealMesh.visible = false;
+        seal.active = false;
+        seal.mesh.visible = false;
       }
     }
 
@@ -855,8 +966,11 @@ export class RiderKickVfx {
     this.active = false;
     this.bootAnchor.visible = false;
     this.bootLight.intensity = 0;
-    this.sealActive = false;
-    this.airSealMesh.visible = false;
+    for (let i = 0; i < this.airSeals.length; i++) {
+      this.airSeals[i]!.active = false;
+      this.airSeals[i]!.delay = 0;
+      this.airSeals[i]!.mesh.visible = false;
+    }
     for (let i = 0; i < this.machRings.length; i++) {
       this.machRings[i]!.active = false;
       this.machRings[i]!.mesh.visible = false;

@@ -1472,7 +1472,10 @@ export class PlayerRider implements HurtboxTarget {
         this.ultimateImpactFired = true;
         this.frameEvents.ultimateImpactThisStep = true;
       }
-      const pulseTimes = [2.48, 2.82, 3.16];
+      const pulseTimes =
+        this.preCinematicFormTier === 'ULTIMATE'
+          ? [2.26, 2.46, 2.66, 2.86, 3.06, 3.26]
+          : [2.48, 2.82, 3.16];
       if (
         this.ultimatePostExplosionsFired < pulseTimes.length &&
         t >= pulseTimes[this.ultimatePostExplosionsFired]!

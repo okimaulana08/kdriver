@@ -38,6 +38,9 @@ export class CameraRig {
   private mode: CameraMode = 'HUB_PEDESTAL';
   private modeElapsedSec = 0;
   private cinematicYaw = Math.PI;
+  private cinematicIsGrandUltimate = false;
+  private readonly baseFov: number;
+  private currentFov: number;
 
   private yaw = 0;
   private pitch = 0.34;
@@ -72,6 +75,8 @@ export class CameraRig {
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
+    this.baseFov = camera.fov;
+    this.currentFov = camera.fov;
   }
 
   public getYaw(): number {
@@ -86,13 +91,21 @@ export class CameraRig {
     return this.lockedOn;
   }
 
-  public setMode(mode: CameraMode, riderYaw = Math.PI): void {
+  public setMode(mode: CameraMode, riderYaw = Math.PI, isGrandUltimate = false): void {
+    const prevMode = this.mode;
     this.mode = mode;
     this.modeElapsedSec = 0;
     this.cinematicYaw = riderYaw;
-    if (mode === 'COMBAT') {
+    this.cinematicIsGrandUltimate = isGrandUltimate;
+    // Preserve combat orbit yaw/pitch when exiting RIDER_KICK or ULTIMATE_CINEMATIC (no jarring snap!)
+    if (mode === 'COMBAT' && (prevMode === 'HUB_PEDESTAL' || prevMode === 'ARENA_ENTRY')) {
       this.yaw = 0;
       this.pitch = 0.34;
+    }
+    if (mode !== 'ULTIMATE_CINEMATIC' && Math.abs(this.currentFov - this.baseFov) > 0.05) {
+      this.currentFov = this.baseFov;
+      this.camera.fov = this.baseFov;
+      this.camera.updateProjectionMatrix();
     }
   }
 
@@ -359,12 +372,29 @@ export class CameraRig {
   private updateUltimateCinematic(dt: number, playerPos: THREE.Vector3): void {
     const t = this.modeElapsedSec;
     const baseAngle = this.cinematicYaw;
+    const isGrand = this.cinematicIsGrandUltimate;
+
+    // Dynamic cinema FOV punch for Grand Sovereign Ultimate Form [R] (widens on dive, snaps tight on Supernova!)
+    const targetFov = isGrand
+      ? t < 1.05
+        ? this.baseFov - 4
+        : t < 1.82
+          ? this.baseFov + 11
+          : t < 2.25
+            ? this.baseFov - 6
+            : this.baseFov + 3
+      : this.baseFov;
+    if (Math.abs(this.currentFov - targetFov) > 0.04) {
+      this.currentFov = THREE.MathUtils.lerp(this.currentFov, targetFov, 1 - Math.exp(-10 * dt));
+      this.camera.fov = this.currentFov;
+      this.camera.updateProjectionMatrix();
+    }
 
     if (t < 1.05) {
       // Beat 1 (0–1.05s): Heroic low-angle front sweep framing Rider crouch-charge under sleek 2D Cut-In
       const p = t / 1.05;
       const angle = baseAngle + THREE.MathUtils.lerp(-0.48, 0.42, p);
-      const dist = THREE.MathUtils.lerp(4.2, 6.0, p);
+      const dist = THREE.MathUtils.lerp(4.2, isGrand ? 6.6 : 6.0, p);
       this.desiredPos.set(
         playerPos.x + Math.sin(angle) * dist,
         playerPos.y + THREE.MathUtils.lerp(0.65, 1.65, p),
@@ -372,37 +402,37 @@ export class CameraRig {
       );
       this.desiredPivot.set(playerPos.x, playerPos.y + 1.25, playerPos.z);
     } else if (t < 2.42) {
-      // Beat 2 (1.05–2.42s, Cut-In OPEN!): Wide side-action tracking +3.65m Soaring Vault -> Diagonal Hyper Rider Kick Impact at 1.90s!
+      // Beat 2 (1.05–2.42s, Cut-In OPEN!): Wide side-action tracking Soaring Vault -> Triple Orbital Seals & Trinity Pets!
       const p = (t - 1.05) / 1.37;
-      const angle = baseAngle + Math.PI * 0.56 + p * 0.44;
-      const dist = THREE.MathUtils.lerp(8.4, 9.8, p);
+      const angle = baseAngle + Math.PI * (isGrand ? 0.52 : 0.56) + p * (isGrand ? 0.62 : 0.44);
+      const dist = THREE.MathUtils.lerp(isGrand ? 10.6 : 8.4, isGrand ? 12.6 : 9.8, p);
       const diveHeight =
         t < 1.48
-          ? THREE.MathUtils.lerp(1.4, 3.2, (t - 1.05) / 0.43)
+          ? THREE.MathUtils.lerp(1.4, isGrand ? 3.55 : 3.2, (t - 1.05) / 0.43)
           : t < 1.96
-            ? THREE.MathUtils.lerp(3.2, 1.2, (t - 1.48) / 0.48)
-            : 1.25;
+            ? THREE.MathUtils.lerp(isGrand ? 3.55 : 3.2, 1.25, (t - 1.48) / 0.48)
+            : 1.45;
       this.desiredPos.set(
         playerPos.x + Math.sin(angle) * dist,
-        playerPos.y + THREE.MathUtils.lerp(2.4, 3.6, p),
+        playerPos.y + THREE.MathUtils.lerp(isGrand ? 2.1 : 2.4, isGrand ? 4.4 : 3.6, p),
         playerPos.z + Math.cos(angle) * dist
       );
       this.desiredPivot.set(
-        playerPos.x + Math.sin(baseAngle) * THREE.MathUtils.lerp(0.2, 2.6, p),
+        playerPos.x + Math.sin(baseAngle) * THREE.MathUtils.lerp(0.2, isGrand ? 3.1 : 2.6, p),
         playerPos.y + diveHeight,
-        playerPos.z + Math.cos(baseAngle) * THREE.MathUtils.lerp(0.2, 2.6, p)
+        playerPos.z + Math.cos(baseAngle) * THREE.MathUtils.lerp(0.2, isGrand ? 3.1 : 2.6, p)
       );
     } else {
-      // Beat 3 (2.42–3.5s): Iconic Kamen Rider Back-Turned Explosion Pose!
+      // Beat 3 (2.42–3.5s): Iconic Kamen Rider Back-Turned Explosion Pose (dramatic wider apocalypse frame in Grand Ultimate!)
       const p = Math.min(1, (t - 2.42) / 1.08);
-      const angle = baseAngle + Math.PI + THREE.MathUtils.lerp(-0.24, 0.2, p);
-      const dist = THREE.MathUtils.lerp(4.1, 4.95, p);
+      const angle = baseAngle + Math.PI + THREE.MathUtils.lerp(isGrand ? -0.36 : -0.24, isGrand ? 0.32 : 0.2, p);
+      const dist = THREE.MathUtils.lerp(isGrand ? 4.5 : 4.1, isGrand ? 5.6 : 4.95, p);
       this.desiredPos.set(
         playerPos.x + Math.sin(angle) * dist,
-        playerPos.y + 0.85,
+        playerPos.y + (isGrand ? 0.78 : 0.85),
         playerPos.z + Math.cos(angle) * dist
       );
-      this.desiredPivot.set(playerPos.x, playerPos.y + 0.9, playerPos.z);
+      this.desiredPivot.set(playerPos.x, playerPos.y + 0.95, playerPos.z);
     }
 
     if (this.desiredPos.y < MIN_CAMERA_Y) this.desiredPos.y = MIN_CAMERA_Y;

@@ -151,7 +151,50 @@ export interface BossProjectileHitResult {
   damage: number;
   dirX: number;
   dirZ: number;
+  impacted: boolean;
+  impactX: number;
+  impactY: number;
+  impactZ: number;
+  trailEmitCount: number;
+  trailPositions: Float32Array;
 }
+
+const BOSS_ORB_VERTEX_SHADER = /* glsl */ `
+  uniform float uTime;
+  varying vec3 vNormalView;
+  varying vec3 vViewDir;
+  varying float vPulse;
+
+  void main() {
+    vec3 dir = normalize(position);
+    float ripple =
+      sin(dir.x * 7.0 + uTime * 11.0) * cos(dir.y * 7.0 - uTime * 9.0) +
+      sin(dir.z * 9.0 + uTime * 13.0) * 0.5;
+    vec3 displaced = position + dir * ripple * 0.065;
+    vPulse = ripple * 0.5 + 0.5;
+    vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
+    vNormalView = normalize(normalMatrix * dir);
+    vViewDir = normalize(-mvPos.xyz);
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const BOSS_ORB_FRAGMENT_SHADER = /* glsl */ `
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  varying vec3 vNormalView;
+  varying vec3 vViewDir;
+  varying float vPulse;
+
+  void main() {
+    float ndv = abs(dot(normalize(vNormalView), normalize(vViewDir)));
+    float fresnel = pow(1.0 - ndv, 2.0);
+    float core = pow(ndv, 1.35);
+    vec3 col = mix(uColorA, uColorB, clamp(fresnel * 0.85 + vPulse * 0.45, 0.0, 1.0));
+    col = mix(col, vec3(1.0, 0.96, 0.9), core * 0.78);
+    gl_FragColor = vec4(col * 2.1, clamp(0.88 + fresnel * 0.12, 0.0, 1.0));
+  }
+`;
 
 export interface BossHazardStepResult {
   damage: number;
@@ -189,8 +232,14 @@ export class BossKaijin extends EnemyBase {
   private pendingChannelInterrupted = false;
 
   private readonly projectiles: PooledProjectile[] = [];
-  private readonly projectileGeo: THREE.OctahedronGeometry;
-  private readonly projectileMat: THREE.MeshStandardMaterial;
+  private readonly projectileGeo: THREE.SphereGeometry;
+  private readonly projectileUniforms: {
+    uTime: { value: number };
+    uColorA: { value: THREE.Color };
+    uColorB: { value: THREE.Color };
+  };
+  private readonly projectileMat: THREE.ShaderMaterial;
+  private projectileTrailAccum = 0;
 
   private readonly hazards: PooledHazardZone[] = [];
   private readonly hazardWarningGeo: THREE.PlaneGeometry;
@@ -201,6 +250,12 @@ export class BossKaijin extends EnemyBase {
     damage: 0,
     dirX: 0,
     dirZ: 1,
+    impacted: false,
+    impactX: 0,
+    impactY: 1.2,
+    impactZ: 0,
+    trailEmitCount: 0,
+    trailPositions: new Float32Array(MAX_BOSS_PROJECTILES * 3),
   };
   private readonly scratchHazardResult: BossHazardStepResult = {
     damage: 0,
@@ -225,12 +280,20 @@ export class BossKaijin extends EnemyBase {
     super(id, config, assetLoader, pbrTextures, spawnX, spawnZ);
     this.profile = getBossSignatureProfile(config.id);
 
-    this.projectileGeo = new THREE.OctahedronGeometry(0.36, 1);
-    this.projectileMat = new THREE.MeshStandardMaterial({
-      color: this.profile.projectileColorHex,
-      emissive: this.profile.projectileEmissiveHex,
-      emissiveIntensity: 3.1,
-      roughness: 0.2,
+    // Boiling GLSL Boss Energy Orbs (seamless vertex-displaced plasma/magma/thorn spheres — zero rigid octahedrons!)
+    this.projectileGeo = new THREE.SphereGeometry(0.42, 20, 14);
+    this.projectileUniforms = {
+      uTime: { value: 0 },
+      uColorA: { value: new THREE.Color(this.profile.projectileColorHex) },
+      uColorB: { value: new THREE.Color(this.profile.projectileEmissiveHex) },
+    };
+    this.projectileMat = new THREE.ShaderMaterial({
+      uniforms: this.projectileUniforms,
+      vertexShader: BOSS_ORB_VERTEX_SHADER,
+      fragmentShader: BOSS_ORB_FRAGMENT_SHADER,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
 
     for (let i = 0; i < MAX_BOSS_PROJECTILES; i++) {
@@ -309,14 +372,26 @@ export class BossKaijin extends EnemyBase {
     return this.activePattern;
   }
 
+  public get isChannelingSanctuaryMend(): boolean {
+    return this.aiState === 'TELEGRAPH' && this.activePattern === 'SANCTUARY_MEND';
+  }
+
   /**
    * Advances pooled Boss projectiles and tests collision against the Rider (Zero-Allocation).
    */
   public stepProjectiles(dt: number, player: HurtboxTarget): BossProjectileHitResult {
     player.getPosition(this.scratchProjPlayerPos);
-    this.scratchProjectileResult.damage = 0;
-    this.scratchProjectileResult.dirX = 0;
-    this.scratchProjectileResult.dirZ = 1;
+    const out = this.scratchProjectileResult;
+    out.damage = 0;
+    out.dirX = 0;
+    out.dirZ = 1;
+    out.impacted = false;
+    out.trailEmitCount = 0;
+
+    this.projectileUniforms.uTime.value += dt;
+    this.projectileTrailAccum += dt;
+    const emitTrailNow = this.projectileTrailAccum >= 0.055;
+    if (emitTrailNow) this.projectileTrailAccum = 0;
 
     for (let i = 0; i < this.projectiles.length; i++) {
       const p = this.projectiles[i]!;
@@ -333,7 +408,19 @@ export class BossKaijin extends EnemyBase {
       if (p.age >= PROJECTILE_LIFETIME || radial > ARENA_RADIUS + 1.5) {
         p.active = false;
         p.mesh.visible = false;
+        out.impacted = true;
+        out.impactX = p.x;
+        out.impactY = p.y;
+        out.impactZ = p.z;
         continue;
+      }
+
+      if (emitTrailNow && out.trailEmitCount < MAX_BOSS_PROJECTILES) {
+        const base = out.trailEmitCount * 3;
+        out.trailPositions[base] = p.x;
+        out.trailPositions[base + 1] = p.y;
+        out.trailPositions[base + 2] = p.z;
+        out.trailEmitCount++;
       }
 
       const dx = this.scratchProjPlayerPos.x - p.x;
@@ -343,13 +430,17 @@ export class BossKaijin extends EnemyBase {
         p.active = false;
         p.mesh.visible = false;
         const speed = Math.hypot(p.vx, p.vz) || 1;
-        this.scratchProjectileResult.damage = p.damage;
-        this.scratchProjectileResult.dirX = p.vx / speed;
-        this.scratchProjectileResult.dirZ = p.vz / speed;
+        out.damage = p.damage;
+        out.dirX = p.vx / speed;
+        out.dirZ = p.vz / speed;
+        out.impacted = true;
+        out.impactX = p.x;
+        out.impactY = p.y;
+        out.impactZ = p.z;
       }
     }
 
-    return this.scratchProjectileResult;
+    return out;
   }
 
   /**
@@ -484,7 +575,7 @@ export class BossKaijin extends EnemyBase {
     this.patternIndex++;
 
     // Restore standard crimson telegraph color unless channeling Sanctuary Mend
-    this.telegraphFillMat.color.setHex(
+    this.setTelegraphColor(
       this.activePattern === 'SANCTUARY_MEND'
         ? 0x10b981
         : this.activePattern === 'MAGMA_FISSURES' || this.activePattern === 'MOLTEN_RING'

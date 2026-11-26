@@ -10,6 +10,7 @@ type SkillVfxKind =
   | 'SPIKE_RING'
   | 'VOID_SINGULARITY'
   | 'FINISHER_CLIMAX'
+  | 'GRAND_ULTIMATE_CLIMAX'
   | 'PYRO_EXPLOSION'
   | 'HENSHIN_SUPER'
   | 'HENSHIN_ULTIMATE';
@@ -424,7 +425,71 @@ const FIREBALL_VERTEX_SHADER = /* glsl */ `
 
   varying vec3 vNormalView;
   varying vec3 vViewDir;
-  varying float vHeatNoise;
+  varying vec3 vObjDir;
+  varying float vHeightNorm;
+
+  float hash31(vec3 p) {
+    p = fract(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return fract((p.x + p.y) * p.z);
+  }
+
+  float noise3(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
+    float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
+    float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
+    float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
+    float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
+    float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
+    float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
+    float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
+
+    float nx00 = mix(n000, n100, f.x);
+    float nx10 = mix(n010, n110, f.x);
+    float nx01 = mix(n001, n101, f.x);
+    float nx11 = mix(n011, n111, f.x);
+    float nxy0 = mix(nx00, nx10, f.y);
+    float nxy1 = mix(nx01, nx11, f.y);
+    return mix(nxy0, nxy1, f.z);
+  }
+
+  void main() {
+    vec3 sphereDir = normalize(position);
+    // Low-frequency smooth volumetric silhouette billowing (zero spiky triangle folding!)
+    float macroBillow =
+      noise3(sphereDir * 1.9 + vec3(uSeed, -uTime * 2.1, uSeed * 0.63)) * 0.7 +
+      noise3(sphereDir * 3.4 + vec3(uTime * 1.1, -uTime * 3.2, uSeed)) * 0.3;
+
+    float displace = (macroBillow - 0.38) * (0.34 + uProgress * 0.22);
+    vec3 displaced = position + sphereDir * displace;
+    displaced.y += max(0.0, sphereDir.y) * 0.18 * uProgress;
+
+    vObjDir = sphereDir;
+    vHeightNorm = clamp(sphereDir.y * 0.5 + 0.5, 0.0, 1.0);
+
+    vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
+    vNormalView = normalize(normalMatrix * sphereDir);
+    vViewDir = normalize(-mvPos.xyz);
+    gl_Position = projectionMatrix * mvPos;
+  }
+`;
+
+const FIREBALL_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uTime;
+  uniform float uProgress;
+  uniform float uSeed;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform float uOpacity;
+  uniform float uElementTint;
+
+  varying vec3 vNormalView;
+  varying vec3 vViewDir;
+  varying vec3 vObjDir;
   varying float vHeightNorm;
 
   float hash31(vec3 p) {
@@ -459,58 +524,26 @@ const FIREBALL_VERTEX_SHADER = /* glsl */ `
   float fbm3(vec3 p) {
     float v = 0.0;
     float a = 0.54;
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
       v += a * noise3(p);
-      p = p * 2.08 + vec3(3.1, 1.7, 5.3);
+      p = p * 2.05 + vec3(3.1, 1.7, 5.3);
       a *= 0.48;
     }
     return v;
   }
 
   void main() {
-    vec3 sphereDir = normalize(position);
-    vec3 flowPos = sphereDir * 2.35 + vec3(uSeed, -uTime * 2.65, uSeed * 0.63);
-    float turb = fbm3(flowPos);
-    float detail = noise3(sphereDir * 5.2 + vec3(uTime * 1.8, -uTime * 4.4, uSeed));
-    float boiling = turb * 0.72 + detail * 0.28;
-
-    // Seamless radial volumetric billowing along continuous sphereDir (100% zero triangle splitting or seam cracks!)
-    float displace = (boiling - 0.36) * (0.42 + uProgress * 0.28);
-    vec3 displaced = position + sphereDir * displace;
-    // Slight mushroom uplift toward crown
-    displaced.y += max(0.0, sphereDir.y) * 0.18 * uProgress;
-
-    vHeatNoise = boiling;
-    vHeightNorm = clamp(sphereDir.y * 0.5 + 0.5, 0.0, 1.0);
-
-    vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
-    vNormalView = normalize(normalMatrix * normalize(sphereDir + vec3(boiling - 0.5) * 0.45));
-    vViewDir = normalize(-mvPos.xyz);
-    gl_Position = projectionMatrix * mvPos;
-  }
-`;
-
-const FIREBALL_FRAGMENT_SHADER = /* glsl */ `
-  uniform float uProgress;
-  uniform vec3 uColorA;
-  uniform vec3 uColorB;
-  uniform float uOpacity;
-  uniform float uElementTint;
-
-  varying vec3 vNormalView;
-  varying vec3 vViewDir;
-  varying float vHeatNoise;
-  varying float vHeightNorm;
-
-  void main() {
     float ndv = abs(dot(normalize(vNormalView), normalize(vViewDir)));
     // Soft feathered outer edge so volumetric fireball has zero hard polygon border
-    float edgeSoft = smoothstep(0.06, 0.48, ndv);
+    float edgeSoft = smoothstep(0.08, 0.52, ndv);
+
+    // Sub-pixel 4-octave 3D FBM boiling fire & rolling smoke detail (100% ZERO triangle facets!)
+    vec3 dir = normalize(vObjDir);
+    float pxNoise = fbm3(dir * 2.75 + vec3(uSeed, -uTime * 2.85, uSeed * 0.63));
 
     // Pyrotechnic cooling curve: scorching gold-orange crevices wrapped in dark rolling charcoal soot!
-    float tempCool = 1.0 - smoothstep(0.14, 0.82, uProgress);
-    // Sharp cauliflower crevice contrast: inner valleys burn blazing orange-gold while outer puffs darken to soot!
-    float creviceHeat = clamp(pow(max(0.0, 1.0 - vHeatNoise), 1.35) * 1.45 + ndv * 0.28, 0.0, 1.35) * (0.28 + 0.92 * tempCool);
+    float tempCool = 1.0 - smoothstep(0.14, 0.8, uProgress);
+    float creviceHeat = clamp(pow(max(0.0, 1.0 - pxNoise), 1.32) * 1.52 + ndv * 0.28, 0.0, 1.35) * (0.28 + 0.92 * tempCool);
 
     vec3 sootDark = vec3(0.032, 0.028, 0.034);
     vec3 sootLit = vec3(0.16, 0.14, 0.135);
@@ -528,7 +561,7 @@ const FIREBALL_FRAGMENT_SHADER = /* glsl */ `
     vec3 col = mix(smokeCol, fireCol * 1.58, fireMask);
 
     // Erode billowing clouds organically at the end of explosion
-    float erosion = smoothstep(uProgress * 0.82 - 0.12, uProgress * 0.82 + 0.26, vHeatNoise + 0.18);
+    float erosion = smoothstep(uProgress * 0.82 - 0.12, uProgress * 0.82 + 0.26, pxNoise + 0.18);
     float alpha = edgeSoft * erosion * uOpacity * mix(0.84, 0.96, fireMask);
     if (alpha < 0.02) discard;
 
@@ -1141,7 +1174,33 @@ export class ElementSkillVfx {
   }
 
   /**
-   * Ultimate Skill [R] Climax Impact:
+   * Temporarily reveals slot 0's shader layers off-screen so `renderer.compile()` pre-warms
+   * all 5 custom GLSL shaders during loading (zero first-use frame hitch!).
+   */
+  public setWarmupVisible(visible: boolean): void {
+    const slot = this.slots[0];
+    if (!slot) return;
+    slot.group.visible = visible;
+    if (visible) {
+      slot.group.position.set(0, -45, 0);
+      slot.fireballMain.visible = true;
+      slot.vortexColumnMesh.visible = true;
+      slot.ringGroundMesh.visible = true;
+      slot.scorchMesh.visible = true;
+      slot.flashCoreMesh.visible = true;
+      slot.wingLeftMesh.visible = true;
+    } else {
+      slot.fireballMain.visible = false;
+      slot.vortexColumnMesh.visible = false;
+      slot.ringGroundMesh.visible = false;
+      slot.scorchMesh.visible = false;
+      slot.flashCoreMesh.visible = false;
+      slot.wingLeftMesh.visible = false;
+    }
+  }
+
+  /**
+   * Ultimate Skill [R] from Super Form Climax Impact:
    * Organic Flared Plasma Sky-Vortex + Twin Giant Helical Filaments + Multi-Lobe Fireball Impact + Voronoi Rupture.
    */
   public spawnFinisherClimax(elementId: ElementId, x: number, z: number, radius = 11.5): void {
@@ -1149,6 +1208,31 @@ export class ElementSkillVfx {
     const cfg = getElementConfig(elementId);
     this.scratchFlashColor.set(cfg.emissiveColor);
     this.triggerFlashLight(x, 2.8, z, this.scratchFlashColor.getHex(), 19.0, 0.78);
+  }
+
+  /**
+   * GRAND SOVEREIGN FINISHER ([R] from Ultimate Form!) — Distinct Cataclysmic Supernova:
+   * 0.00-0.16s Dark-Gold Reality Implosion -> Colossal Golden-Elemental Sky-Vortex + Twin Crossed Horizon
+   * X-Slash Blades + Triple Orbital Energy Rings + 3-Lobe Mega-Fireball Plume + Arena-Wide Tectonic Rupture!
+   */
+  public spawnGrandUltimateClimax(
+    elementId: ElementId,
+    x: number,
+    z: number,
+    yaw: number,
+    radius = 15.5
+  ): void {
+    this.activateSlot(elementId, 'GRAND_ULTIMATE_CLIMAX', x, z, yaw, radius, 1.95);
+    const cfg = getElementConfig(elementId);
+    this.scratchFlashColor.set(cfg.emissiveColor).lerp(this.scratchPrimaryColor.setHex(0xfef08a), 0.55);
+    this.triggerFlashLight(x, 3.4, z, this.scratchFlashColor.getHex(), 24.0, 1.15);
+  }
+
+  /**
+   * Organic emerald healing vortex aura for Sylvan Sovereign's interruptible Sanctuary Mend.
+   */
+  public spawnSanctuaryMendPulse(x: number, z: number): void {
+    this.activateSlot('flora', 'HENSHIN_SUPER', x, z, Math.random() * Math.PI * 2, 4.2, 0.95);
   }
 
   /**
@@ -1365,6 +1449,94 @@ export class ElementSkillVfx {
           const waveR = r * (0.45 + easeOut * 1.55);
           slot.ringGroundMesh.scale.set(waveR, 1, waveR);
           slot.scorchMesh.scale.set(r * 1.05, 1, r * 1.05);
+          break;
+        }
+
+        case 'GRAND_ULTIMATE_CLIMAX': {
+          // Stage 1 (0.00 - 0.14): Reality Implosion Core sucking light inward before Supernova release!
+          if (p < 0.12) {
+            const imp = p / 0.12;
+            const collapse = 1.0 - imp * 0.78;
+            slot.voidCoreMesh.visible = true;
+            slot.voidCoreMesh.position.set(0, 2.1, 0);
+            slot.voidCoreMesh.scale.setScalar(r * 0.42 * collapse);
+            slot.voidCoreMesh.rotation.y = slot.elapsed * 16.0;
+            slot.flashCoreMesh.position.set(0, 2.1, 0);
+            slot.flashCoreMesh.scale.setScalar(r * 0.28 * (0.2 + imp * 1.4));
+            slot.flashUniforms.uOpacity.value = 0.65 + imp * 0.95;
+            slot.vortexColumnMesh.scale.set(0.01, 0.01, 0.01);
+            slot.fireballMain.scale.setScalar(0.01);
+            slot.fireballCrown.scale.setScalar(0.01);
+            slot.fireballSide.scale.setScalar(0.01);
+            slot.crescentMeshA.scale.setScalar(0.01);
+            slot.crescentMeshB.scale.setScalar(0.01);
+            break;
+          }
+
+          // Stage 2 (0.12 - 1.00): COLOSSAL GOLDEN-ELEMENTAL SUPERNOVA CATACLYSM!
+          slot.voidCoreMesh.visible = false;
+          const postP = (p - 0.12) / 0.88;
+          const blastEase = 1 - Math.pow(1 - Math.min(1, postP * 1.65), 3);
+
+          // Blinding golden supernova flash
+          const flashT = Math.min(1, postP * 3.8);
+          slot.flashCoreMesh.position.set(0, 2.2, 0);
+          slot.flashCoreMesh.scale.setScalar(r * (0.28 + flashT * 0.65));
+          slot.flashUniforms.uOpacity.value = Math.max(0, 1 - flashT) * 1.65;
+
+          // Colossal flared Sky-Vortex towering into the eclipsed sky
+          const beamW = r * 0.34 * (1.35 - postP * 0.45);
+          slot.vortexColumnMesh.scale.set(beamW, 1.65 + postP * 0.4, beamW);
+          slot.vortexColumnMesh.rotation.y = slot.elapsed * 8.2;
+
+          // Twin Giant Counter-Rotating Helical Ribbons
+          const helW = r * (0.26 + blastEase * 0.28);
+          slot.helixMeshA.scale.set(helW, 1.55, helW);
+          slot.helixMeshA.rotation.y = slot.elapsed * 11.2;
+          slot.helixMeshB.scale.set(helW * 1.24, 1.6, helW * 1.24);
+          slot.helixMeshB.rotation.y = -slot.elapsed * 9.4;
+
+          // Twin Crossed Horizon X-Slash Waves carving outward across the arena!
+          const slashR = r * (0.42 + blastEase * 0.92);
+          slot.crescentMeshA.position.set(0, 2.35, 0);
+          slot.crescentMeshA.scale.set(slashR, 2.2, slashR);
+          slot.crescentMeshA.rotation.set(0.62, slot.baseYaw + postP * 3.8, 0.58);
+          slot.crescentMeshB.position.set(0, 2.35, 0);
+          slot.crescentMeshB.scale.set(slashR * 0.96, 2.2, slashR * 0.96);
+          slot.crescentMeshB.rotation.set(-0.62, slot.baseYaw - postP * 3.8 + 1.57, -0.58);
+
+          // 3-Lobe Mega-Fireball Mushroom Plume at Ground Zero
+          const fbBase = r * 0.38 * (0.28 + blastEase * 0.85);
+          slot.fireballMain.position.set(0, fbBase * 0.72 + postP * 2.8, 0);
+          slot.fireballMain.scale.set(fbBase * 1.42, fbBase * 0.96, fbBase * 1.42);
+          slot.fireballMain.rotation.y = slot.elapsed * 1.3;
+
+          const fbTop = r * 0.32 * (0.26 + blastEase * 0.92);
+          slot.fireballCrown.position.set(0.6, 1.8 + postP * 5.8, -0.5);
+          slot.fireballCrown.scale.set(fbTop * 1.22, fbTop * 1.18, fbTop * 1.22);
+          slot.fireballCrown.rotation.y = -slot.elapsed * 1.7;
+
+          const fbSide = r * 0.28 * (0.24 + blastEase * 0.85);
+          slot.fireballSide.position.set(-1.6 * blastEase, 1.1 + postP * 2.5, 1.4 * blastEase);
+          slot.fireballSide.scale.set(fbSide * 1.25, fbSide * 0.92, fbSide * 1.18);
+          slot.fireballSide.rotation.y = slot.elapsed * 1.5;
+
+          // Triple Orbital Seals (ground + ascending crown + giant tilted celestial gyro!)
+          slot.ringGroundMesh.scale.set(r * (0.55 + blastEase * 0.95), 1, r * (0.55 + blastEase * 0.95));
+          slot.ringUpperMesh.position.y = 0.4 + postP * 6.4;
+          slot.ringUpperMesh.scale.set(r * (0.5 + blastEase * 0.75), 1, r * (0.5 + blastEase * 0.75));
+          slot.ringUpperMesh.rotation.y = -slot.elapsed * 5.8;
+
+          const gyroR = r * (0.35 + blastEase * 0.55);
+          slot.ringGyroAMesh.position.set(0, 3.2 + postP * 1.8, 0);
+          slot.ringGyroAMesh.scale.setScalar(gyroR);
+          slot.ringGyroAMesh.rotation.set(0.92, slot.elapsed * 4.2, 0.36);
+          slot.ringGyroBMesh.position.set(0, 3.2 + postP * 1.8, 0);
+          slot.ringGyroBMesh.scale.setScalar(gyroR * 0.86);
+          slot.ringGyroBMesh.rotation.set(-0.88, -slot.elapsed * 4.8, -0.42);
+
+          // Arena-Wide Glowing Voronoi Tectonic Rupture!
+          slot.scorchMesh.scale.set(r * 1.02, 1, r * 1.02);
           break;
         }
 
@@ -1665,6 +1837,31 @@ export class ElementSkillVfx {
         chosen.scorchMesh.visible = true;
         chosen.flashCoreMesh.visible = true;
         chosen.flashUniforms.uColor.value.setHex(0xffb74d);
+        break;
+
+      case 'GRAND_ULTIMATE_CLIMAX':
+        // Imperial Golden-Elemental Supernova palette!
+        chosen.energyUniforms.uColorB.value.lerp(this.scratchFlashColor.setHex(0xfef08a), 0.52);
+        chosen.ringUniforms.uColorB.value.lerp(this.scratchFlashColor.setHex(0xfef08a), 0.62);
+        chosen.scorchUniforms.uColorB.value.lerp(this.scratchFlashColor.setHex(0xfde047), 0.55);
+        chosen.flashUniforms.uColor.value.setHex(0xfef08a);
+        chosen.energyUniforms.uMode.value = 1;
+        chosen.energyUniforms.uDisplaceAmp.value = 0.42;
+        chosen.ringUniforms.uRingStyle.value = 0;
+        chosen.voidCoreMesh.visible = true;
+        chosen.vortexColumnMesh.visible = true;
+        chosen.helixMeshA.visible = true;
+        chosen.helixMeshB.visible = true;
+        chosen.crescentMeshA.visible = true;
+        chosen.crescentMeshB.visible = true;
+        chosen.fireballMain.visible = true;
+        chosen.fireballCrown.visible = true;
+        chosen.fireballSide.visible = true;
+        chosen.ringUpperMesh.visible = true;
+        chosen.ringGyroAMesh.visible = true;
+        chosen.ringGyroBMesh.visible = true;
+        chosen.scorchMesh.visible = true;
+        chosen.flashCoreMesh.visible = true;
         break;
 
       case 'FINISHER_CLIMAX':

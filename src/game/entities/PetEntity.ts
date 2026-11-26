@@ -143,6 +143,7 @@ export class PetEntity {
 
   private ultimateElement: ElementId | null = null;
   private ultimateArchetype: PetRigArchetype | null = null;
+  private ultimateTrinityMode = false;
   private ultimateElapsed = 0;
   private ultimateAnchorX = 0;
   private ultimateAnchorZ = 0;
@@ -331,19 +332,41 @@ export class PetEntity {
   public activateUltimatePet(
     element: ElementId,
     riderPos: Readonly<Vec3Snapshot>,
-    riderYaw: number
+    riderYaw: number,
+    isGrandUltimate = false
   ): void {
-    // Pause any active patrolling companions while the Giant Ultimate Pet takes center stage
+    // Pause any active patrolling companions while the Giant Ultimate Pet(s) take center stage
     for (let i = 0; i < ARCHETYPES.length; i++) {
       this.rigs[ARCHETYPES[i]!].group.visible = false;
     }
     const archetype = ELEMENT_PET_ARCHETYPE[element];
     this.ultimateElement = element;
     this.ultimateArchetype = archetype;
+    this.ultimateTrinityMode = isGrandUltimate;
     this.ultimateElapsed = 0;
     this.ultimateAnchorX = riderPos.x;
     this.ultimateAnchorZ = riderPos.z;
     this.ultimateYaw = riderYaw;
+
+    if (isGrandUltimate) {
+      // GRAND SOVEREIGN ULTIMATE FORM [R]: Summon ALL 3 Rigged Contract-Beast Pets simultaneously!
+      for (let i = 0; i < ARCHETYPES.length; i++) {
+        const arch = ARCHETYPES[i]!;
+        const rig = this.rigs[arch];
+        const tintElem: ElementId =
+          arch === archetype
+            ? element
+            : arch === 'winged'
+              ? 'solar'
+              : arch === 'beast'
+                ? 'lux'
+                : 'aqua';
+        this.tintRigForElement(rig, tintElem);
+        rig.group.visible = true;
+        rig.group.scale.setScalar(0.2);
+      }
+      return;
+    }
 
     const rig = this.rigs[archetype];
     this.tintRigForElement(rig, element);
@@ -353,11 +376,14 @@ export class PetEntity {
 
   public deactivateUltimatePet(): void {
     if (this.ultimateArchetype) {
-      const ultRig = this.rigs[this.ultimateArchetype];
-      ultRig.group.visible = false;
-      ultRig.group.scale.setScalar(1.0);
+      for (let i = 0; i < ARCHETYPES.length; i++) {
+        const r = this.rigs[ARCHETYPES[i]!];
+        r.group.visible = false;
+        r.group.scale.setScalar(1.0);
+      }
       this.ultimateElement = null;
       this.ultimateArchetype = null;
+      this.ultimateTrinityMode = false;
 
       // Restore any still-active patrolling companions seamlessly!
       for (let i = 0; i < ARCHETYPES.length; i++) {
@@ -374,6 +400,7 @@ export class PetEntity {
   public resetAll(): void {
     this.ultimateElement = null;
     this.ultimateArchetype = null;
+    this.ultimateTrinityMode = false;
     this.resetActiveSummons();
     for (let i = 0; i < ALL_ELEMENT_IDS.length; i++) {
       this.cooldowns[ALL_ELEMENT_IDS[i]!] = 0;
@@ -609,11 +636,69 @@ export class PetEntity {
 
   public updateVisuals(): void {
     if (this.ultimateArchetype) {
-      const rig = this.rigs[this.ultimateArchetype];
       const t = this.ultimateElapsed;
       const fx = Math.sin(this.ultimateYaw);
       const fz = Math.cos(this.ultimateYaw);
+      const rx = Math.cos(this.ultimateYaw);
+      const rz = -Math.sin(this.ultimateYaw);
 
+      if (this.ultimateTrinityMode) {
+        // TRINITY CONTRACT-BEAST ULTIMATE ASSAULT: All 3 Giant Rigged Pets converging in V-arrowhead formation!
+        const surgeT = t < 1.25 ? 0 : Math.min(1, (t - 1.25) / 0.65);
+        const easeSurge = 1 - Math.pow(1 - surgeT, 2.6);
+        const fadeScale = t < 0.4 ? 0.22 + (t / 0.4) * 0.78 : t > 2.15 ? Math.max(0.05, 1 - (t - 2.15) / 0.5) : 1.0;
+
+        for (let i = 0; i < ARCHETYPES.length; i++) {
+          const arch = ARCHETYPES[i]!;
+          const rig = this.rigs[arch];
+          let baseScale = 2.65;
+          let sideOffset = 0;
+          let backStart = -2.8;
+          let heightStart = 2.2;
+          let heightEnd = 1.1;
+
+          if (arch === 'winged') {
+            baseScale = 3.05;
+            sideOffset = 0;
+            backStart = -3.4;
+            heightStart = rig.isCustomExternal ? 3.55 : 4.2;
+            heightEnd = 1.65;
+          } else if (arch === 'beast') {
+            baseScale = 2.55;
+            sideOffset = 3.8 * (1 - easeSurge * 0.62);
+            backStart = -2.4;
+            heightStart = rig.isCustomExternal ? 0.25 : 0.9;
+            heightEnd = rig.isCustomExternal ? 0.35 : 1.0;
+          } else {
+            baseScale = 2.65;
+            sideOffset = -3.8 * (1 - easeSurge * 0.62);
+            backStart = -2.6;
+            heightStart = rig.isCustomExternal ? 1.85 : 2.3;
+            heightEnd = 1.25;
+          }
+
+          const surgeDist = backStart + easeSurge * 8.6;
+          const hoverY =
+            THREE.MathUtils.lerp(heightStart, heightEnd, easeSurge) + Math.sin(t * 8 + i * 2.1) * 0.25;
+          const convergeYaw = this.ultimateYaw - Math.sign(sideOffset) * 0.24 * (1 - easeSurge * 0.6);
+
+          rig.group.scale.setScalar(baseScale * fadeScale);
+          rig.group.position.set(
+            this.ultimateAnchorX + fx * surgeDist + rx * sideOffset,
+            hoverY,
+            this.ultimateAnchorZ + fz * surgeDist + rz * sideOffset
+          );
+          rig.group.rotation.set(
+            arch === 'winged' && t > 1.25 ? 0.34 : t > 1.25 ? 0.16 : -0.1,
+            convergeYaw,
+            Math.sin(t * 10 + i) * 0.12
+          );
+          this.animateRiggedPetBones(rig, t + i * 0.4, 'STRIKE', 11.0, t > 1.25 ? 0.95 : 0.3, true);
+        }
+        return;
+      }
+
+      const rig = this.rigs[this.ultimateArchetype];
       let scale = 2.75;
       if (t < 0.4) {
         scale = 0.25 + (t / 0.4) * 2.5;

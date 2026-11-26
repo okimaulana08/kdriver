@@ -311,6 +311,10 @@ export class GameApp {
       this.scratchPrevPos.copy(this.scratchCurrPos);
       this.player.root.position.copy(this.scratchCurrPos);
 
+      // Pre-compile all custom GLSL VFX shaders (Rider Kick, Fireball, Henshin, Supernova) during loading
+      // so the very first Rider Kick / Skill / Henshin runs at a locked 60 FPS with ZERO compilation glitch!
+      this.warmUpVfxShaders();
+
       this.updateBgmIntensity('HUB');
       useGameStore.getState().setLoadProgress(100, 'Ready');
       useGameStore.getState().setEngineStatus('ready');
@@ -1052,7 +1056,54 @@ export class GameApp {
       const enemy = this.enemies[i]!;
       const ev = enemy.fixedUpdate(fixedDt, this.player, this.enemies, freezeEnemies);
 
-      if (ev.startedTelegraph) this.audio.playTelegraphCue();
+      if (ev.startedTelegraph) {
+        this.audio.playTelegraphCue();
+        if (enemy instanceof BossKaijin && enemy.isChannelingSanctuaryMend) {
+          enemy.getPosition(this.scratchTargetSnapshot);
+          this.elementSkillVfx.spawnSanctuaryMendPulse(
+            this.scratchTargetSnapshot.x,
+            this.scratchTargetSnapshot.z
+          );
+          this.particlePool.emitHenshinAscension(
+            'flora',
+            this.scratchTargetSnapshot.x,
+            0.35,
+            this.scratchTargetSnapshot.z,
+            false
+          );
+        }
+      }
+      if (ev.attackActivatedThisFrame) {
+        enemy.getPosition(this.scratchTargetSnapshot);
+        const atkYaw = enemy.root.rotation.y;
+        const strikeX = this.scratchTargetSnapshot.x + Math.sin(atkYaw) * (enemy.radius + 0.9);
+        const strikeZ = this.scratchTargetSnapshot.z + Math.cos(atkYaw) * (enemy.radius + 0.9);
+
+        if (enemy instanceof BossKaijin) {
+          const pat = enemy.currentBossPattern;
+          const bossElem = enemy.signatureProfile.hazardElement;
+          if (pat === 'LEAP_SLAM') {
+            this.elementSkillVfx.spawnExplosionPillar(bossElem, strikeX, strikeZ, 2.85);
+            this.particlePool.emitTokusatsuExplosion(bossElem, strikeX, 0.35, strikeZ, 0.92);
+            this.cameraRig.addShake(0.36, 0.24);
+          } else if (pat === 'CLEAVE_2HIT' || pat === 'FURY_3HIT') {
+            this.particlePool.emitHitSparks(
+              strikeX,
+              1.4,
+              strikeZ,
+              enemy.signatureProfile.projectileEmissiveHex,
+              true
+            );
+            this.particlePool.emitDustRing(strikeX, 0.28, strikeZ, 7, 0x78716c, 1.45);
+          }
+        } else if (enemy.config.tier === 'ELITE') {
+          this.particlePool.emitHitSparks(strikeX, 1.25, strikeZ, 0xe879f9, true);
+          this.particlePool.emitDustRing(strikeX, 0.25, strikeZ, 6, 0x78716c, 1.3);
+        } else {
+          // Kroco claw slash sparks!
+          this.particlePool.emitHitSparks(strikeX, 1.05, strikeZ, 0xf43f5e, false);
+        }
+      }
       if (ev.enteredPhase2) {
         this.audio.playBossPhase2();
         this.cameraRig.addShake(0.42, 0.32);
@@ -1129,6 +1180,27 @@ export class GameApp {
 
       if (enemy instanceof BossKaijin && !freezeEnemies) {
         const projHit = enemy.stepProjectiles(fixedDt, this.player);
+        // Live spark trail behind flying Boss Plasma/Magma/Briar Energy Orbs!
+        for (let tIdx = 0; tIdx < projHit.trailEmitCount; tIdx++) {
+          const base = tIdx * 3;
+          this.particlePool.emitHitSparks(
+            projHit.trailPositions[base]!,
+            projHit.trailPositions[base + 1]!,
+            projHit.trailPositions[base + 2]!,
+            enemy.signatureProfile.projectileEmissiveHex,
+            false
+          );
+        }
+        if (projHit.impacted) {
+          this.particlePool.emitElementBurst(
+            enemy.signatureProfile.hazardElement,
+            projHit.impactX,
+            projHit.impactY,
+            projHit.impactZ,
+            18,
+            0.9
+          );
+        }
         if (projHit.damage > 0) {
           this.resolveIncomingHitOnPlayer(projHit.damage, projHit.dirX, projHit.dirZ, false, enemy);
         }
@@ -1380,6 +1452,7 @@ export class GameApp {
     if (!this.player || !this.petEntity) return;
     const elemId = this.player.currentElementId;
     const cfg = getElementConfig(elemId);
+    const isGrand = this.player.wasFinisherCastFromUltimate;
 
     // Capture current arena's natural daylight intensities once before domain dimming engages
     if (!this.domainDimActive && this.domainDimBlend <= 0.01) {
@@ -1390,42 +1463,67 @@ export class GameApp {
     }
     this.domainDimActive = true;
     this.ultimateSealSpawned = false;
-    this.finisherSpotLight.color.set(cfg.emissiveColor);
+    this.finisherSpotLight.color.set(isGrand ? '#fde047' : cfg.emissiveColor);
 
-    this.audio.playUltimateFinisher();
+    this.audio.playUltimateFinisher(isGrand);
     this.player.getPosition(this.scratchOriginSnapshot);
-    this.petEntity.activateUltimatePet(elemId, this.scratchOriginSnapshot, this.player.facingYaw);
-    this.cameraRig.setMode('ULTIMATE_CINEMATIC', this.player.facingYaw);
-    this.cameraRig.addShake(0.28, 0.3);
-    this.particlePool.emitReactionBurst(
-      'ELECTRO_SURGE',
+    this.petEntity.activateUltimatePet(
+      elemId,
+      this.scratchOriginSnapshot,
+      this.player.facingYaw,
+      isGrand
+    );
+    this.cameraRig.setMode('ULTIMATE_CINEMATIC', this.player.facingYaw, isGrand);
+    this.cameraRig.addShake(isGrand ? 0.42 : 0.28, isGrand ? 0.42 : 0.3);
+    this.particlePool.emitHenshinAscension(
+      elemId,
       this.scratchOriginSnapshot.x,
-      this.scratchOriginSnapshot.y + 0.6,
-      this.scratchOriginSnapshot.z
+      this.scratchOriginSnapshot.y + 0.5,
+      this.scratchOriginSnapshot.z,
+      isGrand
     );
     useGameStore
       .getState()
-      .triggerFinisherCinematic(elemId, cfg.finisherName, this.player.wasFinisherCastFromUltimate);
+      .triggerFinisherCinematic(elemId, cfg.finisherName, isGrand);
   }
 
   private resolveUltimateFinisherImpact(): void {
     if (!this.player) return;
     const elemId = this.player.currentElementId;
     const cfg = getElementConfig(elemId);
+    const isGrand = this.player.wasFinisherCastFromUltimate;
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
     const impactX = this.scratchOriginSnapshot.x + this.scratchPlayerForwardXZ.x * 2.6;
     const impactZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 2.6;
 
-    this.elementSkillVfx.spawnFinisherClimax(elemId, impactX, impactZ, 12.5);
-    this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, 6.2, true);
-    this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.55, impactZ, 1.45);
-    this.loop.triggerHitStop(0.14);
-    this.cameraRig.addShake(0.6, 0.45);
+    if (isGrand) {
+      // GRAND SOVEREIGN SUPERNOVA CLIMAX (Ultimate Form [R]!)
+      this.elementSkillVfx.spawnGrandUltimateClimax(
+        elemId,
+        impactX,
+        impactZ,
+        this.player.facingYaw,
+        15.5
+      );
+      this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, 8.2, true);
+      this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.7, impactZ, 1.75);
+      this.particlePool.emitHenshinAscension(elemId, impactX, 1.0, impactZ, true);
+      this.loop.triggerHitStop(0.18);
+      this.cameraRig.addShake(0.72, 0.58);
+    } else {
+      this.elementSkillVfx.spawnFinisherClimax(elemId, impactX, impactZ, 12.5);
+      this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, 6.2, true);
+      this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.55, impactZ, 1.45);
+      this.loop.triggerHitStop(0.14);
+      this.cameraRig.addShake(0.6, 0.45);
+    }
     this.audio.playRiderKickImpact();
     this.audio.playReaction('STEAM_BURST');
 
-    const finisherMult = this.player.wasFinisherCastFromUltimate ? 7.8 : 6.2;
+    const finisherMult = isGrand ? 7.8 : 6.2;
+    const hitRadius = isGrand ? 19.0 : 15.0;
+    const hitLabel = isGrand ? `OMEGA ${cfg.finisherName.toUpperCase()}` : cfg.finisherName.toUpperCase();
 
     for (let i = 0; i < this.enemies.length; i++) {
       const enemy = this.enemies[i]!;
@@ -1435,9 +1533,9 @@ export class GameApp {
         this.scratchTargetSnapshot.x - this.scratchOriginSnapshot.x,
         this.scratchTargetSnapshot.z - this.scratchOriginSnapshot.z
       );
-      if (dist <= 15.0) {
+      if (dist <= hitRadius) {
         this.particlePool.emitReactionBurst(
-          'STEAM_BURST',
+          isGrand ? 'ECLIPSE' : 'STEAM_BURST',
           this.scratchTargetSnapshot.x,
           this.scratchTargetSnapshot.y,
           this.scratchTargetSnapshot.z
@@ -1446,10 +1544,10 @@ export class GameApp {
           enemy,
           elemId,
           finisherMult,
-          195,
+          isGrand ? 240 : 195,
           95,
           true,
-          cfg.finisherName.toUpperCase(),
+          hitLabel,
           true
         );
       }
@@ -1458,21 +1556,34 @@ export class GameApp {
 
   private triggerUltimateBackExplosionVfx(): void {
     if (!this.player) return;
+    const isGrand = this.player.wasFinisherCastFromUltimate;
     this.player.getPosition(this.scratchOriginSnapshot);
     const fx = Math.sin(this.player.facingYaw);
     const fz = Math.cos(this.player.facingYaw);
-    const bx =
-      this.scratchOriginSnapshot.x +
-      fx * (3.5 + Math.random() * 2.5) +
-      (Math.random() - 0.5) * 3.0;
-    const bz =
-      this.scratchOriginSnapshot.z +
-      fz * (3.5 + Math.random() * 2.5) +
-      (Math.random() - 0.5) * 3.0;
+    const rx = Math.cos(this.player.facingYaw);
+    const rz = -Math.sin(this.player.facingYaw);
+    const lateral = (Math.random() - 0.5) * (isGrand ? 7.4 : 3.2);
+    const forwardDist = (isGrand ? 4.2 : 3.5) + Math.random() * (isGrand ? 4.2 : 2.5);
+    const bx = this.scratchOriginSnapshot.x + fx * forwardDist + rx * lateral;
+    const bz = this.scratchOriginSnapshot.z + fz * forwardDist + rz * lateral;
 
-    this.elementSkillVfx.spawnExplosionPillar(this.player.currentElementId, bx, bz, 3.85);
-    this.particlePool.emitTokusatsuExplosion(this.player.currentElementId, bx, 0.45, bz, 1.25);
-    this.cameraRig.addShake(0.36, 0.22);
+    this.elementSkillVfx.spawnExplosionPillar(
+      this.player.currentElementId,
+      bx,
+      bz,
+      isGrand ? 4.4 : 3.85
+    );
+    this.particlePool.emitTokusatsuExplosion(
+      this.player.currentElementId,
+      bx,
+      0.5,
+      bz,
+      isGrand ? 1.48 : 1.25
+    );
+    if (isGrand) {
+      this.particlePool.emitHenshinAscension(this.player.currentElementId, bx, 0.8, bz, true);
+    }
+    this.cameraRig.addShake(isGrand ? 0.44 : 0.36, 0.24);
     this.audio.playReaction('OVERLOAD');
   }
 
@@ -2401,21 +2512,40 @@ export class GameApp {
       this.enemies[i]!.updateVisuals(visualDt, this.camera);
     }
     const vfxDt = rawDt * this.loop.getTimeScale();
-    // Spawn Hyper K-Driver Air Seal right when Cut-In wipes open in ULTIMATE_CINEMATIC!
+    // Spawn Air Seal(s) right when Cut-In wipes open in ULTIMATE_CINEMATIC!
+    const isGrandCinematic =
+      this.player.fsm.state === 'ULTIMATE_CINEMATIC' && this.player.wasFinisherCastFromUltimate;
     if (
       this.player.fsm.state === 'ULTIMATE_CINEMATIC' &&
       !this.ultimateSealSpawned &&
       this.player.currentCinematicElapsed >= 1.06
     ) {
       this.ultimateSealSpawned = true;
-      this.riderKickVfx.spawnAirSeal(
-        this.player.currentElementId,
-        this.scratchRenderPos.x,
-        this.scratchRenderPos.y,
-        this.scratchRenderPos.z,
-        this.player.facingYaw,
-        true
-      );
+      if (isGrandCinematic) {
+        // GRAND ULTIMATE FORM: 3 Stacked Golden Orbital Seals + Roaring Plasma Wings burst!
+        this.riderKickVfx.spawnTripleOrbitalSeals(
+          this.player.currentElementId,
+          this.scratchRenderPos.x,
+          this.scratchRenderPos.y,
+          this.scratchRenderPos.z,
+          this.player.facingYaw
+        );
+        this.elementSkillVfx.spawnHenshinUltimate(
+          this.player.currentElementId,
+          this.scratchRenderPos.x,
+          this.scratchRenderPos.z,
+          this.player.facingYaw
+        );
+      } else {
+        this.riderKickVfx.spawnAirSeal(
+          this.player.currentElementId,
+          this.scratchRenderPos.x,
+          this.scratchRenderPos.y,
+          this.scratchRenderPos.z,
+          this.player.facingYaw,
+          true
+        );
+      }
     }
 
     // Sync 6-layer bone-attached Rider Kick VFX + live glowing heel spark trail!
@@ -2428,13 +2558,16 @@ export class GameApp {
         this.scratchBootWorldPos,
         this.player.facingYaw,
         kickState.intensity,
-        kickState.scale,
-        vfxDt
+        isGrandCinematic ? kickState.scale * 1.18 : kickState.scale,
+        vfxDt,
+        isGrandCinematic
       );
       this.kickSparkCooldown -= vfxDt;
       if (this.kickSparkCooldown <= 0) {
-        this.kickSparkCooldown = 0.028;
-        this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+        this.kickSparkCooldown = isGrandCinematic ? 0.02 : 0.028;
+        this.scratchColorHelper.set(
+          isGrandCinematic ? '#fde047' : this.player.activeElement.emissiveColor
+        );
         this.particlePool.emitHitSparks(
           this.scratchBootWorldPos.x,
           this.scratchBootWorldPos.y,
@@ -2452,7 +2585,8 @@ export class GameApp {
         this.player.facingYaw,
         0,
         1,
-        vfxDt
+        vfxDt,
+        false
       );
     }
 
@@ -2475,6 +2609,14 @@ export class GameApp {
     this.cameraRig.update(rawDt, this.scratchRenderPos, lockTargetPos);
     this.renderFrame();
   };
+
+  private warmUpVfxShaders(): void {
+    this.riderKickVfx.setWarmupVisible(true);
+    this.elementSkillVfx.setWarmupVisible(true);
+    this.renderer.compile(this.scene, this.camera);
+    this.riderKickVfx.setWarmupVisible(false);
+    this.elementSkillVfx.setWarmupVisible(false);
+  }
 
   private renderFrame(): void {
     if (this.bloomEnabled) {
