@@ -199,6 +199,14 @@ export class HumanoidBoneDriver {
     }
   }
 
+  public get isActiveRig(): boolean {
+    return this.isActive;
+  }
+
+  public getBone(key: HumanoidBoneKey): THREE.Object3D | null {
+    return this.bones.get(key)?.bone ?? null;
+  }
+
   /**
    * Creates a weapon mount Group inside `RightHand` or `LeftHand` that automatically compensates
    * for centimeter-scale armatures (0.01 -> 100x) and arbitrary hand bind-pose roll so meter-scale

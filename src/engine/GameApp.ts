@@ -53,6 +53,7 @@ import type {
 } from '../game/types/schema';
 import { ElementSkillVfx } from '../game/vfx/ElementSkillVfx';
 import { ParticlePool } from '../game/vfx/ParticlePool';
+import { RiderKickVfx } from '../game/vfx/RiderKickVfx';
 import { useGameStore } from '../store/useGameStore';
 
 const PLAYER_GRAVITY_PULL = -18.0;
@@ -82,6 +83,7 @@ export class GameApp {
   private readonly gemShardPool: GemShardPool;
   private readonly particlePool: ParticlePool;
   private readonly elementSkillVfx: ElementSkillVfx;
+  private readonly riderKickVfx: RiderKickVfx;
   private readonly playerProjectilePool: PlayerProjectilePool;
   private readonly arenaThemeManager: ArenaThemeManager;
   private readonly playerHitbox: HitboxSystem;
@@ -124,6 +126,8 @@ export class GameApp {
   private outcomeSequenceActive = false;
   private outcomeSequenceVictory = false;
   private outcomeSequenceElapsed = 0;
+  private kickSparkCooldown = 0;
+  private ultimateSealSpawned = false;
   private telemetryCooldownSec = 0;
   private disposed = false;
 
@@ -133,6 +137,7 @@ export class GameApp {
   private readonly scratchPrevPos = new THREE.Vector3(0, PLAYER_SPAWN_Y, 0);
   private readonly scratchCurrPos = new THREE.Vector3(0, PLAYER_SPAWN_Y, 0);
   private readonly scratchRenderPos = new THREE.Vector3(0, PLAYER_SPAWN_Y, 0);
+  private readonly scratchBootWorldPos = new THREE.Vector3();
   private readonly scratchLockTargetPos = new THREE.Vector3();
   private readonly scratchPlayerForwardXZ = { x: 0, z: 1 };
   private readonly scratchOriginSnapshot: Vec3Snapshot = { x: 0, y: 0, z: 0 };
@@ -194,6 +199,9 @@ export class GameApp {
 
     this.elementSkillVfx = new ElementSkillVfx();
     this.scene.add(this.elementSkillVfx.root);
+
+    this.riderKickVfx = new RiderKickVfx();
+    this.scene.add(this.riderKickVfx.root);
 
     this.playerProjectilePool = new PlayerProjectilePool();
     this.scene.add(this.playerProjectilePool.root);
@@ -394,6 +402,9 @@ export class GameApp {
     this.gemShardPool.clearAll();
     this.playerProjectilePool.clearAll();
     this.elementSkillVfx.clearAll();
+    this.riderKickVfx.clearAll();
+    this.ultimateSealSpawned = false;
+    this.kickSparkCooldown = 0;
     this.resetDomainDimming();
     this.petEntity.resetAll();
     this.playerHitbox.endSwing();
@@ -443,6 +454,9 @@ export class GameApp {
     this.gemShardPool.clearAll();
     this.playerProjectilePool.clearAll();
     this.elementSkillVfx.clearAll();
+    this.riderKickVfx.clearAll();
+    this.ultimateSealSpawned = false;
+    this.kickSparkCooldown = 0;
     this.resetDomainDimming();
     this.petEntity.resetAll();
     this.stageManager.resetToIdle();
@@ -488,6 +502,7 @@ export class GameApp {
     this.defaultAtmosphereParts.length = 0;
     this.particlePool.dispose();
     this.elementSkillVfx.dispose();
+    this.riderKickVfx.dispose();
     this.cameraRig.dispose();
     this.audio.dispose();
 
@@ -1349,6 +1364,7 @@ export class GameApp {
       this.domainBaseEnvIntensity = this.scene.environmentIntensity;
     }
     this.domainDimActive = true;
+    this.ultimateSealSpawned = false;
     this.finisherSpotLight.color.set(cfg.emissiveColor);
 
     this.audio.playUltimateFinisher();
@@ -1377,6 +1393,7 @@ export class GameApp {
     const impactZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 2.6;
 
     this.elementSkillVfx.spawnFinisherClimax(elemId, impactX, impactZ, 12.5);
+    this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, 6.2, true);
     this.loop.triggerHitStop(0.14);
     this.cameraRig.addShake(0.6, 0.45);
     this.audio.playRiderKickImpact();
@@ -1681,6 +1698,14 @@ export class GameApp {
     this.loop.setTimeScale(0.62, 0.28);
     this.cameraRig.addShake(0.18, 0.16);
     this.player.getPosition(this.scratchOriginSnapshot);
+    this.riderKickVfx.spawnAirSeal(
+      elemId,
+      this.scratchOriginSnapshot.x,
+      this.scratchOriginSnapshot.y,
+      this.scratchOriginSnapshot.z,
+      this.player.facingYaw,
+      this.player.currentFormTier !== 'BASIC'
+    );
     this.particlePool.emitElementBurst(
       elemId,
       this.scratchOriginSnapshot.x,
@@ -1706,6 +1731,7 @@ export class GameApp {
     this.cameraRig.addShake(0.48, 0.32);
     this.elementSkillVfx.spawnSkillVfx(elemId, impactX, impactZ, this.player.facingYaw, kickRadius, isSuper);
     this.elementSkillVfx.spawnExplosionPillar(elemId, impactX, impactZ, isSuper ? 3.2 : 2.6);
+    this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, kickRadius * 0.94, isSuper);
     this.particlePool.emitReactionBurst('OVERLOAD', impactX, 0.9, impactZ);
 
     let connected = false;
@@ -2349,8 +2375,65 @@ export class GameApp {
     for (let i = 0; i < this.enemies.length; i++) {
       this.enemies[i]!.updateVisuals(visualDt, this.camera);
     }
-    this.particlePool.update(rawDt * this.loop.getTimeScale());
-    this.elementSkillVfx.update(rawDt * this.loop.getTimeScale());
+    const vfxDt = rawDt * this.loop.getTimeScale();
+    // Spawn Hyper K-Driver Air Seal right when Cut-In wipes open in ULTIMATE_CINEMATIC!
+    if (
+      this.player.fsm.state === 'ULTIMATE_CINEMATIC' &&
+      !this.ultimateSealSpawned &&
+      this.player.currentCinematicElapsed >= 1.06
+    ) {
+      this.ultimateSealSpawned = true;
+      this.riderKickVfx.spawnAirSeal(
+        this.player.currentElementId,
+        this.scratchRenderPos.x,
+        this.scratchRenderPos.y,
+        this.scratchRenderPos.z,
+        this.player.facingYaw,
+        true
+      );
+    }
+
+    // Sync 6-layer bone-attached Rider Kick VFX + live glowing heel spark trail!
+    const kickState = this.player.getKickVfxIntensity();
+    if (kickState.active) {
+      this.player.getKickBootWorldPosition(this.scratchBootWorldPos);
+      this.riderKickVfx.syncBootDive(
+        true,
+        this.player.currentElementId,
+        this.scratchBootWorldPos,
+        this.player.facingYaw,
+        kickState.intensity,
+        kickState.scale,
+        vfxDt
+      );
+      this.kickSparkCooldown -= vfxDt;
+      if (this.kickSparkCooldown <= 0) {
+        this.kickSparkCooldown = 0.028;
+        this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+        this.particlePool.emitHitSparks(
+          this.scratchBootWorldPos.x,
+          this.scratchBootWorldPos.y,
+          this.scratchBootWorldPos.z,
+          this.scratchColorHelper.getHex(),
+          true
+        );
+      }
+    } else {
+      this.kickSparkCooldown = 0;
+      this.riderKickVfx.syncBootDive(
+        false,
+        this.player.currentElementId,
+        this.scratchBootWorldPos,
+        this.player.facingYaw,
+        0,
+        1,
+        vfxDt
+      );
+    }
+
+    this.particlePool.update(vfxDt);
+    this.elementSkillVfx.update(vfxDt);
+    this.riderKickVfx.update(vfxDt);
     this.updateDomainDimming(rawDt, this.scratchRenderPos);
 
     let lockTargetPos: THREE.Vector3 | null = null;

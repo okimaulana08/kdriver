@@ -223,8 +223,6 @@ export class PlayerRider implements HurtboxTarget {
   private readonly superAuraRingMesh: THREE.Mesh;
   private readonly beltBurstRingMat: THREE.MeshBasicMaterial;
   private readonly beltBurstRingMesh: THREE.Mesh;
-  private readonly riderKickConeMat: THREE.MeshBasicMaterial;
-  private readonly riderKickConeMesh: THREE.Mesh;
   private readonly ownedMaterials: THREE.Material[] = [];
 
   // Reusable scratch objects (Zero-Allocation Hot Path)
@@ -234,6 +232,7 @@ export class PlayerRider implements HurtboxTarget {
   private readonly scratchMoveDir = new THREE.Vector3();
   private readonly scratchWeaponBaseWorld = new THREE.Vector3();
   private readonly scratchWeaponTipWorld = new THREE.Vector3();
+  private readonly scratchKickVfxState = { active: false, intensity: 0, scale: 1 };
   private readonly scratchFsmInput: PlayerFSMInput = {
     isMoving: false,
     wantsAttack: false,
@@ -731,29 +730,7 @@ export class PlayerRider implements HurtboxTarget {
     this.beltBurstRingMesh.position.y = 0.05;
     this.beltBurstRingMesh.visible = false;
 
-    // Flying Rider Kick supersonic elemental energy cone projecting from the Rider's boot!
-    this.riderKickConeMat = new THREE.MeshBasicMaterial({
-      color: this.elementConfig.emissiveColor,
-      transparent: true,
-      opacity: 0.78,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    });
-    this.ownedMaterials.push(this.riderKickConeMat);
-    const kickConeGeo = new THREE.ConeGeometry(0.72, 2.35, 18, 1, true);
-    kickConeGeo.rotateX(Math.PI / 2 + 0.34);
-    this.ownedGeometries.push(kickConeGeo);
-    this.riderKickConeMesh = new THREE.Mesh(kickConeGeo, this.riderKickConeMat);
-    this.riderKickConeMesh.position.set(-0.14, -0.25, 1.38);
-    this.riderKickConeMesh.visible = false;
-
-    this.root.add(
-      this.dodgeRingMesh,
-      this.superAuraRingMesh,
-      this.beltBurstRingMesh,
-      this.riderKickConeMesh
-    );
+    this.root.add(this.dodgeRingMesh, this.superAuraRingMesh, this.beltBurstRingMesh);
 
     this.applyActiveWeaponMesh(initialElement);
     this.setModularSuperArmorVisible(false);
@@ -819,6 +796,66 @@ export class PlayerRider implements HurtboxTarget {
       this.yaw = Math.atan2(dx, dz);
       this.root.rotation.y = this.yaw;
     }
+  }
+
+  /**
+   * Returns current 6-layer RiderKickVfx intensity/scale for BOTH [SPACE] RIDER_KICK & [R] ULTIMATE_CINEMATIC (Zero-Allocation).
+   */
+  public getKickVfxIntensity(): { active: boolean; intensity: number; scale: number } {
+    const state = this.fsm.state;
+    const t = this.fsm.stateTime;
+    const out = this.scratchKickVfxState;
+
+    if (state === 'RIDER_KICK' && t >= 0.2 && t <= 0.76) {
+      const fadeIn = Math.min(1, (t - 0.2) / 0.12);
+      const fadeOut = t > 0.64 ? Math.max(0, (0.76 - t) / 0.12) : 1;
+      out.active = true;
+      out.intensity = fadeIn * fadeOut;
+      out.scale = this.formTier === 'ULTIMATE' ? 1.24 : this.formTier === 'SUPER' ? 1.12 : 1.0;
+      return out;
+    }
+
+    if (state === 'ULTIMATE_CINEMATIC' && t >= 1.24 && t <= 2.14) {
+      const fadeIn = Math.min(1, (t - 1.24) / 0.18);
+      const fadeOut = t > 1.94 ? Math.max(0, (2.14 - t) / 0.2) : 1;
+      out.active = true;
+      out.intensity = fadeIn * fadeOut;
+      out.scale = 1.44;
+      return out;
+    }
+
+    out.active = false;
+    out.intensity = 0;
+    out.scale = 1;
+    return out;
+  }
+
+  /**
+   * Reads the real world-space position of the Rider's extended kicking boot (`RightFoot` bone on active Basic/Super/Ultimate rig).
+   */
+  public getKickBootWorldPosition(out: THREE.Vector3): THREE.Vector3 {
+    const activeDriver =
+      this.activeBodyMode === 'ULTIMATE' && this.ultimateBoneDriver?.isActive
+        ? this.ultimateBoneDriver
+        : this.activeBodyMode === 'SUPER' && this.superBoneDriver?.isActive
+          ? this.superBoneDriver
+          : this.boneDriver.isActive
+            ? this.boneDriver
+            : null;
+    const footBone = activeDriver?.getBone('RightFoot') ?? null;
+    if (footBone) {
+      this.root.updateMatrixWorld(true);
+      footBone.getWorldPosition(out);
+      out.x += Math.sin(this.yaw) * 0.16;
+      out.y -= 0.06;
+      out.z += Math.cos(this.yaw) * 0.16;
+      return out;
+    }
+    return out.set(
+      this.root.position.x + Math.sin(this.yaw) * 0.85,
+      this.root.position.y - 0.15,
+      this.root.position.z + Math.cos(this.yaw) * 0.85
+    );
   }
 
   public get currentElementId(): ElementId {
@@ -992,7 +1029,6 @@ export class PlayerRider implements HurtboxTarget {
     this.bladeEdgeMat.color.set(this.elementConfig.emissiveColor);
     this.bladeEdgeMat.emissive.set(this.elementConfig.emissiveColor);
     this.beltBurstRingMat.color.set(this.elementConfig.emissiveColor);
-    this.riderKickConeMat.color.set(this.elementConfig.emissiveColor);
 
     // Data-driven selective PBR Armor Hue-Shift on Basic & Super Form sculpted suits (PYRO=native crimson, VOLT=electric gold, AQUA=sapphire blue!)
     for (let i = 0; i < this.armorHueUniforms.length; i++) {
@@ -1515,15 +1551,6 @@ export class PlayerRider implements HurtboxTarget {
         kickOffsetY = 0.42 * (1 - u) + Math.sin(u * Math.PI) * 1.15;
       }
       this.root.position.set(interpolatedPos.x, interpolatedPos.y + kickOffsetY, interpolatedPos.z);
-
-      const showCone = t >= 0.28 && t <= 0.74;
-      this.riderKickConeMesh.visible = showCone;
-      if (showCone) {
-        const pulse = 0.94 + Math.sin(t * 48) * 0.14;
-        this.riderKickConeMesh.scale.set(pulse, 1.15, pulse);
-        this.riderKickConeMesh.rotation.z += renderDt * 22;
-        this.riderKickConeMat.opacity = t > 0.64 ? Math.max(0, (0.74 - t) / 0.1) * 0.88 : 0.86;
-      }
     } else if (state === 'ULTIMATE_CINEMATIC') {
       const t = this.fsm.stateTime;
       let kickOffsetY = 0;
@@ -1550,18 +1577,8 @@ export class PlayerRider implements HurtboxTarget {
         interpolatedPos.y + kickOffsetY,
         interpolatedPos.z + Math.cos(this.yaw) * kickOffsetForward
       );
-
-      const showCone = t >= 1.38 && t <= 2.12;
-      this.riderKickConeMesh.visible = showCone;
-      if (showCone) {
-        const pulse = 1.05 + Math.sin(t * 46) * 0.16;
-        this.riderKickConeMesh.scale.set(pulse, 1.35 + (t > 1.82 && t < 1.98 ? 0.35 : 0), pulse);
-        this.riderKickConeMesh.rotation.z += renderDt * 24;
-        this.riderKickConeMat.opacity = t > 1.96 ? Math.max(0, (2.12 - t) / 0.16) * 0.9 : 0.9;
-      }
     } else {
       this.root.position.copy(interpolatedPos);
-      this.riderKickConeMesh.visible = false;
     }
     this.root.rotation.y = this.yaw;
     this.animTime += renderDt * (state === 'MOVE' ? 9.6 : 3.0);

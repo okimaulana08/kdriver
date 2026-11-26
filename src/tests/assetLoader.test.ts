@@ -89,6 +89,7 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       'src/game/entities/PetEntity.ts',
       'src/game/vfx/ElementSkillVfx.ts',
       'src/game/vfx/ParticlePool.ts',
+      'src/game/vfx/RiderKickVfx.ts',
       'src/game/vfx/SlashTrail.ts',
     ];
 
