@@ -100,8 +100,8 @@ describe('Phase 5 Expansion: 10 Elements, RANGED, Lazy Arenas, Progression & Gam
     expect(normalHit.finalDamage).toBe(50);
   });
 
-  it('provides 3 distinct thematic stages (Coastal Quarry, Volcanic Crater, Forest Ruins) with Boss pools', () => {
-    expect(STAGE_LIST).toHaveLength(3);
+  it('provides distinct thematic stages (Coastal Quarry, Volcanic Crater, Forest Ruins) plus Boss Rush with Boss pools', () => {
+    expect(STAGE_LIST.length).toBeGreaterThanOrEqual(4);
     const s1 = getStageConfig('stage_01_nexus_arena');
     const s2 = getStageConfig('stage_02_volcanic_crater');
     const s3 = getStageConfig('stage_03_forest_ruins');

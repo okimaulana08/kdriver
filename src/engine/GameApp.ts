@@ -31,6 +31,7 @@ import {
 import { HitboxSystem } from '../game/combat/HitboxSystem';
 import { PlayerProjectilePool } from '../game/combat/PlayerProjectilePool';
 import { evaluateElementalReaction } from '../game/combat/ReactionSystem';
+import { getDifficultyConfig, scaleEnemyConfigForDifficulty } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getEnemyConfig, type EnemyConfigId } from '../game/data/enemies';
 import { getStageConfig } from '../game/data/stages';
@@ -44,6 +45,7 @@ import {
   type PlayerDesiredMovement,
 } from '../game/entities/PlayerRider';
 import type {
+  DifficultyId,
   ElementId,
   FloatingTextKind,
   HurtboxTarget,
@@ -51,6 +53,7 @@ import type {
   Vec3Snapshot,
   WaveConfig,
 } from '../game/types/schema';
+import { AfterimageTrail } from '../game/vfx/AfterimageTrail';
 import { ElementSkillVfx } from '../game/vfx/ElementSkillVfx';
 import { ParticlePool } from '../game/vfx/ParticlePool';
 import { RiderKickVfx } from '../game/vfx/RiderKickVfx';
@@ -84,6 +87,7 @@ export class GameApp {
   private readonly particlePool: ParticlePool;
   private readonly elementSkillVfx: ElementSkillVfx;
   private readonly riderKickVfx: RiderKickVfx;
+  private readonly afterimageTrail: AfterimageTrail;
   private readonly playerProjectilePool: PlayerProjectilePool;
   private readonly arenaThemeManager: ArenaThemeManager;
   private readonly playerHitbox: HitboxSystem;
@@ -127,6 +131,8 @@ export class GameApp {
   private outcomeSequenceVictory = false;
   private outcomeSequenceElapsed = 0;
   private kickSparkCooldown = 0;
+  private afterimageCooldown = 0;
+  private bossIntroTimer = 0;
   private ultimateSealSpawned = false;
   private telemetryCooldownSec = 0;
   private disposed = false;
@@ -202,6 +208,9 @@ export class GameApp {
 
     this.riderKickVfx = new RiderKickVfx();
     this.scene.add(this.riderKickVfx.root);
+
+    this.afterimageTrail = new AfterimageTrail();
+    this.scene.add(this.afterimageTrail.root);
 
     this.playerProjectilePool = new PlayerProjectilePool();
     this.scene.add(this.playerProjectilePool.root);
@@ -369,6 +378,11 @@ export class GameApp {
     }
   }
 
+  public selectDifficulty(difficulty: DifficultyId): void {
+    this.stageManager.setDifficulty(difficulty);
+    useGameStore.getState().setSelectedDifficulty(difficulty);
+  }
+
   public syncGemProgression(): void {
     const record = useGameStore.getState().saveRecord;
     this.player?.setGemLevels(record.gemLevels);
@@ -399,7 +413,10 @@ export class GameApp {
     if (!this.player || !this.petEntity) return;
     const store = useGameStore.getState();
     const stage = getStageConfig(store.selectedStageId);
+    const difficulty = store.selectedDifficulty;
+    const diffCfg = getDifficultyConfig(difficulty);
     this.stageManager.setStage(stage);
+    this.stageManager.setDifficulty(difficulty);
     this.audio.unlock();
     this.input.setAllowPointerLock(true);
     this.disposeAllEnemies();
@@ -407,13 +424,18 @@ export class GameApp {
     this.playerProjectilePool.clearAll();
     this.elementSkillVfx.clearAll();
     this.riderKickVfx.clearAll();
+    this.afterimageTrail.clearAll();
     this.ultimateSealSpawned = false;
     this.kickSparkCooldown = 0;
+    this.afterimageCooldown = 0;
+    this.bossIntroTimer = 0;
     this.resetDomainDimming();
     this.petEntity.resetAll();
     this.playerHitbox.endSwing();
     this.skillHitbox.endSwing();
     this.loop.resetTimeScale();
+
+    this.player.fsm.setDodgeIframeBonus(diffCfg.dodgeIframeBonusSec);
 
     this.comboCount = 0;
     this.comboResetTimer = 0;
@@ -460,8 +482,12 @@ export class GameApp {
     this.playerProjectilePool.clearAll();
     this.elementSkillVfx.clearAll();
     this.riderKickVfx.clearAll();
+    this.afterimageTrail.clearAll();
     this.ultimateSealSpawned = false;
     this.kickSparkCooldown = 0;
+    this.afterimageCooldown = 0;
+    this.bossIntroTimer = 0;
+    useGameStore.getState().clearBossIntroBanner();
     this.resetDomainDimming();
     this.petEntity.resetAll();
     this.stageManager.resetToIdle();
@@ -508,6 +534,7 @@ export class GameApp {
     this.particlePool.dispose();
     this.elementSkillVfx.dispose();
     this.riderKickVfx.dispose();
+    this.afterimageTrail.dispose();
     this.cameraRig.dispose();
     this.audio.dispose();
 
@@ -759,9 +786,40 @@ export class GameApp {
       return;
     }
 
-    // 1. Stage Wave Progression
+    // 1. Stage Wave Progression & Mini Boss Intro Timer
+    if (this.bossIntroTimer > 0) {
+      this.bossIntroTimer = Math.max(0, this.bossIntroTimer - fixedDt);
+      if (this.bossIntroTimer === 0) {
+        if (this.cameraRig.currentMode === 'BOSS_INTRO') {
+          this.cameraRig.setMode('COMBAT');
+        }
+        useGameStore.getState().clearBossIntroBanner();
+      }
+    }
+
     const aliveCount = this.countAliveEnemies();
     const stageTick = this.stageManager.fixedUpdate(fixedDt, aliveCount);
+
+    if (stageTick.bossRushHealPct > 0) {
+      const healAmount = Math.round(this.player.maximumHp * stageTick.bossRushHealPct);
+      const healed = this.player.heal(healAmount);
+      this.audio.playShardPickup();
+      this.particlePool.emitHenshinAscension(
+        'flora',
+        this.scratchCurrPos.x,
+        this.scratchCurrPos.y + 0.3,
+        this.scratchCurrPos.z,
+        false
+      );
+      this.emitFloatingTextAtWorld(
+        this.scratchCurrPos.x,
+        this.scratchCurrPos.y + 1.5,
+        this.scratchCurrPos.z,
+        healed > 0 ? `+${healed} HP` : 'FULL HP!',
+        'heal',
+        'BOSS RUSH RECOVERY'
+      );
+    }
 
     if (stageTick.spawnWave) {
       if (this.cameraRig.currentMode === 'ARENA_ENTRY') {
@@ -831,7 +889,8 @@ export class GameApp {
       lockTargetPos = this.scratchLockTargetPos;
     }
 
-    const controlsLocked = this.stageManager.state === 'ENTRY_HENSHIN';
+    const controlsLocked =
+      this.stageManager.state === 'ENTRY_HENSHIN' || this.bossIntroTimer > 0;
     const bossStaggered = this.isAnyBossStaggered();
 
     // 3. Player FSM & Movement
@@ -896,6 +955,17 @@ export class GameApp {
     }
     if (playerEvents.startedDodge) {
       this.audio.playDodge();
+      this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+      this.afterimageTrail.spawnGhost(
+        this.scratchCurrPos.x,
+        this.scratchCurrPos.y,
+        this.scratchCurrPos.z,
+        this.player.facingYaw,
+        this.scratchColorHelper.getHex(),
+        0.34,
+        0.34,
+        1.02
+      );
     }
 
     // 4. Async Pet Assist (`E`)
@@ -1307,17 +1377,24 @@ export class GameApp {
     this.audio.playFormSwitch(this.player.currentElementId, false);
 
     const flatIds: EnemyConfigId[] = [];
+    const difficulty = this.stageManager.difficulty;
+    const diffCfg = getDifficultyConfig(difficulty);
     for (let i = 0; i < wave.spawns.length; i++) {
       const entry = wave.spawns[i]!;
       for (let c = 0; c < entry.count; c++) {
         flatIds.push(entry.enemyId);
       }
     }
+    // HELL difficulty: inject an extra Armored Brute into Wave 2 of regular sectors!
+    if (diffCfg.hellExtraElite && !this.stageManager.stage.isBossRush && wave.waveNumber === 2) {
+      flatIds.push('armored_brute');
+    }
 
     const total = flatIds.length;
+    let introBoss: BossKaijin | null = null;
     for (let i = 0; i < total; i++) {
       const enemyId = flatIds[i]!;
-      const cfg = getEnemyConfig(enemyId);
+      const cfg = scaleEnemyConfigForDifficulty(getEnemyConfig(enemyId), difficulty);
       const spread = total === 1 ? 0 : (i / (total - 1) - 0.5) * Math.PI * 0.85;
       const dist = cfg.tier === 'BOSS' ? 8.0 : cfg.tier === 'ELITE' ? 9.2 : 10.2;
       const sx = Math.sin(spread) * dist;
@@ -1327,13 +1404,14 @@ export class GameApp {
       const textures = this.pbrTextures ?? this.assetLoader.getPbrTextures();
       const enemy =
         cfg.tier === 'BOSS'
-          ? new BossKaijin(uid, cfg, this.assetLoader, textures, sx, sz)
-          : new EnemyBase(uid, cfg, this.assetLoader, textures, sx, sz);
+          ? new BossKaijin(uid, cfg, this.assetLoader, textures, sx, sz, difficulty)
+          : new EnemyBase(uid, cfg, this.assetLoader, textures, sx, sz, difficulty);
 
       this.scene.add(enemy.root);
       if (enemy instanceof BossKaijin) {
         this.scene.add(enemy.projectileGroup);
         this.scene.add(enemy.hazardGroup);
+        if (!introBoss) introBoss = enemy;
       }
       this.enemies.push(enemy);
 
@@ -1344,6 +1422,26 @@ export class GameApp {
         sz,
         24,
         1.0
+      );
+    }
+
+    // Mini Cinematic Boss Intro (1.25s low-angle camera sweep + slanted Tokusatsu warning card!)
+    if (introBoss) {
+      introBoss.getPosition(this.scratchTargetSnapshot);
+      const bossFacingYaw = Math.atan2(-this.scratchTargetSnapshot.x, -this.scratchTargetSnapshot.z);
+      this.bossIntroTimer = 1.25;
+      this.cameraRig.setBossIntroTarget(
+        this.scratchTargetSnapshot.x,
+        1.75,
+        this.scratchTargetSnapshot.z,
+        bossFacingYaw
+      );
+      this.cameraRig.setMode('BOSS_INTRO');
+      this.audio.playBossPhase2();
+      store.triggerBossIntroBanner(
+        introBoss.config.name,
+        wave.subtitle,
+        introBoss.signatureProfile.phase2BannerColor
       );
     }
   }
@@ -1871,6 +1969,7 @@ export class GameApp {
     this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.45, impactZ, isSuper ? 1.2 : 0.96);
 
     let connected = false;
+    let hitStaggeredTarget = false;
     for (let i = 0; i < this.enemies.length; i++) {
       const enemy = this.enemies[i]!;
       if (!enemy.isAlive) continue;
@@ -1881,22 +1980,30 @@ export class GameApp {
       );
       if (dist <= kickRadius + enemy.radius) {
         connected = true;
-        const mult = enemy.isStaggered ? (isSuper ? 4.2 : 3.5) : isSuper ? 3.3 : 2.6;
+        if (enemy.isStaggered) hitStaggeredTarget = true;
+        const mult = enemy.isStaggered ? (isSuper ? 4.4 : 3.65) : isSuper ? 3.3 : 2.6;
         this.applyElementalStrikeOnEnemy(
           enemy,
           elemId,
           mult,
           75,
-          95,
+          enemy.isStaggered ? 120 : 95,
           true,
-          enemy.isStaggered ? 'CRITICAL RIDER KICK!' : 'RIDER KICK!',
+          enemy.isStaggered ? '💥 BREAK KICK!' : 'RIDER KICK!',
           false,
           enemy.isStaggered
         );
       }
     }
+    if (hitStaggeredTarget) {
+      // Dramatic Break-Counter slow-mo zoom-punch & golden-crimson shatter flash!
+      this.loop.setTimeScale(0.32, 0.24);
+      this.cameraRig.addShake(0.62, 0.4);
+      this.particlePool.emitReactionBurst('OVERLOAD', impactX, 1.1, impactZ);
+      useGameStore.getState().triggerBreakKickFlash();
+    }
     if (connected) {
-      this.player.addDriverGauge(22);
+      this.player.addDriverGauge(hitStaggeredTarget ? 30 : 22);
     }
   }
 
@@ -1941,6 +2048,19 @@ export class GameApp {
     this.scratchPrevPos.copy(this.scratchCurrPos);
     this.player.root.position.copy(this.scratchCurrPos);
     this.player.faceToward(this.scratchTargetSnapshot.x, this.scratchTargetSnapshot.z);
+
+    // 3 staggered neon holographic afterimage silhouettes bridging origin -> warp behind attacker!
+    this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+    this.afterimageTrail.spawnWarpTrail(
+      this.scratchOriginSnapshot.x,
+      this.scratchOriginSnapshot.y,
+      this.scratchOriginSnapshot.z,
+      this.scratchCurrPos.x,
+      this.scratchCurrPos.y,
+      this.scratchCurrPos.z,
+      this.player.facingYaw,
+      this.scratchColorHelper.getHex()
+    );
 
     this.audio.playWarpCounter();
     this.cameraRig.addShake(0.32, 0.2);
@@ -2358,6 +2478,7 @@ export class GameApp {
       canActivateSuper: this.player.canActivateSuperForm(),
       canActivateUltimateForm: this.player.canActivateUltimateForm(bossStaggered),
       canActivateUltimate: this.player.canActivateFinisher(),
+      bossStaggered,
       warpCounterReady: this.player.isWarpCounterReady,
       ultimateBannerTitle: ultimateTitle,
       comboCount: this.comboCount,
@@ -2590,9 +2711,40 @@ export class GameApp {
       );
     }
 
+    // Continuous holographic Afterimage Ghost Trail during Dodge, Rider Kick dive, & Super/Ultimate sprints!
+    const pState = this.player.fsm.state;
+    const emitTrailState =
+      pState === 'DODGE' ||
+      kickState.active ||
+      (this.player.currentFormTier !== 'BASIC' && (pState === 'MOVE' || pState === 'ATTACK_3'));
+    if (emitTrailState) {
+      this.afterimageCooldown -= vfxDt;
+      if (this.afterimageCooldown <= 0) {
+        this.afterimageCooldown = kickState.active ? 0.055 : pState === 'DODGE' ? 0.065 : 0.14;
+        const ghostColor = isGrandCinematic
+          ? 0xfde047
+          : pState === 'DODGE'
+            ? 0x38bdf8
+            : this.scratchColorHelper.set(this.player.activeElement.emissiveColor).getHex();
+        this.afterimageTrail.spawnGhost(
+          this.player.root.position.x,
+          this.player.root.position.y,
+          this.player.root.position.z,
+          this.player.facingYaw,
+          ghostColor,
+          kickState.active ? 0.65 : pState === 'DODGE' ? 0.36 : 0.16,
+          kickState.active ? 0.36 : 0.28,
+          this.player.currentFormTier === 'ULTIMATE' ? 1.08 : 1.0
+        );
+      }
+    } else {
+      this.afterimageCooldown = 0;
+    }
+
     this.particlePool.update(vfxDt);
     this.elementSkillVfx.update(vfxDt);
     this.riderKickVfx.update(vfxDt);
+    this.afterimageTrail.update(vfxDt);
     this.updateDomainDimming(rawDt, this.scratchRenderPos);
 
     let lockTargetPos: THREE.Vector3 | null = null;
@@ -2613,9 +2765,11 @@ export class GameApp {
   private warmUpVfxShaders(): void {
     this.riderKickVfx.setWarmupVisible(true);
     this.elementSkillVfx.setWarmupVisible(true);
+    this.afterimageTrail.setWarmupVisible(true);
     this.renderer.compile(this.scene, this.camera);
     this.riderKickVfx.setWarmupVisible(false);
     this.elementSkillVfx.setWarmupVisible(false);
+    this.afterimageTrail.setWarmupVisible(false);
   }
 
   private renderFrame(): void {

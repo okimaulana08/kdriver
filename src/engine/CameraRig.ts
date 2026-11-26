@@ -5,6 +5,7 @@ import { ARENA_RADIUS } from './PhysicsWorld';
 export type CameraMode =
   | 'HUB_PEDESTAL'
   | 'ARENA_ENTRY'
+  | 'BOSS_INTRO'
   | 'COMBAT'
   | 'RIDER_KICK'
   | 'ULTIMATE_CINEMATIC'
@@ -72,6 +73,13 @@ export class CameraRig {
   private readonly scratchToTarget = new THREE.Vector3();
   private readonly scratchRight = new THREE.Vector3();
   private readonly scratchShakeOffset = new THREE.Vector3();
+  private readonly bossIntroTarget = new THREE.Vector3(0, 1.8, -8);
+  private bossIntroYaw = 0;
+
+  public setBossIntroTarget(x: number, y: number, z: number, bossYaw: number): void {
+    this.bossIntroTarget.set(x, y, z);
+    this.bossIntroYaw = bossYaw;
+  }
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -173,6 +181,11 @@ export class CameraRig {
 
     if (this.mode === 'ARENA_ENTRY') {
       this.updateArenaEntry(safeDt, playerPos);
+      return;
+    }
+
+    if (this.mode === 'BOSS_INTRO') {
+      this.updateBossIntro(safeDt);
       return;
     }
 
@@ -342,6 +355,31 @@ export class CameraRig {
     this.currentPos.copy(this.desiredPos);
     this.currentPivot.copy(this.desiredPivot);
     this.initialized = true;
+    this.applyShakeAndCommit(dt, this.currentPos, this.currentPivot);
+  }
+
+  private updateBossIntro(dt: number): void {
+    // 1.25s Tokusatsu low-angle hero sweep framing the newly arrived Stage Boss!
+    const t = Math.min(1, this.modeElapsedSec / 1.25);
+    const ease = 1 - Math.pow(1 - t, 2.5);
+    const angle = this.bossIntroYaw + THREE.MathUtils.lerp(-0.48, 0.36, ease);
+    const dist = THREE.MathUtils.lerp(6.4, 4.45, ease);
+    const height = THREE.MathUtils.lerp(1.15, 2.05, ease);
+
+    this.desiredPivot.set(
+      this.bossIntroTarget.x,
+      this.bossIntroTarget.y + THREE.MathUtils.lerp(0.15, 0.45, ease),
+      this.bossIntroTarget.z
+    );
+    this.desiredPos.set(
+      this.bossIntroTarget.x + Math.sin(angle) * dist,
+      Math.max(MIN_CAMERA_Y, height),
+      this.bossIntroTarget.z + Math.cos(angle) * dist
+    );
+
+    const lerp = 1 - Math.exp(-11 * dt);
+    this.currentPos.lerp(this.desiredPos, lerp);
+    this.currentPivot.lerp(this.desiredPivot, lerp);
     this.applyShakeAndCommit(dt, this.currentPos, this.currentPivot);
   }
 

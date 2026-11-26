@@ -1,10 +1,12 @@
 import { create } from 'zustand';
 import { ALL_ELEMENT_IDS } from '../game/data/elements';
+import { getDifficultyConfig } from '../game/data/difficulty';
 import { getStageConfig } from '../game/data/stages';
 import { applyGemUpgrade, applyShardGemUnlock } from '../game/ProgressionSystem';
 import { loadSaveRecord, persistSaveRecord } from '../game/StageManager';
 import type {
   ArenaThemeId,
+  DifficultyId,
   ElementId,
   EnemyHudSnapshot,
   FloatingCombatText,
@@ -20,6 +22,14 @@ import type {
   StageResult,
   Vec3Snapshot,
 } from '../game/types/schema';
+
+export interface BossIntroBannerState {
+  id: number;
+  bossName: string;
+  bossTitle: string;
+  accentColor: string;
+  difficultyLabel: string;
+}
 
 export type EngineStatus = 'initializing' | 'ready' | 'error';
 
@@ -55,6 +65,7 @@ interface GameStoreState {
   riderRigMode: 'PROCEDURAL PBR' | 'MIXAMO SKELETAL';
   screenMode: ScreenMode;
   selectedStageId: StageId;
+  selectedDifficulty: DifficultyId;
   arenaTheme: ArenaThemeId;
   loadoutOrder: [ElementId, ElementId, ElementId];
   saveRecord: SaveRecord;
@@ -94,11 +105,13 @@ interface GameStoreState {
   canActivateSuper: boolean;
   canActivateUltimateForm: boolean;
   canActivateUltimate: boolean;
+  bossStaggered: boolean;
   warpCounterReady: boolean;
   ultimateBannerTitle: string | null;
   finisherCinematicId: number;
   finisherCinematicElement: ElementId;
   finisherCinematicFromUltimate: boolean;
+  bossIntroBanner: BossIntroBannerState | null;
   stageOutcomeCutIn: StageOutcomeCutInState | null;
 
   comboCount: number;
@@ -116,6 +129,7 @@ interface GameStoreState {
   reactionBanner: ReactionBannerEvent | null;
   waveBanner: AnnouncementBanner | null;
   perfectDodgeFlashId: number;
+  breakKickFlashId: number;
   audioMuted: boolean;
   floatingTexts: FloatingCombatText[];
 
@@ -126,6 +140,7 @@ interface GameStoreState {
   setRiderRigMode: (mode: 'PROCEDURAL PBR' | 'MIXAMO SKELETAL') => void;
   setScreenMode: (mode: ScreenMode) => void;
   setSelectedStageId: (stageId: StageId) => void;
+  setSelectedDifficulty: (difficulty: DifficultyId) => void;
   setArenaTheme: (theme: ArenaThemeId) => void;
   setGamepadStatus: (connected: boolean, name: string | null) => void;
   setLoadoutOrder: (order: [ElementId, ElementId, ElementId]) => void;
@@ -164,6 +179,7 @@ interface GameStoreState {
     canActivateSuper: boolean;
     canActivateUltimateForm: boolean;
     canActivateUltimate: boolean;
+    bossStaggered: boolean;
     warpCounterReady: boolean;
     ultimateBannerTitle: string | null;
     comboCount: number;
@@ -176,6 +192,8 @@ interface GameStoreState {
   }) => void;
   triggerFinisherCinematic: (element: ElementId, title: string, fromUltimate: boolean) => void;
   clearFinisherCinematic: () => void;
+  triggerBossIntroBanner: (bossName: string, bossTitle: string, accentColor: string) => void;
+  clearBossIntroBanner: () => void;
   triggerStageOutcomeCutIn: (victory: boolean, stageName: string, accentColor: string) => void;
   clearStageOutcomeCutIn: () => void;
   setAbilityCooldowns: (
@@ -188,6 +206,7 @@ interface GameStoreState {
   triggerWaveBanner: (title: string, subtitle: string, accentColor?: string) => void;
   clearExpiredBanners: (nowMs: number) => void;
   triggerPerfectDodgeFlash: () => void;
+  triggerBreakKickFlash: () => void;
   setAudioMuted: (muted: boolean) => void;
   pushFloatingText: (
     text: string,
@@ -275,6 +294,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   riderRigMode: 'PROCEDURAL PBR',
   screenMode: 'HUB',
   selectedStageId: initialStage.id,
+  selectedDifficulty: initialSave.selectedDifficulty,
   arenaTheme: initialStage.arenaTheme,
   loadoutOrder: initialSave.loadoutOrder,
   saveRecord: initialSave,
@@ -314,11 +334,13 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   canActivateSuper: false,
   canActivateUltimateForm: false,
   canActivateUltimate: false,
+  bossStaggered: false,
   warpCounterReady: false,
   ultimateBannerTitle: null,
   finisherCinematicId: 0,
   finisherCinematicElement: initialSave.loadoutOrder[0],
   finisherCinematicFromUltimate: false,
+  bossIntroBanner: null,
   stageOutcomeCutIn: null,
 
   comboCount: 0,
@@ -336,6 +358,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   reactionBanner: null,
   waveBanner: null,
   perfectDodgeFlashId: 0,
+  breakKickFlashId: 0,
   audioMuted: false,
   floatingTexts: [],
 
@@ -380,6 +403,16 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       selectedStageId: stage.id,
       arenaTheme: stage.arenaTheme,
       totalWaves: stage.waves.length,
+      saveRecord: nextRecord,
+    });
+  },
+
+  setSelectedDifficulty: (difficulty) => {
+    const cfg = getDifficultyConfig(difficulty);
+    const nextRecord: SaveRecord = { ...get().saveRecord, selectedDifficulty: cfg.id };
+    persistSaveRecord(nextRecord);
+    set({
+      selectedDifficulty: cfg.id,
       saveRecord: nextRecord,
     });
   },
@@ -511,6 +544,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       state.canActivateSuper === snap.canActivateSuper &&
       state.canActivateUltimateForm === snap.canActivateUltimateForm &&
       state.canActivateUltimate === snap.canActivateUltimate &&
+      state.bossStaggered === snap.bossStaggered &&
       state.warpCounterReady === snap.warpCounterReady &&
       state.ultimateBannerTitle === snap.ultimateBannerTitle &&
       state.comboCount === snap.comboCount &&
@@ -540,6 +574,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       canActivateSuper: snap.canActivateSuper,
       canActivateUltimateForm: snap.canActivateUltimateForm,
       canActivateUltimate: snap.canActivateUltimate,
+      bossStaggered: snap.bossStaggered,
       warpCounterReady: snap.warpCounterReady,
       ultimateBannerTitle: snap.ultimateBannerTitle,
       comboCount: snap.comboCount,
@@ -564,6 +599,24 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   clearFinisherCinematic: () => {
     if (get().ultimateBannerTitle === null) return;
     set({ ultimateBannerTitle: null });
+  },
+
+  triggerBossIntroBanner: (bossName, bossTitle, accentColor) => {
+    const diffLabel = getDifficultyConfig(get().selectedDifficulty).label;
+    set({
+      bossIntroBanner: {
+        id: nextBannerId++,
+        bossName,
+        bossTitle,
+        accentColor,
+        difficultyLabel: diffLabel,
+      },
+    });
+  },
+
+  clearBossIntroBanner: () => {
+    if (get().bossIntroBanner === null) return;
+    set({ bossIntroBanner: null });
   },
 
   triggerStageOutcomeCutIn: (victory, stageName, accentColor) => {
@@ -655,6 +708,10 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     set((state) => ({ perfectDodgeFlashId: state.perfectDodgeFlashId + 1 }));
   },
 
+  triggerBreakKickFlash: () => {
+    set((state) => ({ breakKickFlashId: state.breakKickFlashId + 1 }));
+  },
+
   setAudioMuted: (muted) => {
     if (get().audioMuted === muted) return;
     set({ audioMuted: muted });
@@ -734,9 +791,11 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       canActivateSuper: false,
       canActivateUltimateForm: false,
       canActivateUltimate: false,
+      bossStaggered: false,
       warpCounterReady: false,
       ultimateBannerTitle: null,
       finisherCinematicFromUltimate: false,
+      bossIntroBanner: null,
       stageOutcomeCutIn: null,
       comboCount: 0,
       reactionCount: 0,

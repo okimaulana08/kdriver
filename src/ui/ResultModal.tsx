@@ -1,3 +1,4 @@
+import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getStageConfig } from '../game/data/stages';
 import type { RankGrade } from '../game/types/schema';
@@ -14,6 +15,12 @@ const RANK_THEMES: Readonly<
     { text: string; accent: string; glow: string; label: string }
   >
 > = {
+  'S+': {
+    text: '#fef08a',
+    accent: '#f43f5e',
+    glow: 'rgba(244, 63, 94, 0.75)',
+    label: 'SOVEREIGN LEGEND',
+  },
   S: {
     text: '#fde047',
     accent: '#f59e0b',
@@ -59,6 +66,7 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
 
   const isVictory = result.victory;
   const stage = getStageConfig(result.stageId ?? selectedStageId);
+  const diffConfig = getDifficultyConfig(result.difficulty ?? 'medium');
   const rankTheme = RANK_THEMES[result.rank];
   const primaryAccent = isVictory ? '#fbbf24' : '#f43f5e';
   const secondaryAccent = isVictory ? '#22d3ee' : '#fb7185';
@@ -101,6 +109,12 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
               </span>
               <span className="font-game-display text-[11px] font-bold tracking-[0.22em] text-slate-300 uppercase">
                 {stage.name}
+              </span>
+              <span
+                className="game-chamfer-sm px-2.5 py-0.5 font-game-display text-[10px] font-black tracking-[0.2em] text-slate-950 uppercase"
+                style={{ backgroundColor: diffConfig.accentColor }}
+              >
+                {diffConfig.label}
               </span>
               {result.isNewBest && (
                 <span className="game-chamfer-sm border border-amber-300/80 bg-amber-400/20 px-2.5 py-0.5 font-game-display text-[10px] font-black tracking-[0.2em] text-amber-200 uppercase">

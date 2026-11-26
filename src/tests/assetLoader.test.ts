@@ -90,6 +90,7 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       'src/game/vfx/ElementSkillVfx.ts',
       'src/game/vfx/ParticlePool.ts',
       'src/game/vfx/RiderKickVfx.ts',
+      'src/game/vfx/AfterimageTrail.ts',
       'src/game/vfx/SlashTrail.ts',
     ];
 
@@ -113,6 +114,7 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       'src/game/vfx/ParticlePool.ts',
       'src/game/vfx/ElementSkillVfx.ts',
       'src/game/vfx/RiderKickVfx.ts',
+      'src/game/vfx/AfterimageTrail.ts',
       'src/game/entities/EnemyBase.ts',
       'src/game/entities/BossKaijin.ts',
     ];

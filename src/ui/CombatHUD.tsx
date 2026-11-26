@@ -1,3 +1,4 @@
+import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { ULTIMATE_FORM_DURATION_SEC } from '../game/entities/PlayerRider';
 import { getGemLevel } from '../game/ProgressionSystem';
@@ -49,7 +50,12 @@ export function CombatHUD() {
   const canActivateSuper = useGameStore((s) => s.canActivateSuper);
   const canActivateUltimateForm = useGameStore((s) => s.canActivateUltimateForm);
   const canActivateUltimate = useGameStore((s) => s.canActivateUltimate);
+  const bossStaggered = useGameStore((s) => s.bossStaggered);
   const warpCounterReady = useGameStore((s) => s.warpCounterReady);
+  const selectedDifficulty = useGameStore((s) => s.selectedDifficulty);
+  const bossIntroBanner = useGameStore((s) => s.bossIntroBanner);
+  const perfectDodgeFlashId = useGameStore((s) => s.perfectDodgeFlashId);
+  const breakKickFlashId = useGameStore((s) => s.breakKickFlashId);
   const ultimateBannerTitle = useGameStore((s) => s.ultimateBannerTitle);
   const finisherCinematicId = useGameStore((s) => s.finisherCinematicId);
   const finisherCinematicElement = useGameStore((s) => s.finisherCinematicElement);
@@ -73,6 +79,8 @@ export function CombatHUD() {
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
 
   const activeConfig = getElementConfig(activeElement);
+  const diffConfig = getDifficultyConfig(selectedDifficulty);
+  const canBreakKick = bossStaggered && riderKickCooldown <= 0;
   const activeSkillCd = skillCooldowns[activeElement];
   const activePetCd = petCooldowns[activeElement];
 
@@ -103,11 +111,73 @@ export function CombatHUD() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-4">
+      {/* Screen Edge Impact Vignette Pulse (Perfect Dodge cyan / Break Kick gold-crimson!) */}
+      {perfectDodgeFlashId > 0 && (
+        <div
+          key={`pd-${perfectDodgeFlashId}`}
+          className="animate-edge-flash pointer-events-none fixed inset-0 z-10"
+          style={{
+            boxShadow: 'inset 0 0 95px rgba(34, 211, 238, 0.72), inset 0 0 36px rgba(255,255,255,0.45)',
+          }}
+        />
+      )}
+      {breakKickFlashId > 0 && (
+        <div
+          key={`bk-${breakKickFlashId}`}
+          className="animate-edge-flash pointer-events-none fixed inset-0 z-10"
+          style={{
+            boxShadow: 'inset 0 0 115px rgba(251, 191, 36, 0.85), inset 0 0 42px rgba(244,63,94,0.65)',
+          }}
+        />
+      )}
+
+      {/* Mini Cinematic Boss Intro Slanted Encounter Card (1.25s) */}
+      {bossIntroBanner && (
+        <div
+          key={bossIntroBanner.id}
+          className="animate-boss-intro pointer-events-none fixed inset-0 z-30 flex items-center justify-center"
+        >
+          <div
+            className="w-full -skew-y-2 border-y-4 bg-slate-950/88 py-5 text-center shadow-2xl backdrop-blur-sm"
+            style={{
+              borderColor: bossIntroBanner.accentColor,
+              boxShadow: `0 0 55px ${bossIntroBanner.accentColor}77`,
+            }}
+          >
+            <div className="flex items-center justify-center gap-3 font-game-display text-[11px] font-black tracking-[0.34em] uppercase">
+              <span style={{ color: bossIntroBanner.accentColor }}>⚠ WARNING // BOSS ENCOUNTER</span>
+              <span className="rounded bg-white/10 px-2 py-0.5 text-amber-300">
+                {bossIntroBanner.difficultyLabel}
+              </span>
+            </div>
+            <h2
+              className="mt-1 font-game-display text-4xl font-black tracking-widest text-white uppercase italic md:text-6xl"
+              style={{
+                textShadow: `0 0 28px ${bossIntroBanner.accentColor}, 0 4px 16px rgba(0,0,0,0.95)`,
+              }}
+            >
+              {bossIntroBanner.bossName}
+            </h2>
+            <p className="mt-1 font-mono text-xs font-bold tracking-[0.28em] text-slate-300 uppercase">
+              {bossIntroBanner.bossTitle}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar: Wave Tracker (left) + Focused Enemy/Boss Bar (center) */}
       <div className="relative flex items-start justify-center">
         {/* Top-Left Wave Pill */}
         <div className="absolute top-0 left-0 rounded-xl border border-slate-700/80 bg-slate-950/80 px-3.5 py-2 font-mono text-xs shadow-xl backdrop-blur-md">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`rounded px-1.5 py-0.5 text-[9px] font-black tracking-wider text-slate-950 uppercase ${
+                selectedDifficulty === 'hell' ? 'animate-pulse' : ''
+              }`}
+              style={{ backgroundColor: diffConfig.accentColor }}
+            >
+              {diffConfig.label}
+            </span>
             <span className="font-black tracking-wider text-cyan-300">
               WAVE {waveNumber} / {totalWaves}
             </span>
@@ -288,9 +358,18 @@ export function CombatHUD() {
         </div>
       )}
 
-      {/* Contextual [F] Henshin / Ultimate Evolution, [R] Instant Finisher & [LMB] Warp Counter Callouts */}
-      {(canActivateSuper || canActivateUltimateForm || canActivateUltimate || warpCounterReady) && (
+      {/* Contextual [F] Henshin / Ultimate Evolution, [R] Instant Finisher, [SPACE] Break Kick & [LMB] Warp Counter Callouts */}
+      {(canActivateSuper ||
+        canActivateUltimateForm ||
+        canActivateUltimate ||
+        warpCounterReady ||
+        canBreakKick) && (
         <div className="fixed inset-x-0 bottom-30 flex flex-wrap items-center justify-center gap-3">
+          {canBreakKick && (
+            <div className="animate-bounce rounded-xl border-2 border-amber-300 bg-slate-950/95 px-5 py-2 font-mono text-sm font-black tracking-widest text-amber-200 uppercase shadow-[0_0_34px_rgba(251,191,36,0.85)]">
+              💥 [SPACE] BREAK KICK! (GUARANTEED CRIT!)
+            </div>
+          )}
           {warpCounterReady && (
             <div className="animate-bounce rounded-xl border-2 border-cyan-300 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-cyan-200 uppercase shadow-[0_0_28px_rgba(34,211,238,0.75)]">
               ⚡ [LMB] WARP COUNTER! (CRIT 1.65×)

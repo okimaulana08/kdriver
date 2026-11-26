@@ -1,11 +1,13 @@
 import { ALL_ELEMENT_IDS, STARTER_ELEMENT_IDS, isValidElementId } from './data/elements';
+import { getDifficultyConfig } from './data/difficulty';
 import { getStageConfig } from './data/stages';
-import type { ElementId, RankGrade, SaveRecord, StageId } from './types/schema';
+import type { DifficultyId, ElementId, RankGrade, SaveRecord, StageId } from './types/schema';
 
 export const MAX_GEM_LEVEL = 5;
 export const GEM_SHARD_UNLOCK_COST = 80;
 
 const RANK_SHARD_BONUS: Readonly<Record<RankGrade, number>> = {
+  'S+': 75,
   S: 45,
   A: 30,
   B: 18,
@@ -61,14 +63,16 @@ export function calculateStageRewards(
   victory: boolean,
   stageId: StageId,
   rank: RankGrade,
-  unlockedElements: readonly ElementId[]
+  unlockedElements: readonly ElementId[],
+  difficulty: DifficultyId = 'medium'
 ): { shardsEarned: number; unlockedElementDrop: ElementId | null } {
   const stage = getStageConfig(stageId);
+  const diffCfg = getDifficultyConfig(difficulty);
   if (!victory) {
     // Consolation shards even on defeat so players steadily progress!
-    return { shardsEarned: 15, unlockedElementDrop: null };
+    return { shardsEarned: Math.max(10, Math.round(15 * diffCfg.shardRewardMult)), unlockedElementDrop: null };
   }
-  const shardsEarned = stage.shardReward + RANK_SHARD_BONUS[rank];
+  const shardsEarned = Math.round((stage.shardReward + RANK_SHARD_BONUS[rank]) * diffCfg.shardRewardMult);
   const unlockedElementDrop = pickBossDropUnlock(unlockedElements, stageId);
   return { shardsEarned, unlockedElementDrop };
 }

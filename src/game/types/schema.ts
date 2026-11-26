@@ -19,7 +19,25 @@ export type FormTier = 'BASIC' | 'SUPER' | 'ULTIMATE';
 export type EnemyTier = 'MINION' | 'ELITE' | 'MINI_BOSS' | 'BOSS';
 
 export type ScreenMode = 'HUB' | 'ARENA' | 'RESULT';
-export type RankGrade = 'S' | 'A' | 'B' | 'C';
+export type DifficultyId = 'easy' | 'medium' | 'hard' | 'hell';
+export type RankGrade = 'S+' | 'S' | 'A' | 'B' | 'C';
+
+export interface DifficultyConfig {
+  readonly id: DifficultyId;
+  readonly label: string;
+  readonly tagline: string;
+  readonly accentColor: string;
+  readonly enemyHpMult: number;
+  readonly enemyDamageMult: number;
+  readonly enemyGuardMult: number;
+  readonly telegraphDurationMult: number;
+  readonly enemyCooldownMult: number;
+  readonly bossPhase2HpRatio: number;
+  readonly dodgeIframeBonusSec: number;
+  readonly shardRewardMult: number;
+  readonly scoreMult: number;
+  readonly hellExtraElite: boolean;
+}
 
 export type PlayerStateId =
   | 'IDLE'
@@ -107,7 +125,8 @@ export interface EnemyConfig {
 export type StageId =
   | 'stage_01_nexus_arena'
   | 'stage_02_volcanic_crater'
-  | 'stage_03_forest_ruins';
+  | 'stage_03_forest_ruins'
+  | 'stage_boss_rush';
 
 export type ArenaThemeId = 'coastal_quarry' | 'volcanic_crater' | 'forest_ruins';
 
@@ -138,10 +157,13 @@ export interface StageConfig {
   shardReward: number;
   bossDropPool: readonly ElementId[];
   waves: readonly WaveConfig[];
+  isBossRush?: boolean;
+  bossRushHealPct?: number;
 }
 
 export interface StageStats {
   stageId?: StageId;
+  difficulty?: DifficultyId;
   victory: boolean;
   clearTimeSec: number;
   damageTaken: number;
@@ -152,6 +174,7 @@ export interface StageStats {
 }
 
 export interface StageResult extends StageStats {
+  difficulty: DifficultyId;
   score: number;
   rank: RankGrade;
   isNewBest: boolean;
@@ -166,6 +189,8 @@ export interface SaveRecord {
   totalClears: number;
   loadoutOrder: [ElementId, ElementId, ElementId];
   selectedStageId: StageId;
+  selectedDifficulty: DifficultyId;
+  stageDifficultyBestRanks: Partial<Record<string, RankGrade>>;
   unlockedElements: ElementId[];
   gemLevels: Partial<Record<ElementId, number>>;
   gemShards: number;

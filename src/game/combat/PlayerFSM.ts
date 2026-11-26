@@ -88,6 +88,11 @@ export class PlayerFSM {
   private skillSequenceId = 0;
   private kickSequenceId = 0;
   private perfectDodgeTriggeredThisDodge = false;
+  private dodgeIframeBonusSec = 0;
+
+  public setDodgeIframeBonus(bonusSec: number): void {
+    this.dodgeIframeBonusSec = Math.max(0, Math.min(0.12, bonusSec));
+  }
 
   public get state(): PlayerStateId {
     return this.currentState;
@@ -155,7 +160,10 @@ export class PlayerFSM {
     if (this.currentState === 'RIDER_KICK' && this.stateElapsedSec <= 0.85) {
       return true;
     }
-    return this.currentState === 'DODGE' && this.stateElapsedSec <= DODGE_IFRAME_SEC;
+    return (
+      this.currentState === 'DODGE' &&
+      this.stateElapsedSec <= DODGE_IFRAME_SEC + this.dodgeIframeBonusSec
+    );
   }
 
   public get isHitboxActive(): boolean {
@@ -358,7 +366,10 @@ export class PlayerFSM {
       return 'IGNORED';
     }
 
-    if (this.currentState === 'DODGE' && this.stateElapsedSec <= DODGE_IFRAME_SEC) {
+    if (
+      this.currentState === 'DODGE' &&
+      this.stateElapsedSec <= DODGE_IFRAME_SEC + this.dodgeIframeBonusSec
+    ) {
       if (!this.perfectDodgeTriggeredThisDodge) {
         this.perfectDodgeTriggeredThisDodge = true;
         return 'PERFECT_DODGE';

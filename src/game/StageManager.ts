@@ -1,7 +1,13 @@
 import { ALL_ELEMENT_IDS, STARTER_ELEMENT_IDS, isValidElementId } from './data/elements';
+import {
+  getDifficultyConfig,
+  isValidDifficultyId,
+  makeStageDifficultyKey,
+} from './data/difficulty';
 import { MVP_STAGE_1, isValidStageId } from './data/stages';
 import { calculateStageRewards, sanitizeUnlockedElements } from './ProgressionSystem';
 import type {
+  DifficultyId,
   ElementId,
   RankGrade,
   SaveRecord,
@@ -21,6 +27,7 @@ const SAVE_STORAGE_KEY = 'k_driver_save_v1';
 export const UNLOCK_ALL_ELEMENTS_FOR_TESTING = true;
 
 const RANK_ORDER: Readonly<Record<RankGrade, number>> = {
+  'S+': 5,
   S: 4,
   A: 3,
   B: 2,
@@ -44,6 +51,8 @@ function createDefaultSaveRecord(): SaveRecord {
     totalClears: 0,
     loadoutOrder: [...DEFAULT_LOADOUT_ORDER] as [ElementId, ElementId, ElementId],
     selectedStageId: 'stage_01_nexus_arena',
+    selectedDifficulty: 'medium',
+    stageDifficultyBestRanks: {},
     unlockedElements: unlocked,
     gemLevels,
     gemShards: 0,
@@ -54,14 +63,20 @@ function createDefaultSaveRecord(): SaveRecord {
 export const DEFAULT_SAVE_RECORD: SaveRecord = createDefaultSaveRecord();
 
 /**
- * Pure score & Tokusatsu Rank calculator (GDD Section 4.1).
+ * Pure score & Tokusatsu Rank calculator (GDD Section 4.1 + Difficulty Multiplier & S+ Rank).
  * Evaluates clear speed, damage avoided, elemental reactions, perfect dodges, and Ultimate Finisher bonus.
  */
 export function calculateStageRank(stats: StageStats): { score: number; rank: RankGrade } {
+  const difficulty: DifficultyId = stats.difficulty ?? 'medium';
+  const diffCfg = getDifficultyConfig(difficulty);
+
   if (!stats.victory) {
     const partialScore = Math.max(
       0,
-      stats.reactionsTriggered * 250 + stats.perfectDodges * 200 + stats.maxCombo * 30
+      Math.round(
+        (stats.reactionsTriggered * 250 + stats.perfectDodges * 200 + stats.maxCombo * 30) *
+          diffCfg.scoreMult
+      )
     );
     return { score: partialScore, rank: 'C' };
   }
@@ -79,11 +94,14 @@ export function calculateStageRank(stats: StageStats): { score: number; rank: Ra
   const comboScore = Math.min(800, stats.maxCombo * 40);
   const finisherBonus = stats.defeatedBossWithFinisher ? 1500 : 0;
 
-  const totalScore =
+  const baseScore =
     timeScore + survivalScore + reactionScore + dodgeScore + comboScore + finisherBonus;
+  const totalScore = Math.round(baseScore * diffCfg.scoreMult);
 
   let rank: RankGrade = 'C';
-  if (totalScore >= 8200) {
+  if ((difficulty === 'hard' || difficulty === 'hell') && totalScore >= 11200) {
+    rank = 'S+';
+  } else if (totalScore >= 8200) {
     rank = 'S';
   } else if (totalScore >= 6400) {
     rank = 'A';
@@ -133,13 +151,28 @@ export function loadSaveRecord(): SaveRecord {
       ? parsed.selectedStageId
       : 'stage_01_nexus_arena';
 
+    const selectedDifficulty: DifficultyId = isValidDifficultyId(parsed.selectedDifficulty)
+      ? parsed.selectedDifficulty
+      : 'medium';
+
+    const stageDifficultyBestRanks: Partial<Record<string, RankGrade>> = {};
+    if (parsed.stageDifficultyBestRanks && typeof parsed.stageDifficultyBestRanks === 'object') {
+      for (const [k, v] of Object.entries(parsed.stageDifficultyBestRanks)) {
+        if (typeof v === 'string' && v in RANK_ORDER) {
+          stageDifficultyBestRanks[k] = v as RankGrade;
+        }
+      }
+    }
+
     return {
-      bestRank: parsed.bestRank ?? null,
+      bestRank: parsed.bestRank && parsed.bestRank in RANK_ORDER ? parsed.bestRank : null,
       bestScore: typeof parsed.bestScore === 'number' ? parsed.bestScore : 0,
       fastestClearSec: typeof parsed.fastestClearSec === 'number' ? parsed.fastestClearSec : null,
       totalClears: typeof parsed.totalClears === 'number' ? parsed.totalClears : 0,
       loadoutOrder: validLoadout,
       selectedStageId,
+      selectedDifficulty,
+      stageDifficultyBestRanks,
       unlockedElements,
       gemLevels,
       gemShards:
@@ -175,6 +208,7 @@ export type StageFlowState = 'IDLE' | 'ENTRY_HENSHIN' | 'WAVE_ACTIVE' | 'WAVE_TR
  */
 export class StageManager {
   public stage: StageConfig;
+  public difficulty: DifficultyId = 'medium';
 
   private flowState: StageFlowState = 'IDLE';
   private currentWaveIndex = -1;
@@ -187,13 +221,18 @@ export class StageManager {
   private maxCombo = 0;
   private defeatedBossWithFinisher = false;
 
-  constructor(stage: StageConfig = MVP_STAGE_1) {
+  constructor(stage: StageConfig = MVP_STAGE_1, difficulty: DifficultyId = 'medium') {
     this.stage = stage;
+    this.difficulty = difficulty;
   }
 
   public setStage(stage: StageConfig): void {
     this.stage = stage;
     this.resetToIdle();
+  }
+
+  public setDifficulty(difficulty: DifficultyId): void {
+    this.difficulty = difficulty;
   }
 
   public get state(): StageFlowState {
@@ -251,9 +290,10 @@ export class StageManager {
   public fixedUpdate(dt: number, aliveEnemyCount: number): {
     spawnWave: WaveConfig | null;
     stageCleared: boolean;
+    bossRushHealPct: number;
   } {
     if (this.flowState === 'IDLE' || this.flowState === 'FINISHED') {
-      return { spawnWave: null, stageCleared: false };
+      return { spawnWave: null, stageCleared: false, bossRushHealPct: 0 };
     }
 
     if (this.flowState === 'ENTRY_HENSHIN') {
@@ -261,9 +301,13 @@ export class StageManager {
       if (this.transitionTimer <= 0) {
         this.currentWaveIndex = 0;
         this.flowState = 'WAVE_ACTIVE';
-        return { spawnWave: this.stage.waves[0] ?? null, stageCleared: false };
+        return {
+          spawnWave: this.stage.waves[0] ?? null,
+          stageCleared: false,
+          bossRushHealPct: 0,
+        };
       }
-      return { spawnWave: null, stageCleared: false };
+      return { spawnWave: null, stageCleared: false, bossRushHealPct: 0 };
     }
 
     this.elapsedStageSec += dt;
@@ -272,12 +316,17 @@ export class StageManager {
       if (aliveEnemyCount <= 0) {
         if (this.currentWaveIndex + 1 >= this.stage.waves.length) {
           this.flowState = 'FINISHED';
-          return { spawnWave: null, stageCleared: true };
+          return { spawnWave: null, stageCleared: true, bossRushHealPct: 0 };
         }
         this.flowState = 'WAVE_TRANSITION';
         this.transitionTimer = 1.65;
+        return {
+          spawnWave: null,
+          stageCleared: false,
+          bossRushHealPct: this.stage.isBossRush ? (this.stage.bossRushHealPct ?? 0.35) : 0,
+        };
       }
-      return { spawnWave: null, stageCleared: false };
+      return { spawnWave: null, stageCleared: false, bossRushHealPct: 0 };
     }
 
     if (this.flowState === 'WAVE_TRANSITION') {
@@ -288,17 +337,19 @@ export class StageManager {
         return {
           spawnWave: this.stage.waves[this.currentWaveIndex] ?? null,
           stageCleared: false,
+          bossRushHealPct: 0,
         };
       }
     }
 
-    return { spawnWave: null, stageCleared: false };
+    return { spawnWave: null, stageCleared: false, bossRushHealPct: 0 };
   }
 
   public buildResultAndPersist(victory: boolean): { result: StageResult; saveRecord: SaveRecord } {
     this.flowState = 'FINISHED';
     const stats: StageStats = {
       stageId: this.stage.id,
+      difficulty: this.difficulty,
       victory,
       clearTimeSec: Math.round(this.elapsedStageSec * 10) / 10,
       damageTaken: this.damageTaken,
@@ -315,7 +366,8 @@ export class StageManager {
       victory,
       this.stage.id,
       rank,
-      prevSave.unlockedElements
+      prevSave.unlockedElements,
+      this.difficulty
     );
 
     const nextUnlocked =
@@ -332,6 +384,13 @@ export class StageManager {
         ? [...prevSave.clearedStageIds, this.stage.id]
         : prevSave.clearedStageIds;
 
+    const rankKey = makeStageDifficultyKey(this.stage.id, this.difficulty);
+    const prevModeRank = prevSave.stageDifficultyBestRanks[rankKey] ?? null;
+    const nextStageDiffRanks: Partial<Record<string, RankGrade>> =
+      victory && isRankBetter(rank, prevModeRank)
+        ? { ...prevSave.stageDifficultyBestRanks, [rankKey]: rank }
+        : prevSave.stageDifficultyBestRanks;
+
     const updatedSave: SaveRecord = {
       ...prevSave,
       bestRank: victory && isRankBetter(rank, prevSave.bestRank) ? rank : prevSave.bestRank,
@@ -342,6 +401,8 @@ export class StageManager {
           ? stats.clearTimeSec
           : prevSave.fastestClearSec,
       totalClears: victory ? prevSave.totalClears + 1 : prevSave.totalClears,
+      selectedDifficulty: this.difficulty,
+      stageDifficultyBestRanks: nextStageDiffRanks,
       unlockedElements: nextUnlocked,
       gemLevels: nextGemLevels,
       gemShards: prevSave.gemShards + shardsEarned,
@@ -353,6 +414,7 @@ export class StageManager {
     return {
       result: {
         ...stats,
+        difficulty: this.difficulty,
         score,
         rank,
         isNewBest,

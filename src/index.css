@@ -305,6 +305,42 @@ canvas {
   animation: cutin-slash-wipe-counter 3.5s linear forwards;
 }
 
+@keyframes edge-impact-flash {
+  0% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.animate-edge-flash {
+  animation: edge-impact-flash 0.42s ease-out forwards;
+}
+
+@keyframes boss-intro-slam {
+  0% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+  14% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  84% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+.animate-boss-intro {
+  animation: boss-intro-slam 1.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 @keyframes cutin-impact-flash {
   0%,
   52% {

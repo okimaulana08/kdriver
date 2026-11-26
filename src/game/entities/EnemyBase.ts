@@ -12,8 +12,10 @@ import { ARENA_RADIUS } from '../../engine/PhysicsWorld';
 import { SkeletalAnimator } from '../../engine/SkeletalAnimator';
 import { HitboxSystem } from '../combat/HitboxSystem';
 import { STATUS_DEFAULT_DURATIONS } from '../combat/ReactionSystem';
+import { getDifficultyConfig } from '../data/difficulty';
 import type {
   ActiveStatusSnapshot,
+  DifficultyId,
   EnemyConfig,
   EnemyHudSnapshot,
   HurtboxTarget,
@@ -259,6 +261,8 @@ export class EnemyBase implements HurtboxTarget {
   protected currentAttackHeavy = false;
   protected attackSwingId = 0;
   protected bossPhase: 1 | 2 = 1;
+  protected readonly enemyCooldownMult: number;
+  protected readonly bossPhase2HpRatio: number;
   protected readyForDisposal = false;
 
   protected lockedOn = false;
@@ -353,17 +357,21 @@ export class EnemyBase implements HurtboxTarget {
     assetLoader: AssetLoader,
     pbrTextures: PbrTextureSet,
     spawnX: number,
-    spawnZ: number
+    spawnZ: number,
+    difficulty: DifficultyId = 'medium'
   ) {
     this.id = id;
     this.config = config;
+    const diffCfg = getDifficultyConfig(difficulty);
+    this.enemyCooldownMult = diffCfg.enemyCooldownMult;
+    this.bossPhase2HpRatio = diffCfg.bossPhase2HpRatio;
     this.hp = config.maxHp;
     this.guard = config.maxGuard;
     this.radius = config.tier === 'BOSS' ? 1.05 : config.tier === 'ELITE' ? 0.85 : 0.56;
     this.attackRange = config.tier === 'BOSS' ? 4.2 : config.tier === 'ELITE' ? 3.5 : 2.3;
     this.activeAttackRadius = config.tier === 'BOSS' ? 4.6 : config.tier === 'ELITE' ? 4.1 : 2.4;
     this.currentTelegraphDuration = Math.max(0.45, config.telegraphDurationSec);
-    this.attackCooldown = 0.9 + Math.random() * 1.1;
+    this.attackCooldown = (0.9 + Math.random() * 1.1) * this.enemyCooldownMult;
 
     this.bodyMat = createKaijinCarapaceMaterial(config.color, pbrTextures, config.tier === 'BOSS');
     this.trimMat = createUndersuitMaterial(pbrTextures);
@@ -913,13 +921,13 @@ export class EnemyBase implements HurtboxTarget {
         this.aiState = 'CHASE';
         this.stateTimer = 0;
         this.attackCooldown =
-          this.config.tier === 'BOSS'
+          (this.config.tier === 'BOSS'
             ? this.bossPhase === 2
               ? 0.9
               : 1.45
             : this.config.tier === 'ELITE'
               ? 1.85
-              : 1.4 + Math.random() * 0.6;
+              : 1.4 + Math.random() * 0.6) * this.enemyCooldownMult;
         this.shockwaveMesh.visible = false;
         this.attackSlashMesh.visible = false;
       }

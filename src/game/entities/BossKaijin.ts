@@ -2,7 +2,13 @@ import * as THREE from 'three';
 import type { AssetLoader } from '../../engine/AssetLoader';
 import type { PbrTextureSet } from '../../engine/PbrMaterialSystem';
 import { ARENA_RADIUS } from '../../engine/PhysicsWorld';
-import type { ElementId, EnemyConfig, HurtboxTarget, Vec3Snapshot } from '../types/schema';
+import type {
+  DifficultyId,
+  ElementId,
+  EnemyConfig,
+  HurtboxTarget,
+  Vec3Snapshot,
+} from '../types/schema';
 import { EnemyBase } from './EnemyBase';
 
 export type BossAttackPattern =
@@ -275,9 +281,10 @@ export class BossKaijin extends EnemyBase {
     assetLoader: AssetLoader,
     pbrTextures: PbrTextureSet,
     spawnX: number,
-    spawnZ: number
+    spawnZ: number,
+    difficulty: DifficultyId = 'medium'
   ) {
-    super(id, config, assetLoader, pbrTextures, spawnX, spawnZ);
+    super(id, config, assetLoader, pbrTextures, spawnX, spawnZ, difficulty);
     this.profile = getBossSignatureProfile(config.id);
 
     // Boiling GLSL Boss Energy Orbs (seamless vertex-displaced plasma/magma/thorn spheres — zero rigid octahedrons!)
@@ -539,7 +546,7 @@ export class BossKaijin extends EnemyBase {
   }
 
   protected override onBeforeAIStep(_dt: number): void {
-    if (this.bossPhase === 1 && this.hp > 0 && this.hp < this.config.maxHp * 0.5) {
+    if (this.bossPhase === 1 && this.hp > 0 && this.hp < this.config.maxHp * this.bossPhase2HpRatio) {
       this.bossPhase = 2;
       this.guard = Math.min(this.config.maxGuard, this.guard + Math.round(this.config.maxGuard * 0.4));
       this.events.enteredPhase2 = true;

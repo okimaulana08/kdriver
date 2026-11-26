@@ -105,16 +105,51 @@ export const STAGE_3_FOREST_RUINS: StageConfig = {
   ],
 };
 
+export const STAGE_BOSS_RUSH: StageConfig = {
+  id: 'stage_boss_rush',
+  name: 'Boss Rush',
+  subtitle: '3-Boss Endurance Gauntlet • +35% HP Recovery',
+  arenaTheme: 'volcanic_crater',
+  accentColor: '#f43f5e',
+  recommendedLevel: 3,
+  shardReward: 180,
+  bossDropPool: ['lux', 'umbra', 'solar', 'lunar', 'terra', 'aero', 'flora'],
+  isBossRush: true,
+  bossRushHealPct: 0.35,
+  waves: [
+    {
+      waveNumber: 1,
+      title: 'BOSS RUSH 1 / 3',
+      subtitle: 'OBSIDIAN KAIJIN',
+      spawns: [{ enemyId: 'obsidian_kaijin', count: 1 }],
+    },
+    {
+      waveNumber: 2,
+      title: 'BOSS RUSH 2 / 3',
+      subtitle: 'MAGMA OVERLORD',
+      spawns: [{ enemyId: 'magma_overlord', count: 1 }],
+    },
+    {
+      waveNumber: 3,
+      title: 'FINAL BOSS 3 / 3',
+      subtitle: 'SYLVAN SOVEREIGN',
+      spawns: [{ enemyId: 'sylvan_sovereign', count: 1 }],
+    },
+  ],
+};
+
 export const ALL_STAGES: Readonly<Record<StageId, StageConfig>> = {
   stage_01_nexus_arena: MVP_STAGE_1,
   stage_02_volcanic_crater: STAGE_2_VOLCANIC_CRATER,
   stage_03_forest_ruins: STAGE_3_FOREST_RUINS,
+  stage_boss_rush: STAGE_BOSS_RUSH,
 };
 
 export const STAGE_LIST: readonly StageConfig[] = [
   MVP_STAGE_1,
   STAGE_2_VOLCANIC_CRATER,
   STAGE_3_FOREST_RUINS,
+  STAGE_BOSS_RUSH,
 ];
 
 export function getStageConfig(id: StageId): StageConfig {

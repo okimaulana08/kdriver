@@ -420,61 +420,25 @@ function buildPlasmaWingGeometry(side: 1 | -1): THREE.BufferGeometry {
 // ---------------------------------------------------------------------------
 const FIREBALL_VERTEX_SHADER = /* glsl */ `
   uniform float uTime;
-  uniform float uProgress;
   uniform float uSeed;
 
-  varying vec3 vNormalView;
-  varying vec3 vViewDir;
-  varying vec3 vObjDir;
-  varying float vHeightNorm;
-
-  float hash31(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-  }
-
-  float noise3(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-
-    float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
-    float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
-    float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
-    float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
-    float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
-    float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
-    float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
-    float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
-
-    float nx00 = mix(n000, n100, f.x);
-    float nx10 = mix(n010, n110, f.x);
-    float nx01 = mix(n001, n101, f.x);
-    float nx11 = mix(n011, n111, f.x);
-    float nxy0 = mix(nx00, nx10, f.y);
-    float nxy1 = mix(nx01, nx11, f.y);
-    return mix(nxy0, nxy1, f.z);
-  }
+  varying vec2 vUv;
 
   void main() {
-    vec3 sphereDir = normalize(position);
-    // Low-frequency smooth volumetric silhouette billowing (zero spiky triangle folding!)
-    float macroBillow =
-      noise3(sphereDir * 1.9 + vec3(uSeed, -uTime * 2.1, uSeed * 0.63)) * 0.7 +
-      noise3(sphereDir * 3.4 + vec3(uTime * 1.1, -uTime * 3.2, uSeed)) * 0.3;
+    vUv = uv;
+    // Camera-facing volumetric billboard centered at mesh origin (100% zero sphere triangle facets or seams!)
+    float scaleX = length(vec3(modelMatrix[0][0], modelMatrix[0][1], modelMatrix[0][2]));
+    float scaleY = length(vec3(modelMatrix[1][0], modelMatrix[1][1], modelMatrix[1][2]));
+    float spin = uSeed * 0.17 + uTime * 0.45;
+    float c = cos(spin);
+    float s = sin(spin);
+    vec2 localPos = vec2(position.x * c - position.y * s, position.x * s + position.y * c);
+    localPos.x *= scaleX;
+    localPos.y *= scaleY;
 
-    float displace = (macroBillow - 0.38) * (0.34 + uProgress * 0.22);
-    vec3 displaced = position + sphereDir * displace;
-    displaced.y += max(0.0, sphereDir.y) * 0.18 * uProgress;
-
-    vObjDir = sphereDir;
-    vHeightNorm = clamp(sphereDir.y * 0.5 + 0.5, 0.0, 1.0);
-
-    vec4 mvPos = modelViewMatrix * vec4(displaced, 1.0);
-    vNormalView = normalize(normalMatrix * sphereDir);
-    vViewDir = normalize(-mvPos.xyz);
-    gl_Position = projectionMatrix * mvPos;
+    vec4 mvCenter = viewMatrix * modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+    mvCenter.xy += localPos;
+    gl_Position = projectionMatrix * mvCenter;
   }
 `;
 
@@ -487,84 +451,71 @@ const FIREBALL_FRAGMENT_SHADER = /* glsl */ `
   uniform float uOpacity;
   uniform float uElementTint;
 
-  varying vec3 vNormalView;
-  varying vec3 vViewDir;
-  varying vec3 vObjDir;
-  varying float vHeightNorm;
+  varying vec2 vUv;
 
-  float hash31(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
+  float hash21(vec2 p) {
+    p = fract(p * vec2(127.1, 311.7));
+    p += dot(p, p + 34.17);
+    return fract(p.x * p.y);
   }
 
-  float noise3(vec3 p) {
-    vec3 i = floor(p);
-    vec3 f = fract(p);
+  float noise2(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-
-    float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
-    float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
-    float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
-    float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
-    float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
-    float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
-    float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
-    float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
-
-    float nx00 = mix(n000, n100, f.x);
-    float nx10 = mix(n010, n110, f.x);
-    float nx01 = mix(n001, n101, f.x);
-    float nx11 = mix(n011, n111, f.x);
-    float nxy0 = mix(nx00, nx10, f.y);
-    float nxy1 = mix(nx01, nx11, f.y);
-    return mix(nxy0, nxy1, f.z);
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  float fbm3(vec3 p) {
+  float fbm2(vec2 p) {
     float v = 0.0;
     float a = 0.54;
+    mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
     for (int i = 0; i < 4; i++) {
-      v += a * noise3(p);
-      p = p * 2.05 + vec3(3.1, 1.7, 5.3);
+      v += a * noise2(p);
+      p = rot * p * 2.04 + vec2(2.1, 5.7);
       a *= 0.48;
     }
     return v;
   }
 
   void main() {
-    float ndv = abs(dot(normalize(vNormalView), normalize(vViewDir)));
-    // Soft feathered outer edge so volumetric fireball has zero hard polygon border
-    float edgeSoft = smoothstep(0.08, 0.52, ndv);
+    vec2 centered = vUv * 2.0 - 1.0;
+    float dist = length(centered);
+    if (dist > 1.0) discard;
 
-    // Sub-pixel 4-octave 3D FBM boiling fire & rolling smoke detail (100% ZERO triangle facets!)
-    vec3 dir = normalize(vObjDir);
-    float pxNoise = fbm3(dir * 2.75 + vec3(uSeed, -uTime * 2.85, uSeed * 0.63));
+    // 4-octave billowing cauliflower FBM noise — guaranteed 0 before quad edge (zero polygon facets, zero square edges!)
+    vec2 flowUv = centered * 2.35 + vec2(uSeed * 0.73, -uTime * 1.35 + uSeed * 0.37);
+    float n1 = fbm2(flowUv);
+    float n2 = fbm2(flowUv * 1.95 - vec2(uTime * 0.65, uTime * 1.15));
+    float puff = n1 * 0.65 + n2 * 0.35;
 
-    // Pyrotechnic cooling curve: scorching gold-orange crevices wrapped in dark rolling charcoal soot!
-    float tempCool = 1.0 - smoothstep(0.14, 0.8, uProgress);
-    float creviceHeat = clamp(pow(max(0.0, 1.0 - pxNoise), 1.32) * 1.52 + ndv * 0.28, 0.0, 1.35) * (0.28 + 0.92 * tempCool);
+    float boundaryFade = smoothstep(0.96, 0.44, dist);
+    float radialSoft = smoothstep(0.94, 0.16, dist + (puff - 0.5) * 0.36) * boundaryFade;
+    float density = smoothstep(0.18 + uProgress * 0.38, 0.78, puff * 0.68 + radialSoft * 0.64) * radialSoft;
 
-    vec3 sootDark = vec3(0.032, 0.028, 0.034);
-    vec3 sootLit = vec3(0.16, 0.14, 0.135);
-    vec3 smokeCol = mix(sootDark, sootLit, clamp(vHeightNorm * 0.6 + (1.0 - ndv) * 0.4, 0.0, 1.0));
+    // Pyrotechnic blackbody cooling: white-gold heart -> roaring crimson-orange -> rich charcoal quarry smoke
+    float tempCool = 1.0 - smoothstep(0.1, 0.72, uProgress);
+    float heatCore = clamp(pow(1.0 - dist * 0.9, 1.2) * 0.78 + puff * 0.55, 0.0, 1.3) * (0.24 + 0.96 * tempCool);
 
-    // Authentic Tokusatsu gasoline fireball blackbody palette subtly infused with Rider element hue
-    vec3 fieryRed = mix(vec3(0.86, 0.11, 0.015), uColorA * 0.85, uElementTint * 0.45);
-    vec3 fieryOrange = mix(vec3(1.0, 0.44, 0.05), uColorB * 1.05, uElementTint * 0.4);
-    vec3 whiteHot = vec3(1.0, 0.92, 0.72);
+    float lightBias = clamp(0.42 + centered.y * 0.38 + (n2 - 0.5) * 0.42, 0.0, 1.0);
+    vec3 smokeCol = mix(vec3(0.032, 0.028, 0.034), vec3(0.17, 0.15, 0.145), lightBias);
 
-    vec3 fireCol = mix(fieryRed, fieryOrange, smoothstep(0.24, 0.62, creviceHeat));
-    fireCol = mix(fireCol, whiteHot, smoothstep(0.76, 1.12, creviceHeat));
+    vec3 fieryRed = mix(vec3(0.88, 0.12, 0.015), uColorA * 0.85, uElementTint * 0.42);
+    vec3 fieryOrange = mix(vec3(1.0, 0.46, 0.06), uColorB * 1.08, uElementTint * 0.38);
+    vec3 whiteHot = vec3(1.0, 0.93, 0.74);
 
-    float fireMask = smoothstep(0.26 + uProgress * 0.42, 0.68, creviceHeat);
-    vec3 col = mix(smokeCol, fireCol * 1.58, fireMask);
+    vec3 fireCol = mix(fieryRed, fieryOrange, smoothstep(0.24, 0.62, heatCore));
+    fireCol = mix(fireCol, whiteHot, smoothstep(0.74, 1.12, heatCore));
 
-    // Erode billowing clouds organically at the end of explosion
-    float erosion = smoothstep(uProgress * 0.82 - 0.12, uProgress * 0.82 + 0.26, pxNoise + 0.18);
-    float alpha = edgeSoft * erosion * uOpacity * mix(0.84, 0.96, fireMask);
-    if (alpha < 0.02) discard;
+    float fireMask = smoothstep(0.24 + uProgress * 0.42, 0.66, heatCore);
+    vec3 col = mix(smokeCol, fireCol * 1.52, fireMask);
 
+    float alpha = density * uOpacity * mix(0.84, 0.96, fireMask);
+    if (alpha < 0.015) discard;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.95));
   }
 `;
@@ -899,8 +850,8 @@ export class ElementSkillVfx {
   constructor() {
     this.root.name = 'ElementSkillVfxRoot';
 
-    // Shared high-resolution organic procedural geometries (indexed smooth spheres — zero flat-shaded cracks, zero cones!)
-    const fireballLobeGeo = new THREE.SphereGeometry(1.0, 36, 24);
+    // Shared high-resolution organic procedural geometries (camera-facing FBM fireball lobes — 100% zero sphere triangle seams!)
+    const fireballLobeGeo = new THREE.PlaneGeometry(2.35, 2.35);
     const vortexColumnGeo = buildFlaredVortexColumnGeometry(11.5);
     const helixGeoA = buildVerticalHelixRibbonGeometry(0, 2.75, 10.8, 1.05, 0.36);
     const helixGeoB = buildVerticalHelixRibbonGeometry(Math.PI, 2.5, 10.4, 1.32, 0.28);

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { GameApp } from './engine/GameApp';
-import type { ElementId, StageId } from './game/types/schema';
+import type { DifficultyId, ElementId, StageId } from './game/types/schema';
 import { useGameStore } from './store/useGameStore';
 import { CombatHUD } from './ui/CombatHUD';
 import { DamageNumbers } from './ui/DamageNumbers';
@@ -45,6 +45,10 @@ export function App() {
     void appRef.current?.selectStage(stageId);
   }, []);
 
+  const handleSelectDifficulty = useCallback((difficulty: DifficultyId) => {
+    appRef.current?.selectDifficulty(difficulty);
+  }, []);
+
   const handleGemProgressionChanged = useCallback(() => {
     appRef.current?.syncGemProgression();
   }, []);
@@ -84,6 +88,7 @@ export function App() {
           onPreviewElement={handlePreviewElement}
           onUpdateLoadoutOrder={handleUpdateLoadout}
           onSelectStage={handleSelectStage}
+          onSelectDifficulty={handleSelectDifficulty}
           onGemProgressionChanged={handleGemProgressionChanged}
           onDeploy={handleDeploy}
           onResetView={handleResetHubView}

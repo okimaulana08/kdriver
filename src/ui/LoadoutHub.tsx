@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import {
+  DIFFICULTY_LIST,
+  getDifficultyConfig,
+  makeStageDifficultyKey,
+} from '../game/data/difficulty';
+import {
   ALL_ELEMENT_IDS,
   getElementConfig,
   getElementLevelDamageMultiplier,
@@ -12,13 +17,14 @@ import {
   getGemUpgradeCost,
   isElementUnlocked,
 } from '../game/ProgressionSystem';
-import type { ElementId, StageId, WeaponArchetype } from '../game/types/schema';
+import type { DifficultyId, ElementId, StageId, WeaponArchetype } from '../game/types/schema';
 import { useGameStore } from '../store/useGameStore';
 
 interface LoadoutHubProps {
   onPreviewElement: (id: ElementId) => void;
   onUpdateLoadoutOrder: (order: [ElementId, ElementId, ElementId]) => void;
   onSelectStage: (stageId: StageId) => void;
+  onSelectDifficulty: (difficulty: DifficultyId) => void;
   onGemProgressionChanged: () => void;
   onDeploy: () => void;
   onResetView?: () => void;
@@ -119,6 +125,7 @@ export function LoadoutHub({
   onPreviewElement,
   onUpdateLoadoutOrder,
   onSelectStage,
+  onSelectDifficulty,
   onGemProgressionChanged,
   onDeploy,
   onResetView,
@@ -126,6 +133,7 @@ export function LoadoutHub({
   const loadoutOrder = useGameStore((s) => s.loadoutOrder);
   const activeElement = useGameStore((s) => s.activeElement);
   const selectedStageId = useGameStore((s) => s.selectedStageId);
+  const selectedDifficulty = useGameStore((s) => s.selectedDifficulty);
   const saveRecord = useGameStore((s) => s.saveRecord);
   const engineStatus = useGameStore((s) => s.engineStatus);
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
@@ -138,6 +146,8 @@ export function LoadoutHub({
   const previewLevel = getGemLevel(saveRecord, activeElement);
   const previewMultPct = Math.round((getElementLevelDamageMultiplier(previewLevel) - 1) * 100);
   const selectedStage = getStageConfig(selectedStageId);
+  const diffConfig = getDifficultyConfig(selectedDifficulty);
+  const scaledShardPreview = Math.round(selectedStage.shardReward * diffConfig.shardRewardMult);
   const accentColor = previewConfig.primaryColor;
   const glowColor = previewConfig.emissiveColor;
 
@@ -225,17 +235,21 @@ export function LoadoutHub({
           </div>
         </div>
 
-        {/* Center: Mission Sector Selector Ribbon */}
+        {/* Center: Mission Sector + Boss Rush Selector Ribbon */}
         <div className="flex items-center gap-1.5">
           {STAGE_LIST.map((stage, idx) => {
             const isSelected = stage.id === selectedStageId;
             const isCleared = saveRecord.clearedStageIds.includes(stage.id);
+            const modeBestRank =
+              saveRecord.stageDifficultyBestRanks[
+                makeStageDifficultyKey(stage.id, selectedDifficulty)
+              ] ?? null;
             return (
               <button
                 key={stage.id}
                 type="button"
                 onClick={() => onSelectStage(stage.id)}
-                className={`game-chamfer-sm group relative cursor-pointer px-3.5 py-1.5 text-left transition-all ${
+                className={`game-chamfer-sm group relative cursor-pointer px-3 py-1.5 text-left transition-all ${
                   isSelected
                     ? 'bg-slate-900/95 text-white'
                     : 'bg-slate-950/65 text-slate-400 hover:bg-slate-900/80 hover:text-slate-100'
@@ -245,11 +259,23 @@ export function LoadoutHub({
                   boxShadow: isSelected ? `0 4px 18px ${stage.accentColor}35` : 'none',
                 }}
               >
-                <div className="flex items-center justify-between gap-3 text-[9px] font-bold tracking-[0.16em] uppercase">
-                  <span style={{ color: stage.accentColor }}>SECTOR 0{idx + 1}</span>
+                <div className="flex items-center justify-between gap-2.5 text-[9px] font-bold tracking-[0.15em] uppercase">
+                  <span style={{ color: stage.accentColor }}>
+                    {stage.isBossRush ? '★ ENDGAME' : `SECTOR 0${idx + 1}`}
+                  </span>
                   <span className="text-slate-400">
-                    {isCleared ? (
-                      <span className="text-emerald-400">CLEARED</span>
+                    {modeBestRank ? (
+                      <span
+                        className={
+                          modeBestRank === 'S+'
+                            ? 'font-black text-amber-300'
+                            : 'font-bold text-emerald-400'
+                        }
+                      >
+                        {modeBestRank}
+                      </span>
+                    ) : isCleared ? (
+                      <span className="text-emerald-400">CLR</span>
                     ) : (
                       `LV.${stage.recommendedLevel}+`
                     )}
@@ -691,15 +717,59 @@ export function LoadoutHub({
             </div>
           </div>
 
-          {/* MISSION BRIEF + DRAMATIC HENSHIN IGNITION TRIGGER */}
-          <div className="flex flex-col gap-1.5">
+          {/* DIFFICULTY SELECTOR (EASY / MEDIUM / HARD / HELL) + MISSION BRIEF + DEPLOY */}
+          <div className="flex flex-col gap-2">
+            <div className="game-chamfer-sm game-hud-surface p-2.5 ring-1 ring-white/10">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="font-game-display text-[9px] font-bold tracking-[0.2em] text-slate-300 uppercase">
+                  HAZARD LEVEL
+                </span>
+                <span
+                  className="text-[9px] font-black tracking-wider uppercase"
+                  style={{ color: diffConfig.accentColor }}
+                >
+                  {diffConfig.shardRewardMult}× SHARDS
+                </span>
+              </div>
+              <div className="mt-1.5 grid grid-cols-4 gap-1">
+                {DIFFICULTY_LIST.map((diff) => {
+                  const active = diff.id === selectedDifficulty;
+                  return (
+                    <button
+                      key={diff.id}
+                      type="button"
+                      onClick={() => onSelectDifficulty(diff.id)}
+                      className={`game-chamfer-sm cursor-pointer py-1.5 font-game-display text-[10px] font-black tracking-wider uppercase transition-all ${
+                        active
+                          ? 'text-slate-950'
+                          : 'bg-slate-950/75 text-slate-400 hover:bg-slate-900 hover:text-white'
+                      }`}
+                      style={
+                        active
+                          ? {
+                              backgroundColor: diff.accentColor,
+                              boxShadow: `0 0 14px ${diff.accentColor}88`,
+                            }
+                          : { border: '1px solid rgba(148,163,184,0.18)' }
+                      }
+                    >
+                      {diff.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 truncate px-0.5 text-[9px] text-slate-300/85">
+                {diffConfig.tagline}
+              </p>
+            </div>
+
             <div className="flex items-center justify-between px-2 text-[10px]">
               <span className="truncate font-bold tracking-wider text-slate-200 uppercase">
                 <span style={{ color: selectedStage.accentColor }}>▸ </span>
                 {selectedStage.name}
               </span>
               <span className="shrink-0 font-bold text-amber-300">
-                +{selectedStage.shardReward} ◆
+                +{scaledShardPreview} ◆
               </span>
             </div>
 
