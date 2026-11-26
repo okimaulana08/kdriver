@@ -245,9 +245,9 @@ const leftThighTop =
     0,
   ];
 const leftKnee =
-  sliceCentroid(0.2, 0.25, (x) => x > 0) ?? [0.095 * H, yAt(0.225), 0];
+  sliceCentroid(0.23, 0.28, (x) => x > 0) ?? [0.098 * H, yAt(0.255), 0];
 const leftAnkle =
-  sliceCentroid(0.05, 0.09, (x) => x > 0) ?? [0.125 * H, yAt(0.07), -0.015 * H];
+  sliceCentroid(0.06, 0.1, (x) => x > 0) ?? [0.128 * H, yAt(0.08), -0.015 * H];
 const leftFootCenter =
   sliceCentroid(0.0, 0.04, (x) => x > 0) ?? [0.135 * H, yAt(0.02), 0.02 * H];
 
@@ -272,9 +272,10 @@ const armJointX = Math.max(armpitSeamX * 1.05, Math.min(leftArmUpper[0] * 0.88, 
 const clavicleX = armJointX * 0.48;
 const shoulderZ = leftArmUpper[2] * 0.65 + torsoZ * 0.35;
 
-const hipJointX = Math.max(0.058 * H, Math.min(0.092 * H, leftThighTop[0]));
-const hipJointY = yAt(nyCrotch + 0.028);
+const hipJointX = Math.max(0.062 * H, Math.min(0.092 * H, leftThighTop[0]));
+const hipJointY = yAt(nyCrotch + 0.032);
 const hipJointZ = leftThighTop[2] * 0.5 + torsoZ * 0.5;
+const kneeJointZ = leftKnee[2] * 0.45 + hipJointZ * 0.55;
 
 const JOINTS = [
   { name: 'Hips', parent: -1, pos: [0, yHips, torsoZ] },
@@ -298,19 +299,24 @@ const JOINTS = [
 
   // Left Leg (+X)
   { name: 'LeftUpLeg', parent: 0, pos: [hipJointX, hipJointY, hipJointZ] },
-  { name: 'LeftLeg', parent: 14, pos: [leftKnee[0], leftKnee[1], leftKnee[2]] },
+  { name: 'LeftLeg', parent: 14, pos: [leftKnee[0], leftKnee[1], kneeJointZ] },
   { name: 'LeftFoot', parent: 15, pos: [leftAnkle[0], leftAnkle[1], leftAnkle[2]] },
 
   // Right Leg (-X, exact mirror)
   { name: 'RightUpLeg', parent: 0, pos: [-hipJointX, hipJointY, hipJointZ] },
-  { name: 'RightLeg', parent: 17, pos: [-leftKnee[0], leftKnee[1], leftKnee[2]] },
+  { name: 'RightLeg', parent: 17, pos: [-leftKnee[0], leftKnee[1], kneeJointZ] },
   { name: 'RightFoot', parent: 18, pos: [-leftAnkle[0], leftAnkle[1], leftAnkle[2]] },
 ];
 
 const J = Object.fromEntries(JOINTS.map((j, idx) => [j.name, idx]));
 
 // 6. Compute anatomically-partitioned, zero-webbing smooth skin weights per vertex
+// Supports BOTH ascending (edge0 < edge1) and descending (edge0 > edge1) transitions!
 function smoothstep(edge0, edge1, x) {
+  if (edge0 > edge1) {
+    const t = Math.max(0, Math.min(1, (edge0 - x) / Math.max(1e-6, edge0 - edge1)));
+    return t * t * (3 - 2 * t);
+  }
   const t = Math.max(0, Math.min(1, (x - edge0) / Math.max(1e-6, edge1 - edge0)));
   return t * t * (3 - 2 * t);
 }
@@ -426,8 +432,10 @@ for (let i = 0; i < vertCount; i++) {
     continue;
   }
 
-  // C. Legs (strictly partitioned by X >= 0 vs X < 0 so left & right thighs NEVER cross-web!)
-  if (y < yHips - 0.01 * H) {
+  // C. Legs (anatomical diagonal bikini-line hip crease + strict X >= 0 vs X < 0 leg isolation!)
+  // Inner thigh separates cleanly right at nyCrotch; outer hip crease rises cleanly toward hip socket.
+  const hipSeamY = yAt(nyCrotch) + smoothstep(0.008 * H, 0.115 * H, ax) * 0.048 * H;
+  if (y < hipSeamY + 0.026 * H) {
     const isLeft = x >= 0;
     const jUp = isLeft ? J.LeftUpLeg : J.RightUpLeg;
     const jKnee = isLeft ? J.LeftLeg : J.RightLeg;
@@ -441,26 +449,29 @@ for (let i = 0; i < vertCount; i++) {
     void pFoot;
 
     if (y >= yKnee) {
-      // Upper thigh + hip blend near crotch/pelvis
-      const pelvisBlend = smoothstep(hipJointY - 0.035 * H, yHips - 0.005 * H, y) * 0.65;
-      const kneeBlend = smoothstep(yKnee + 0.05 * H, yKnee - 0.015 * H, y) * 0.45;
-      const thighW = Math.max(0.2, 1 - pelvisBlend - kneeBlend);
-      const sum = pelvisBlend + thighW + kneeBlend;
+      // Narrow anatomical hip crease blend -> rigid full-volume thigh shaft (ZERO candy-wrapper collapse!)
+      const pelvisBlend = smoothstep(hipSeamY - 0.024 * H, hipSeamY + 0.026 * H, y);
+      // Knee transition ONLY within ±3.8% of actual knee joint (0.0 on mid/upper thigh!)
+      const kneeBlend = smoothstep(yKnee + 0.038 * H, yKnee - 0.014 * H, y) * 0.45;
+      const upBase = 1 - pelvisBlend;
+      const thighW = Math.max(0, upBase * (1 - kneeBlend));
+      const kneeW = upBase * kneeBlend;
+      const sum = pelvisBlend + thighW + kneeW || 1;
       wMatrix[base + J.Hips] = pelvisBlend / sum;
       wMatrix[base + jUp] = thighW / sum;
-      wMatrix[base + jKnee] = kneeBlend / sum;
+      wMatrix[base + jKnee] = kneeW / sum;
     } else if (y >= yAnkle) {
-      // Shin / greave with smooth knee & ankle transitions
-      const toKnee = smoothstep(yKnee - 0.045 * H, yKnee + 0.015 * H, y) * 0.45;
-      const toAnkle = smoothstep(yAnkle + 0.04 * H, yAnkle - 0.01 * H, y) * 0.45;
+      // Shin / greave with clean local knee & ankle transitions
+      const toKnee = smoothstep(yKnee - 0.038 * H, yKnee + 0.012 * H, y) * 0.45;
+      const toAnkle = smoothstep(yAnkle + 0.035 * H, yAnkle - 0.01 * H, y) * 0.42;
       const shinW = Math.max(0.25, 1 - toKnee - toAnkle);
       const sum = toKnee + shinW + toAnkle;
       wMatrix[base + jUp] = toKnee / sum;
       wMatrix[base + jKnee] = shinW / sum;
       wMatrix[base + jFoot] = toAnkle / sum;
     } else {
-      // Boot & Claws
-      const ankleFade = smoothstep(yAnkle - 0.025 * H, yAnkle + 0.015 * H, y) * 0.25;
+      // Boot & Foot
+      const ankleFade = smoothstep(yAnkle - 0.022 * H, yAnkle + 0.012 * H, y) * 0.25;
       wMatrix[base + jKnee] = ankleFade;
       wMatrix[base + jFoot] = 1 - ankleFade;
     }
@@ -529,7 +540,9 @@ if (indices) {
   }
 
   let nextW = new Float32Array(vertCount * numJoints);
-  const SMOOTH_PASSES = 4;
+  const SMOOTH_PASSES = 3;
+  const leftLegJoints = [J.LeftUpLeg, J.LeftLeg, J.LeftFoot];
+  const rightLegJoints = [J.RightUpLeg, J.RightLeg, J.RightFoot];
   for (let pass = 0; pass < SMOOTH_PASSES; pass++) {
     for (let i = 0; i < vertCount; i++) {
       const base = i * numJoints;
@@ -548,7 +561,17 @@ if (indices) {
         for (let k = 0; k < nbrs.length; k++) {
           sumNbr += wMatrix[nbrs[k] * numJoints + j];
         }
-        nextW[base + j] = wMatrix[base + j] * 0.56 + sumNbr * invN * 0.44;
+        nextW[base + j] = wMatrix[base + j] * 0.62 + sumNbr * invN * 0.38;
+      }
+      // Strict midline leg barrier: left-side leg vertices NEVER absorb right-leg weights & vice versa!
+      const vx = pos[i * 3];
+      const vy = pos[i * 3 + 1];
+      if (vy < yHips) {
+        if (vx > 0.004 * H) {
+          for (const rj of rightLegJoints) nextW[base + rj] = 0;
+        } else if (vx < -0.004 * H) {
+          for (const lj of leftLegJoints) nextW[base + lj] = 0;
+        }
       }
     }
     // Enforce exact identical weights on UV-seam duplicates so seams never split!

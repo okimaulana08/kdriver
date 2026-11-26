@@ -1,6 +1,6 @@
 {
   "rider": {
-    "modelUrl": "/assets/models/custom/rider.glb",
+    "modelUrl": "/assets/models/custom/rider.glb?v=rigfix1",
     "targetHeightMeters": 1.84,
     "animationUrls": {
       "idle": null,
@@ -27,12 +27,12 @@
     "animationUrls": {}
   },
   "rider_unit2": {
-    "modelUrl": "/assets/models/custom/rider_unit2.glb?v=mocap1",
+    "modelUrl": "/assets/models/custom/rider_unit2.glb?v=rigfix1",
     "targetHeightMeters": 1.84,
     "animationUrls": {}
   },
   "rider_unit2_upgraded": {
-    "modelUrl": "/assets/models/custom/rider_unit2_upgraded.glb?v=mocap1",
+    "modelUrl": "/assets/models/custom/rider_unit2_upgraded.glb?v=rigfix1",
     "targetHeightMeters": 1.94,
     "animationUrls": {}
   },

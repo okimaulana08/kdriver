@@ -166,23 +166,19 @@ const BONE_PAIRS = [
   ['RightFoot', 'RightFoot'],
 ];
 
-// Primary anatomical limb segments used to align source T-pose/wide A-pose -> target A-pose cleanly
+// Primary anatomical limb segments used to align source T-pose/wide A-pose -> target A-pose cleanly.
+// IMPORTANT: Apply bind-direction swing alignment ONLY to ARMS (where T-pose vs A-pose differs by ~30-60 deg).
+// Both source & target LEGS stand upright; applying setFromUnitVectors to legs injects artificial Z-pitch squat/collapse!
 const LIMB_DIR_CHILD = {
   LeftArm: 'LeftForeArm',
   LeftForeArm: 'LeftHand',
   RightArm: 'RightForeArm',
   RightForeArm: 'RightHand',
-  LeftUpLeg: 'LeftLeg',
-  LeftLeg: 'LeftFoot',
-  RightUpLeg: 'RightLeg',
-  RightLeg: 'RightFoot',
 };
 
 const INHERIT_BIND_CORRECTION = {
   LeftHand: 'LeftForeArm',
   RightHand: 'RightForeArm',
-  LeftFoot: 'LeftLeg',
-  RightFoot: 'RightLeg',
 };
 
 const src = parseGlb(SRC_PATH);

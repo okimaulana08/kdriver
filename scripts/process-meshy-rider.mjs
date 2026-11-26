@@ -176,6 +176,143 @@ if (!SKIP_FIST_CURL) {
   console.log('[MOCAP-RIDER] Skipped fist curl (--skip-fist-curl: gauntlet fists already sculpted).');
 }
 
+// Rigidify Tokusatsu armored chestplate & K-Driver belt so shoulder/head/hip twists NEVER warp
+// the rigid front chest cuirass asymmetrically or bend the gold sternum centerline!
+function rigidifyChestCuirass() {
+  const findJoint = (name) => skin.joints.findIndex((ni) => gltf.nodes[ni].name === name);
+  const jHips = findJoint('Hips');
+  const jSpine02 = findJoint('Spine02');
+  const jSpine01 = findJoint('Spine01');
+  const jHead = findJoint('Head');
+  const jHeadFront = findJoint('headfront');
+  if (jSpine01 < 0 || jHips < 0) return;
+
+  const smooth = (e0, e1, x) => {
+    if (e0 > e1) {
+      const t = Math.max(0, Math.min(1, (e0 - x) / Math.max(1e-6, e0 - e1)));
+      return t * t * (3 - 2 * t);
+    }
+    const t = Math.max(0, Math.min(1, (x - e0) / Math.max(1e-6, e1 - e0)));
+    return t * t * (3 - 2 * t);
+  };
+
+  const vertCount = pos.length / 3;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < vertCount; i++) {
+    const y = pos[i * 3 + 1];
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const H = Math.max(0.1, maxY - minY);
+
+  let rigidChestVerts = 0;
+  let strippedHeadBleed = 0;
+  let rigidBeltVerts = 0;
+
+  for (let i = 0; i < vertCount; i++) {
+    const x = pos[i * 3];
+    const y = pos[i * 3 + 1];
+    const z = pos[i * 3 + 2];
+    const ny = (y - minY) / H;
+    const ax = Math.abs(x);
+
+    // 1. Strip erroneous Head / headfront skin bleed below collar (ny < 0.795) so head turns never shear chest!
+    if (ny < 0.795 && ax < 0.24 * H) {
+      let stripped = 0;
+      for (let k = 0; k < 4; k++) {
+        const j = joints[i * 4 + k];
+        if ((j === jHead || j === jHeadFront) && weights[i * 4 + k] > 0) {
+          stripped += weights[i * 4 + k];
+          weights[i * 4 + k] = 0;
+        }
+      }
+      if (stripped > 0) {
+        strippedHeadBleed++;
+        let rem = 0;
+        for (let k = 0; k < 4; k++) rem += weights[i * 4 + k];
+        if (rem > 1e-5) {
+          for (let k = 0; k < 4; k++) weights[i * 4 + k] /= rem;
+        } else {
+          joints[i * 4] = jSpine01;
+          weights[i * 4] = 1;
+          for (let k = 1; k < 4; k++) weights[i * 4 + k] = 0;
+        }
+      }
+    }
+
+    // 2. Rigidify solid Kuuga chestplate cuirass (ny 0.618..0.778, inside armhole edges) to Spine01!
+    // Front chestplate (z > 0.015) extends slightly wider across both pectoral plates so left & right pecs stay 100% symmetric!
+    const innerEdge = z > 0.015 ? 0.145 * (H / 1.7) : 0.122 * (H / 1.7);
+    const outerEdge = z > 0.015 ? 0.184 * (H / 1.7) : 0.165 * (H / 1.7);
+    if (ny >= 0.59 && ny <= 0.798 && ax <= outerEdge) {
+      const vMask = smooth(0.592, 0.62, ny) * smooth(0.796, 0.772, ny);
+      const hMask = smooth(outerEdge, innerEdge, ax);
+      const rig = vMask * hMask;
+      if (rig > 0.005) {
+        const wMap = new Map();
+        for (let k = 0; k < 4; k++) {
+          const w = weights[i * 4 + k] * (1 - rig);
+          if (w > 1e-5) {
+            const j = joints[i * 4 + k];
+            wMap.set(j, (wMap.get(j) || 0) + w);
+          }
+        }
+        wMap.set(jSpine01, (wMap.get(jSpine01) || 0) + rig);
+        const top4 = [...wMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+        let sum = 0;
+        for (const [, w] of top4) sum += w;
+        for (let k = 0; k < 4; k++) {
+          if (k < top4.length) {
+            joints[i * 4 + k] = top4[k][0];
+            weights[i * 4 + k] = top4[k][1] / (sum || 1);
+          } else {
+            joints[i * 4 + k] = jSpine01;
+            weights[i * 4 + k] = 0;
+          }
+        }
+        rigidChestVerts++;
+      }
+    }
+
+    // 3. Stabilize K-Driver front belt buckle (ny 0.525..0.59, |x| < 0.155, z > 0.02) on Hips/Spine02
+    if (ny >= 0.525 && ny <= 0.59 && ax < 0.155 * (H / 1.7) && z > 0.02) {
+      const beltRigid = smooth(0.525, 0.545, ny) * smooth(0.59, 0.57, ny) * smooth(0.155 * (H / 1.7), 0.11 * (H / 1.7), ax);
+      if (beltRigid > 0.25) {
+        const targetJ = jSpine02 >= 0 && ny > 0.575 ? jSpine02 : jHips;
+        const wMap = new Map();
+        for (let k = 0; k < 4; k++) {
+          const w = weights[i * 4 + k] * (1 - beltRigid * 0.85);
+          if (w > 1e-5) {
+            const j = joints[i * 4 + k];
+            wMap.set(j, (wMap.get(j) || 0) + w);
+          }
+        }
+        wMap.set(targetJ, (wMap.get(targetJ) || 0) + beltRigid * 0.85);
+        const top4 = [...wMap.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+        let sum = 0;
+        for (const [, w] of top4) sum += w;
+        for (let k = 0; k < 4; k++) {
+          if (k < top4.length) {
+            joints[i * 4 + k] = top4[k][0];
+            weights[i * 4 + k] = top4[k][1] / (sum || 1);
+          } else {
+            joints[i * 4 + k] = targetJ;
+            weights[i * 4 + k] = 0;
+          }
+        }
+        rigidBeltVerts++;
+      }
+    }
+  }
+
+  console.log(
+    `[MOCAP-RIDER] Rigidified chest cuirass: ${rigidChestVerts} chest verts, ${strippedHeadBleed} collar head-bleed fixes, ${rigidBeltVerts} belt verts.`
+  );
+}
+
+rigidifyChestCuirass();
+
 // Strip horizontal root motion (X/Z) on in-place combat animations while preserving vertical Y motion!
 for (const anim of gltf.animations || []) {
   const isRollOrAttack = /roll|dodge|thrust|slash|attack|punch|combo/i.test(anim.name);
