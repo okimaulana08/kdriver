@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getRiderConfig } from '../game/data/riders';
@@ -361,75 +362,113 @@ export function CombatHUD() {
         </div>
       </div>
 
-      {/* Mid-Right: Combo + Reactions Counter */}
-      {(comboCount > 0 || reactionCount > 0) && (
-        <div className="fixed top-1/3 right-6 flex flex-col items-end font-mono">
-          {comboCount > 0 && (
-            <>
-              <div className="text-5xl font-black tracking-tighter text-amber-300 italic drop-shadow-[0_0_16px_rgba(251,191,36,0.65)]">
-                {comboCount}
-                <span className="ml-1 text-lg font-bold text-white not-italic">HITS</span>
-              </div>
-              <span className="mt-0.5 rounded bg-rose-600/85 px-2 py-0.5 text-[10px] font-bold tracking-[0.2em] text-white uppercase">
-                K-DRIVER COMBO
-              </span>
-            </>
-          )}
-          {reactionCount > 0 && (
-            <span className="mt-2 rounded border border-cyan-400/50 bg-slate-950/80 px-2 py-0.5 text-[10px] font-bold tracking-wider text-cyan-300 uppercase">
-              REACTIONS: {reactionCount}
-            </span>
-          )}
-        </div>
-      )}
+      {/* Mid-Right: Kinetic Combo + Reactions Counter */}
+      <AnimatePresence>
+        {(comboCount > 0 || reactionCount > 0) && (
+          <motion.div
+            initial={{ x: 28, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: 24, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            className="fixed top-1/3 right-6 flex flex-col items-end font-mono"
+          >
+            {comboCount > 0 && (
+              <>
+                <motion.div
+                  key={comboCount}
+                  initial={{ scale: 1.42, rotate: -4 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 520, damping: 22 }}
+                  className="font-game-display text-5xl font-black tracking-tighter text-amber-300 italic drop-shadow-[0_0_18px_rgba(251,191,36,0.72)]"
+                >
+                  {comboCount}
+                  <span className="ml-1 text-lg font-bold text-white not-italic">HITS</span>
+                </motion.div>
+                <span className="game-skew-cta mt-0.5 bg-rose-600/90 px-3 py-0.5 font-game-display text-[10px] font-black tracking-[0.2em] text-white uppercase">
+                  {isPhantom ? 'PHANTOM COMBO' : 'K-DRIVER COMBO'}
+                </span>
+              </>
+            )}
+            {reactionCount > 0 && (
+              <motion.span
+                key={reactionCount}
+                initial={{ scale: 1.2 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 24 }}
+                className="game-chamfer-sm mt-2 border border-cyan-400/50 bg-slate-950/85 px-2.5 py-0.5 text-[10px] font-bold tracking-wider text-cyan-300 uppercase"
+              >
+                REACTIONS: {reactionCount}
+              </motion.span>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Contextual [F] Henshin / Ultimate Evolution, [R] Instant Finisher, [SPACE] Break Kick & [LMB] Warp Counter Callouts */}
-      {(canActivateSuper ||
-        canActivateUltimateForm ||
-        canActivateUltimate ||
-        warpCounterReady ||
-        canBreakKick) && (
-        <div className="fixed inset-x-0 bottom-30 flex flex-wrap items-center justify-center gap-3">
-          {canBreakKick && (
-            <div className="animate-bounce rounded-xl border-2 border-amber-300 bg-slate-950/95 px-5 py-2 font-mono text-sm font-black tracking-widest text-amber-200 uppercase shadow-[0_0_34px_rgba(251,191,36,0.85)]">
-              💥 [SPACE] BREAK KICK! (GUARANTEED CRIT!)
-            </div>
-          )}
-          {warpCounterReady && (
-            <div className="animate-bounce rounded-xl border-2 border-cyan-300 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-cyan-200 uppercase shadow-[0_0_28px_rgba(34,211,238,0.75)]">
-              ⚡ [LMB] {isPhantom ? 'PHANTOM COUNTER!' : 'WARP COUNTER!'} (CRIT{' '}
-              {riderConfig.warpCounterDamageMult.toFixed(2)}×)
-            </div>
-          )}
-          {canActivateSuper && (
-            <div
-              className={`animate-pulse rounded-xl border-2 bg-slate-950/90 px-5 py-2 font-mono text-sm font-black tracking-widest uppercase ${
-                isPhantom
-                  ? 'border-cyan-300 text-cyan-300 shadow-[0_0_28px_rgba(34,211,238,0.65)]'
-                  : 'border-amber-300 text-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.65)]'
-              }`}
-            >
-              ⚡ PRESS [F] — {isPhantom ? 'UPGRADED FORM OVERCLOCK!' : 'HENSHIN SUPER FORM!'}
-            </div>
-          )}
-          {canActivateUltimateForm && riderConfig.hasUltimateForm && (
-            <div className="animate-pulse rounded-xl border-2 border-rose-400 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-rose-300 uppercase shadow-[0_0_32px_rgba(244,63,94,0.75)]">
-              ★ PRESS [F] — EVOLVE ULTIMATE FORM!
-            </div>
-          )}
-          {canActivateUltimate && (
-            <div
-              className={`animate-pulse rounded-xl border-2 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest uppercase ${
-                isPhantom
-                  ? 'border-cyan-300 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.75)]'
-                  : 'border-amber-300 text-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.7)]'
-              }`}
-            >
-              🔥 PRESS [R] — FINISHER: {activeFinisherName}!
-            </div>
-          )}
-        </div>
-      )}
+      <AnimatePresence>
+        {(canActivateSuper ||
+          canActivateUltimateForm ||
+          canActivateUltimate ||
+          warpCounterReady ||
+          canBreakKick) && (
+          <motion.div
+            initial={{ y: 18, opacity: 0, scale: 0.92 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 14, opacity: 0, scale: 0.94 }}
+            transition={{ type: 'spring', stiffness: 460, damping: 26 }}
+            className="fixed inset-x-0 bottom-30 flex flex-wrap items-center justify-center gap-3"
+          >
+            {canBreakKick && (
+              <motion.div
+                initial={{ scale: 1.22 }}
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ repeat: Infinity, duration: 0.9 }}
+                className="game-skew-cta border-2 border-amber-300 bg-slate-950/95 px-6 py-2 font-game-display text-xs font-black tracking-widest text-amber-200 uppercase shadow-[0_0_34px_rgba(251,191,36,0.85)]"
+              >
+                💥 [SPACE] BREAK KICK! (GUARANTEED CRIT!)
+              </motion.div>
+            )}
+            {warpCounterReady && (
+              <motion.div
+                initial={{ scale: 1.2 }}
+                animate={{ scale: [1, 1.05, 1] }}
+                transition={{ repeat: Infinity, duration: 0.85 }}
+                className="game-skew-cta border-2 border-cyan-300 bg-slate-950/92 px-6 py-2 font-game-display text-xs font-black tracking-widest text-cyan-200 uppercase shadow-[0_0_28px_rgba(34,211,238,0.75)]"
+              >
+                ⚡ [LMB] {isPhantom ? 'PHANTOM COUNTER!' : 'WARP COUNTER!'} (CRIT{' '}
+                {riderConfig.warpCounterDamageMult.toFixed(2)}×)
+              </motion.div>
+            )}
+            {canActivateSuper && (
+              <div
+                className={`game-skew-cta animate-pulse border-2 bg-slate-950/92 px-6 py-2 font-game-display text-xs font-black tracking-widest uppercase ${
+                  isPhantom
+                    ? 'border-cyan-300 text-cyan-300 shadow-[0_0_28px_rgba(34,211,238,0.65)]'
+                    : 'border-amber-300 text-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.65)]'
+                }`}
+              >
+                ⚡ PRESS [F] — {isPhantom ? 'UPGRADED FORM OVERCLOCK!' : 'HENSHIN SUPER FORM!'}
+              </div>
+            )}
+            {canActivateUltimateForm && riderConfig.hasUltimateForm && (
+              <div className="game-skew-cta animate-pulse border-2 border-rose-400 bg-slate-950/92 px-6 py-2 font-game-display text-xs font-black tracking-widest text-rose-300 uppercase shadow-[0_0_32px_rgba(244,63,94,0.75)]">
+                ★ PRESS [F] — EVOLVE ULTIMATE FORM!
+              </div>
+            )}
+            {canActivateUltimate && (
+              <div
+                className={`game-skew-cta animate-pulse border-2 bg-slate-950/92 px-6 py-2 font-game-display text-xs font-black tracking-widest uppercase ${
+                  isPhantom
+                    ? 'border-cyan-300 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.75)]'
+                    : 'border-amber-300 text-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.7)]'
+                }`}
+              >
+                🔥 PRESS [R] — FINISHER: {activeFinisherName}!
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Bottom Row: Rider Vital Card + 3 Gem Slots + Skill Q / Pet E / Finisher R */}
       <div className="flex items-end justify-between gap-3">
@@ -593,7 +632,7 @@ export function CombatHUD() {
             </div>
           </div>
         ) : (
-        <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-950/85 px-3 py-2.5 font-mono shadow-2xl backdrop-blur-md">
+        <div className="game-chamfer-sm flex items-center gap-2.5 border border-slate-800 bg-slate-950/85 px-3 py-2.5 font-mono shadow-2xl backdrop-blur-md">
           {loadoutOrder.map((gemId, idx) => {
             const cfg = getElementConfig(gemId);
             const gemLv = getGemLevel(saveRecord, gemId);
@@ -601,14 +640,27 @@ export function CombatHUD() {
             const sCd = skillCooldowns[gemId];
             const pCd = petCooldowns[gemId];
             return (
-              <div
+              <motion.div
                 key={gemId}
-                className={`relative flex w-32 flex-col rounded-lg border px-2.5 py-2 transition-all ${
+                animate={{ y: isActive ? -3 : 0, scale: isActive ? 1.03 : 1 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+                className={`game-chamfer-sm relative flex w-32 flex-col border px-2.5 py-2 ${
                   isActive
                     ? GEM_ACTIVE_CLASSES[gemId]
                     : 'border-slate-700/80 bg-slate-900/75 text-slate-400'
                 }`}
               >
+                {isActive && (
+                  <motion.span
+                    layoutId="combat-active-gem-bar"
+                    transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                    className="pointer-events-none absolute inset-x-1 top-0 h-[2px]"
+                    style={{
+                      backgroundColor: cfg.emissiveColor,
+                      boxShadow: `0 0 10px ${cfg.emissiveColor}`,
+                    }}
+                  />
+                )}
                 <div className="flex items-center justify-between">
                   <span className="rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] font-bold uppercase">
                     [{idx + 1}] {gemId}
@@ -639,7 +691,7 @@ export function CombatHUD() {
                     {formSwitchCooldown.toFixed(1)}s
                   </div>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </div>

@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getStageConfig } from '../game/data/stages';
@@ -92,7 +93,13 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
       </div>
 
       {/* Main Asymmetric Tokusatsu Mission Debrief Frame */}
-      <div className="animate-outcome-panel relative z-10 w-full max-w-4xl">
+      <motion.div
+        initial={{ opacity: 0, y: 26, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 16, scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+        className="relative z-10 w-full max-w-4xl"
+      >
         {/* Top Slanted Status Header Bar */}
         <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-1">
           <div>
@@ -181,7 +188,12 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
               </span>
 
               {/* Hexagonal Slammed Rank Emblem */}
-              <div className="animate-outcome-rank relative my-4 flex h-36 w-36 items-center justify-center">
+              <motion.div
+                initial={{ opacity: 0, scale: 2.35, rotate: -18 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', stiffness: 360, damping: 22, delay: 0.14 }}
+                className="relative my-4 flex h-36 w-36 items-center justify-center"
+              >
                 <div
                   className="game-hex absolute inset-0 opacity-25"
                   style={{
@@ -208,7 +220,7 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
                     {result.rank}
                   </span>
                 </div>
-              </div>
+              </motion.div>
 
               <div className="w-full border-t border-white/10 pt-2.5">
                 <p
@@ -349,10 +361,12 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
 
           {/* Bottom Skewed Arcade Action Triggers */}
           <div className="relative z-10 mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center">
-            <button
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={onRetry}
-              className="game-skew-cta group relative flex-1 cursor-pointer overflow-hidden px-6 py-3.5 text-center transition-transform hover:scale-[1.015] active:scale-[0.985]"
+              className="game-skew-cta group relative flex-1 cursor-pointer overflow-hidden px-6 py-3.5 text-center"
               style={{
                 background: isVictory
                   ? 'linear-gradient(105deg, #0284c7 0%, #06b6d4 50%, #f59e0b 100%)'
@@ -367,21 +381,23 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
               <span className="font-game-display relative z-10 text-sm font-black tracking-[0.24em] text-white uppercase italic drop-shadow">
                 ↻ {isVictory ? 'REPLAY SECTOR' : 'RETRY MISSION'}
               </span>
-            </button>
+            </motion.button>
 
-            <button
+            <motion.button
               type="button"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.97 }}
               onClick={onReturnToHub}
-              className="game-chamfer-sm flex-1 cursor-pointer bg-slate-900/90 px-6 py-3.5 font-game-display text-xs font-black tracking-[0.22em] text-slate-100 uppercase ring-1 ring-white/20 transition-all hover:bg-slate-800 hover:text-white"
+              className="game-chamfer-sm flex-1 cursor-pointer bg-slate-900/90 px-6 py-3.5 font-game-display text-xs font-black tracking-[0.22em] text-slate-100 uppercase ring-1 ring-white/20 transition-colors hover:bg-slate-800 hover:text-white"
               style={{
                 borderRight: `3px solid ${secondaryAccent}`,
               }}
             >
               ◀ RETURN TO ARMORY HUB
-            </button>
+            </motion.button>
           </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

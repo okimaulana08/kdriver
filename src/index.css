@@ -166,6 +166,68 @@ canvas {
   animation: henshin-sheen 2.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
+@keyframes hud-scan-sweep {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.32;
+  }
+  80% {
+    opacity: 0.18;
+  }
+  100% {
+    transform: translateY(320%);
+    opacity: 0;
+  }
+}
+
+.animate-hud-scan {
+  animation: hud-scan-sweep 4.6s linear infinite;
+}
+
+.game-panel-bezel {
+  background:
+    linear-gradient(155deg, rgba(12, 21, 42, 0.88) 0%, rgba(4, 8, 19, 0.84) 100%),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.018) 0px,
+      rgba(255, 255, 255, 0.018) 2px,
+      transparent 2px,
+      transparent 7px
+    );
+  backdrop-filter: blur(12px);
+}
+
+.game-corner-brackets {
+  position: relative;
+}
+
+.game-corner-brackets::before,
+.game-corner-brackets::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.game-corner-brackets::before {
+  top: 4px;
+  left: 4px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.game-corner-brackets::after {
+  right: 4px;
+  bottom: 4px;
+  border-right: 2px solid;
+  border-bottom: 2px solid;
+}
+
 .game-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(56, 189, 248, 0.4) transparent;

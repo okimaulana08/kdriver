@@ -104,6 +104,15 @@ describe('Paket C — Playable Second Rider UNIT-02 PHANTOM (2-Form Counter-Assa
     expect(fsm.riderKickCooldown).toBeCloseTo(6.0, 2);
   });
 
+  it('verifies photorealistic cutin_phantom_visor.jpg exists with valid JPEG magic bytes', () => {
+    const visorPath = path.resolve(process.cwd(), 'public/assets/textures/cutin_phantom_visor.jpg');
+    expect(fs.existsSync(visorPath)).toBe(true);
+    const bytes = fs.readFileSync(visorPath);
+    expect(bytes.length).toBeGreaterThan(40 * 1024);
+    expect(bytes[0]).toBe(0xff);
+    expect(bytes[1]).toBe(0xd8);
+  });
+
   it('verifies total public/assets stays strictly under 25 MB after adding both rigged Unit-02 GLBs', () => {
     const totalBytes = getDirectorySizeBytes(path.resolve(process.cwd(), 'public/assets'));
     expect(totalBytes).toBeLessThan(25 * 1024 * 1024);

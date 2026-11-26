@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import type { HubCameraPreset } from '../engine/CameraRig';
 import {
   DIFFICULTY_LIST,
   getDifficultyConfig,
@@ -37,7 +39,11 @@ interface LoadoutHubProps {
   onGemProgressionChanged: () => void;
   onDeploy: () => void;
   onResetView?: () => void;
+  onSelectCameraPreset?: (preset: HubCameraPreset) => void;
 }
+
+const SPRING_SNAPPY = { type: 'spring' as const, stiffness: 460, damping: 32, mass: 0.8 };
+const SPRING_PANEL = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.9 };
 
 function ElementEmblem({ id, color, size = 16 }: { id: ElementId; color: string; size?: number }) {
   return (
@@ -130,6 +136,12 @@ function formatArchetype(arch: WeaponArchetype): string {
   }
 }
 
+const CAMERA_PRESETS: ReadonlyArray<{ id: HubCameraPreset; label: string }> = [
+  { id: 'full', label: 'FULL' },
+  { id: 'helmet', label: 'VISOR' },
+  { id: 'weapon', label: 'ARMAMENT' },
+];
+
 export function LoadoutHub({
   onPreviewElement,
   onUpdateLoadoutOrder,
@@ -139,6 +151,7 @@ export function LoadoutHub({
   onGemProgressionChanged,
   onDeploy,
   onResetView,
+  onSelectCameraPreset,
 }: LoadoutHubProps) {
   const loadoutOrder = useGameStore((s) => s.loadoutOrder);
   const activeElement = useGameStore((s) => s.activeElement);
@@ -153,6 +166,7 @@ export function LoadoutHub({
   const unlockGemWithShards = useGameStore((s) => s.unlockGemWithShards);
 
   const [editingSlot, setEditingSlot] = useState<0 | 1 | 2>(0);
+  const [camPreset, setCamPreset] = useState<HubCameraPreset>('full');
 
   const previewConfig = getElementConfig(activeElement);
   const selectedStage = getStageConfig(selectedStageId);
@@ -165,14 +179,16 @@ export function LoadoutHub({
     phantomLevel < MAX_GEM_LEVEL && saveRecord.gemShards >= phantomUpgradeCost;
 
   const previewLevel = isPhantomLocked ? phantomLevel : getGemLevel(saveRecord, activeElement);
-  const previewMultPct = Math.round((getElementLevelDamageMultiplier(previewLevel) - 1) * 100);
+  const levelMult = getElementLevelDamageMultiplier(previewLevel);
+  const previewMultPct = Math.round((levelMult - 1) * 100);
   const scaledShardPreview = Math.round(selectedStage.shardReward * diffConfig.shardRewardMult);
   const accentColor = isPhantomLocked ? riderConfig.accentColor : previewConfig.primaryColor;
   const glowColor = isPhantomLocked ? riderConfig.glowColor : previewConfig.emissiveColor;
 
-  const displayWeaponName = isPhantomLocked
-    ? (riderConfig.signatureWeapon?.name ?? 'Kurokage Cyber Katana')
-    : previewConfig.weapon.name;
+  const activeWeaponCfg = isPhantomLocked
+    ? (riderConfig.signatureWeapon ?? previewConfig.weapon)
+    : previewConfig.weapon;
+  const displayWeaponName = activeWeaponCfg.name;
   const displayWeaponTag = isPhantomLocked
     ? 'KATANA'
     : formatArchetype(previewConfig.weapon.archetype);
@@ -191,6 +207,19 @@ export function LoadoutHub({
   const displayPedestalSubtitle = isPhantomLocked
     ? (riderConfig.signatureThemeName ?? 'FIXED FORM // CYBER KATANA')
     : previewConfig.name;
+
+  // Data-driven animated combat profile percentages (0-100) for AAA Weapon Inspector bars
+  const statPowerPct = Math.min(
+    100,
+    Math.max(24, Math.round(((activeWeaponCfg.baseDamage * levelMult) / 56) * 100))
+  );
+  const statSpeedPct = Math.min(
+    100,
+    Math.max(22, Math.round(((activeWeaponCfg.attackSpeed * riderConfig.attackSpeedMult) / 1.7) * 100))
+  );
+  const statReachOrCritPct = isPhantomLocked
+    ? Math.min(100, Math.round((riderConfig.baseCritChance / 0.25) * 100))
+    : Math.min(100, Math.max(28, Math.round((Math.min(activeWeaponCfg.range, 6.2) / 6.2) * 100)));
 
   const moveSlot = (index: number, delta: -1 | 1) => {
     const target = index + delta;
@@ -236,54 +265,102 @@ export function LoadoutHub({
     }
   };
 
+  const handleCameraPresetClick = (preset: HubCameraPreset) => {
+    setCamPreset(preset);
+    if (onSelectCameraPreset) {
+      onSelectCameraPreset(preset);
+    } else if (preset === 'full' && onResetView) {
+      onResetView();
+    }
+  };
+
   return (
-    <div className="font-game-ui pointer-events-none fixed inset-0 z-20 flex flex-col justify-between overflow-hidden">
-      {/* Subtle cinematic dark edge vignette so floating HUD elements stay razor-legible without boxing the 3D scene */}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="font-game-ui pointer-events-none fixed inset-0 z-20 flex flex-col justify-between overflow-hidden select-none"
+    >
+      {/* Dynamic Cinematic Edge Framing Vignette + Subtle Color Rim Wash */}
       <div
-        className="pointer-events-none fixed inset-0 -z-10"
+        className="pointer-events-none fixed inset-0 -z-10 transition-all duration-500"
         style={{
-          background:
-            'linear-gradient(90deg, rgba(2,6,23,0.72) 0%, rgba(2,6,23,0.22) 38%, rgba(2,6,23,0.02) 64%, rgba(2,6,23,0.42) 100%)',
+          background: `linear-gradient(90deg, rgba(2,6,23,0.78) 0%, rgba(2,6,23,0.22) 34%, rgba(2,6,23,0.0) 56%, rgba(2,6,23,0.48) 100%), radial-gradient(ellipse at 52% 94%, ${accentColor}22 0%, transparent 56%)`,
         }}
       />
 
-      {/* ================= TOP COMMAND BAR ================= */}
-      <header className="pointer-events-auto flex items-center justify-between gap-2 border-b border-white/10 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent px-4 py-2 backdrop-blur-sm">
-        {/* Game Brand Crest */}
+      {/* ================= TOP TACTICAL COMMAND RIBBON ================= */}
+      <motion.header
+        initial={{ y: -36, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={SPRING_PANEL}
+        className="pointer-events-auto relative flex items-center justify-between gap-2 border-b border-white/12 bg-gradient-to-b from-slate-950/94 via-slate-950/82 to-slate-950/35 px-4 py-2 backdrop-blur-md"
+      >
+        {/* Dynamic top accent laser filament */}
+        <motion.div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+          animate={{
+            background: `linear-gradient(90deg, ${accentColor} 0%, ${glowColor} 45%, transparent 100%)`,
+          }}
+          transition={{ duration: 0.35 }}
+        />
+
+        {/* Game Brand Crest + Live Hangar Status */}
         <div className="flex shrink-0 items-center gap-2.5">
-          <div
+          <motion.div
+            key={`${selectedRiderId}-${activeElement}`}
+            initial={{ scale: 0.84, rotate: -14 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={SPRING_SNAPPY}
             className="game-hex flex h-9 w-10 items-center justify-center shadow-lg"
             style={{
               background: `linear-gradient(135deg, ${accentColor}, #0f172a)`,
-              boxShadow: `0 0 18px ${accentColor}66`,
+              boxShadow: `0 0 22px ${accentColor}77`,
             }}
           >
-            <ElementEmblem id={activeElement} color="#ffffff" size={18} />
-          </div>
+            {isPhantomLocked ? (
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 2 5 6.5 8 12l-3 5.5L12 22l7-4.5-3-5.5 3-5.5L12 2Z"
+                  fill="#67e8f9"
+                  stroke="#ffffff"
+                  strokeWidth="1.4"
+                />
+              </svg>
+            ) : (
+              <ElementEmblem id={activeElement} color="#ffffff" size={18} />
+            )}
+          </motion.div>
           <div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <span className="font-game-display text-base font-black tracking-wider text-white italic">
                 K-DRIVER
               </span>
               <span
-                className="game-chamfer-sm hidden px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] uppercase 2xl:inline-block"
+                className="game-chamfer-sm hidden items-center gap-1 px-1.5 py-0.5 text-[8px] font-black tracking-[0.18em] uppercase 2xl:inline-flex"
                 style={{
-                  backgroundColor: `${accentColor}26`,
+                  backgroundColor: `${accentColor}28`,
                   color: glowColor,
                   border: `1px solid ${accentColor}70`,
                 }}
               >
-                HENSHIN ARMORY
+                <span
+                  className="inline-block h-1.5 w-1.5 animate-pulse rounded-full"
+                  style={{ backgroundColor: glowColor }}
+                />
+                HANGAR BAY-01
               </span>
             </div>
-            <p className="text-[9px] tracking-[0.18em] text-slate-400 uppercase">
-              {gamepadConnected ? 'Gamepad Linked' : 'KBM / Gamepad'}
+            <p className="flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.18em] text-slate-400 uppercase">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+              {gamepadConnected ? 'GAMEPAD LINKED' : 'SYS.ONLINE // KBM + PAD'}
             </p>
           </div>
         </div>
 
-        {/* Center: Mission Sector (01-05) + Boss Rush Selector Ribbon */}
-        <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto">
+        {/* Center: Mission Sector (01-05) + Boss Rush Selector Ribbon with Shared layoutId Laser Track */}
+        <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto py-0.5">
           {STAGE_LIST.map((stage, idx) => {
             const isSelected = stage.id === selectedStageId;
             const isCleared = saveRecord.clearedStageIds.includes(stage.id);
@@ -292,20 +369,31 @@ export function LoadoutHub({
                 makeStageDifficultyKey(stage.id, selectedDifficulty)
               ] ?? null;
             return (
-              <button
+              <motion.button
                 key={stage.id}
                 type="button"
+                whileHover={{ y: -1.5 }}
+                whileTap={{ scale: 0.96 }}
+                transition={SPRING_SNAPPY}
                 onClick={() => onSelectStage(stage.id)}
-                className={`game-chamfer-sm group relative shrink-0 cursor-pointer px-2 py-1 text-left transition-all ${
+                className={`game-chamfer-sm group relative shrink-0 cursor-pointer overflow-hidden px-2.5 py-1.5 text-left transition-colors ${
                   isSelected
-                    ? 'bg-slate-900/95 text-white'
-                    : 'bg-slate-950/65 text-slate-400 hover:bg-slate-900/80 hover:text-slate-100'
+                    ? 'text-white'
+                    : 'bg-slate-950/65 text-slate-400 hover:bg-slate-900/85 hover:text-slate-100'
                 }`}
-                style={{
-                  borderBottom: `2px solid ${isSelected ? stage.accentColor : 'rgba(148,163,184,0.2)'}`,
-                  boxShadow: isSelected ? `0 4px 16px ${stage.accentColor}35` : 'none',
-                }}
               >
+                {isSelected && (
+                  <motion.div
+                    layoutId="hub-sector-active"
+                    transition={SPRING_SNAPPY}
+                    className="pointer-events-none absolute inset-0 -z-10"
+                    style={{
+                      background: `linear-gradient(180deg, ${stage.accentColor}2e 0%, rgba(15,23,42,0.96) 100%)`,
+                      borderBottom: `2px solid ${stage.accentColor}`,
+                      boxShadow: `inset 0 0 18px ${stage.accentColor}30`,
+                    }}
+                  />
+                )}
                 <div className="flex items-center justify-between gap-1.5 text-[8px] font-bold tracking-[0.12em] uppercase">
                   <span style={{ color: stage.accentColor }}>
                     {stage.isBossRush ? '★ ENDGAME' : `SEC 0${idx + 1}`}
@@ -331,12 +419,12 @@ export function LoadoutHub({
                 <p className="font-game-display mt-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-wide uppercase">
                   {stage.name}
                 </p>
-              </button>
+              </motion.button>
             );
           })}
         </div>
 
-        {/* Right: Pilot Telemetry & Shard Crystal Counter */}
+        {/* Right: Pilot Telemetry & Animated Shard Crystal Counter */}
         <div className="flex shrink-0 items-center gap-2.5">
           <div className="hidden items-center gap-2.5 border-r border-white/10 pr-2.5 text-[10px] 2xl:flex">
             <div className="flex items-center gap-1.5">
@@ -364,9 +452,13 @@ export function LoadoutHub({
             </div>
           </div>
 
-          <div
-            className="game-chamfer-sm flex items-center gap-2 bg-amber-500/15 px-3 py-1.5"
-            style={{ border: '1px solid rgba(251, 191, 36, 0.45)' }}
+          <motion.div
+            key={saveRecord.gemShards}
+            initial={{ scale: 1.16, filter: 'brightness(1.45)' }}
+            animate={{ scale: 1, filter: 'brightness(1)' }}
+            transition={SPRING_SNAPPY}
+            className="game-chamfer-sm flex items-center gap-2 bg-amber-500/18 px-3 py-1.5 shadow-[0_0_18px_rgba(251,191,36,0.18)]"
+            style={{ border: '1px solid rgba(251, 191, 36, 0.5)' }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="#fbbf24" aria-hidden="true">
               <polygon points="12,2 20,12 12,22 4,12" />
@@ -377,447 +469,581 @@ export function LoadoutHub({
                 {saveRecord.gemShards}
               </p>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </header>
+      </motion.header>
 
       {/* ================= MAIN FLOATING ARMORY WORKSPACE ================= */}
-      <div className="flex min-h-0 flex-1 items-stretch justify-between px-4 py-3 sm:px-5">
-        {/* LEFT TACTICAL RAIL: UNIT-01 3-Slot Element Deck OR UNIT-02 Fixed Single-Form Overclock Kit */}
-        {isPhantomLocked ? (
-          <aside className="game-scroll pointer-events-auto flex w-[410px] max-w-full flex-col justify-between gap-2.5 overflow-y-auto pr-1">
-            {/* FIXED SINGLE-FORM BANNER */}
-            <section className="flex flex-col gap-2">
-              <div className="flex items-center justify-between px-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-3 w-1 bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
-                  <h2 className="font-game-display text-[11px] font-bold tracking-[0.18em] text-cyan-200 uppercase">
-                    PHANTOM OVERCLOCK KIT
-                  </h2>
-                </div>
-                <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-cyan-200 uppercase ring-1 ring-cyan-400/45">
-                  SINGLE FORM LOCKED
-                </span>
-              </div>
-
-              {/* SIGNATURE WEAPON CARD: KUROKAGE CYBER KATANA */}
-              <div
-                className="game-chamfer-sm game-hud-surface p-3"
-                style={{
-                  borderLeft: '4px solid #06b6d4',
-                  boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.45), 0 0 18px rgba(6,182,212,0.18)',
-                }}
+      <div className="flex min-h-0 flex-1 items-stretch justify-between px-4 py-2.5 sm:px-5">
+        {/* LEFT TACTICAL RAIL: Animated swap between UNIT-01 Deck & UNIT-02 Fixed Overclock Kit */}
+        <div className="pointer-events-auto flex w-[404px] max-w-full flex-col min-h-0">
+          <AnimatePresence mode="wait">
+            {isPhantomLocked ? (
+              <motion.aside
+                key="rail-phantom"
+                initial={{ x: -34, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -24, opacity: 0 }}
+                transition={SPRING_PANEL}
+                className="game-scroll flex h-full flex-col justify-between gap-2.5 overflow-y-auto pr-1"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-[9px] font-bold tracking-[0.2em] text-cyan-300 uppercase">
-                      SIGNATURE KATANA • LV.{phantomLevel}/{MAX_GEM_LEVEL}
-                    </p>
-                    <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
-                      {displayWeaponName}
-                    </h3>
-                  </div>
-                  {phantomLevel < MAX_GEM_LEVEL ? (
-                    <button
-                      type="button"
-                      disabled={!canUpgradePhantom}
-                      onClick={handleUpgradePhantom}
-                      className="shrink-0 cursor-pointer bg-amber-500/20 px-2 py-1 text-[9px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/40 disabled:cursor-not-allowed disabled:opacity-35"
-                    >
-                      UPGRADE +{phantomUpgradeCost}◆
-                    </button>
-                  ) : (
-                    <span className="shrink-0 bg-emerald-500/20 px-2 py-1 text-[9px] font-black text-emerald-300">
-                      MAX LV.5
+                {/* FIXED SINGLE-FORM BANNER */}
+                <section className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3.5 w-1 bg-cyan-400 shadow-[0_0_10px_#22d3ee]" />
+                      <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-cyan-200 uppercase">
+                        PHANTOM OVERCLOCK KIT
+                      </h2>
+                    </div>
+                    <span className="game-chamfer-sm bg-cyan-500/20 px-2 py-0.5 text-[9px] font-black tracking-wider text-cyan-200 uppercase ring-1 ring-cyan-400/45">
+                      SINGLE FORM LOCKED
                     </span>
-                  )}
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[10px]">
-                  <div className="flex items-center gap-1">
-                    {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                  </div>
+
+                  {/* SIGNATURE WEAPON CARD: KUROKAGE CYBER KATANA */}
+                  <motion.div
+                    whileHover={{ x: 3 }}
+                    transition={SPRING_SNAPPY}
+                    className="game-chamfer-sm game-panel-bezel game-corner-brackets relative overflow-hidden p-3"
+                    style={{
+                      borderLeft: '4px solid #06b6d4',
+                      boxShadow:
+                        'inset 0 0 0 1px rgba(34,211,238,0.45), 0 0 22px rgba(6,182,212,0.2)',
+                    }}
+                  >
+                    <div className="animate-hud-scan pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-cyan-400/12 to-transparent" />
+                    <div className="relative z-10 flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.2em] text-cyan-300 uppercase">
+                          SIGNATURE KATANA • LV.{phantomLevel}/{MAX_GEM_LEVEL}
+                        </p>
+                        <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
+                          {displayWeaponName}
+                        </h3>
+                      </div>
+                      {phantomLevel < MAX_GEM_LEVEL ? (
+                        <motion.button
+                          type="button"
+                          whileHover={canUpgradePhantom ? { scale: 1.05 } : undefined}
+                          whileTap={canUpgradePhantom ? { scale: 0.94 } : undefined}
+                          disabled={!canUpgradePhantom}
+                          onClick={handleUpgradePhantom}
+                          className="game-chamfer-sm shrink-0 cursor-pointer bg-amber-500/25 px-2.5 py-1 text-[9px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/60 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-35"
+                        >
+                          UPGRADE +{phantomUpgradeCost}◆
+                        </motion.button>
+                      ) : (
+                        <span className="game-chamfer-sm shrink-0 bg-emerald-500/20 px-2 py-1 text-[9px] font-black text-emerald-300">
+                          MAX LV.5
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative z-10 mt-2 flex items-center justify-between text-[10px]">
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                          <motion.span
+                            key={p}
+                            animate={{
+                              backgroundColor:
+                                p < phantomLevel ? '#22d3ee' : 'rgba(148,163,184,0.22)',
+                              boxShadow: p < phantomLevel ? '0 0 8px #22d3ee' : 'none',
+                            }}
+                            className="h-1.5 w-5"
+                          />
+                        ))}
+                      </div>
+                      <span className="font-bold text-emerald-300">
+                        ATK +{previewMultPct}% • 22% CRIT
+                      </span>
+                    </div>
+                    <p className="relative z-10 mt-1.5 text-[10px] text-slate-300/85">
+                      Obsidian-cyan plasma odachi (3.15m reach • 1.24× swift slash). Applies{' '}
+                      <span className="font-bold text-cyan-300">MARK</span> on every strike.
+                    </p>
+                  </motion.div>
+
+                  {/* SIGNATURE PET CARD: KITSUNE-02 CYBER FOX */}
+                  <motion.div
+                    whileHover={{ x: 3 }}
+                    transition={SPRING_SNAPPY}
+                    className="game-chamfer-sm game-panel-bezel p-3"
+                    style={{
+                      borderLeft: '4px solid #38bdf8',
+                      boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.42)',
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[9px] font-bold tracking-[0.2em] text-sky-300 uppercase">
+                          CONTRACT BEAST [E] • AUTO-RIGGED 9-BONE
+                        </p>
+                        <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
+                          {displayPetName}
+                        </h3>
+                      </div>
+                      <span className="game-chamfer-sm flex items-center gap-1.5 bg-sky-500/20 px-2 py-0.5 text-[9px] font-black text-sky-200 uppercase">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+                        CYBER FOX
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[10px] text-cyan-200/90">
+                      Passive: <strong>{displayPetPassive}</strong>
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-slate-300/80">
+                      Pounces for 2.15× MARK burst, then sprints alongside Unit-02 for 18s firing
+                      cyan Fox-Fire Plasma Bolts.
+                    </p>
+                  </motion.div>
+                </section>
+
+                {/* 2-FORM PROGRESSION & SIGNATURE ARTS (NO ELEMENT SELECTION) */}
+                <section className="game-chamfer-sm game-panel-bezel flex flex-col gap-2 p-3 ring-1 ring-cyan-400/20">
+                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                    <span className="font-game-display text-[10px] font-bold tracking-[0.18em] text-white uppercase">
+                      2-FORM OVERCLOCK MATRIX
+                    </span>
+                    <span className="text-[9px] font-bold tracking-wider text-rose-300 uppercase">
+                      NO ELEMENT SWAP
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                    <div className="game-chamfer-sm bg-slate-900/90 p-2 ring-1 ring-cyan-400/30">
+                      <p className="text-[8px] font-black tracking-widest text-cyan-300 uppercase">
+                        FORM 01 • BASE
+                      </p>
+                      <p className="font-game-display mt-0.5 text-[11px] font-bold text-white uppercase">
+                        BASIC FORM
+                      </p>
+                      <p className="mt-0.5 text-[9px] text-slate-400">
+                        10.0 m/s Sprint • 2.15× Counter
+                      </p>
+                    </div>
+                    <div className="game-chamfer-sm bg-cyan-950/60 p-2 ring-1 ring-cyan-300/60 shadow-[inset_0_0_16px_rgba(34,211,238,0.18)]">
+                      <p className="text-[8px] font-black tracking-widest text-rose-300 uppercase">
+                        FORM 02 • [F] MAX TIER
+                      </p>
+                      <p className="font-game-display mt-0.5 text-[11px] font-bold text-cyan-200 uppercase">
+                        UPGRADED FORM
+                      </p>
+                      <p className="mt-0.5 text-[9px] text-cyan-100/80">
+                        +40% DMG • 38s • Cyan Afterimage
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 border-t border-white/10 pt-1.5 text-[10px] text-slate-300">
+                    <div className="flex items-center justify-between">
+                      <span>
+                        <strong className="text-amber-300">[Q]</strong> {displaySkillName}
+                      </span>
+                      <span className="text-[9px] text-slate-400">5.5s CD • Dash X-Slash</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>
+                        <strong className="text-orange-300">[SPACE]</strong> Phantom Kick
+                      </span>
+                      <span className="text-[9px] text-slate-400">6.0s CD • +75 Break</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>
+                        <strong className="text-rose-300">[R]</strong> PHANTOM OMNISLASH
+                      </span>
+                      <span className="text-[9px] text-cyan-300">
+                        Cyber Cage • 6 Clones • Kitsune-02
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="bg-slate-950/85 px-2.5 py-1.5 text-[9px] leading-relaxed text-slate-400 ring-1 ring-white/5">
+                    UNIT-02 PHANTOM beroperasi dengan 1 wujud khusus tanpa pergantian 10 elemen.
+                    Pilih <strong className="text-rose-300">UNIT-01 NEXUS</strong> di panel kanan
+                    untuk kustomisasi 10 Elemental Cores.
+                  </p>
+                </section>
+              </motion.aside>
+            ) : (
+              <motion.aside
+                key="rail-nexus"
+                initial={{ x: -34, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: -24, opacity: 0 }}
+                transition={SPRING_PANEL}
+                className="game-scroll flex h-full flex-col justify-between gap-2 overflow-y-auto pr-1"
+              >
+                {/* SECTION 1: ACTIVE K-DRIVER BELT SLOTS [1] [2] [3] */}
+                <section className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-2">
                       <span
-                        key={p}
-                        className="h-1.5 w-4"
+                        className="inline-block h-3.5 w-1"
                         style={{
-                          backgroundColor: p < phantomLevel ? '#22d3ee' : 'rgba(148,163,184,0.22)',
+                          backgroundColor: accentColor,
+                          boxShadow: `0 0 10px ${accentColor}`,
                         }}
                       />
-                    ))}
-                  </div>
-                  <span className="font-bold text-emerald-300">
-                    ATK +{previewMultPct}% • 22% CRIT
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[10px] text-slate-300/85">
-                  Obsidian-cyan plasma odachi (3.15m reach • 1.24× swift slash). Applies{' '}
-                  <span className="font-bold text-cyan-300">MARK</span> on every strike.
-                </p>
-              </div>
-
-              {/* SIGNATURE PET CARD: KITSUNE-02 CYBER FOX */}
-              <div
-                className="game-chamfer-sm game-hud-surface p-3"
-                style={{
-                  borderLeft: '4px solid #38bdf8',
-                  boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.38)',
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] font-bold tracking-[0.2em] text-sky-300 uppercase">
-                      CONTRACT BEAST [E] • AUTO-RIGGED
-                    </p>
-                    <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
-                      {displayPetName}
-                    </h3>
-                  </div>
-                  <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black text-sky-200 uppercase">
-                    CYBER FOX
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[10px] text-cyan-200/90">
-                  Passive: <strong>{displayPetPassive}</strong>
-                </p>
-                <p className="mt-0.5 text-[10px] text-slate-300/80">
-                  Pounces for 2.15× MARK burst, then sprints alongside Unit-02 for 18s firing cyan
-                  Fox-Fire Plasma Bolts.
-                </p>
-              </div>
-            </section>
-
-            {/* 2-FORM PROGRESSION & SIGNATURE ARTS (NO ELEMENT SELECTION) */}
-            <section className="game-chamfer-sm game-hud-surface flex flex-col gap-2 p-3 ring-1 ring-white/10">
-              <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                <span className="font-game-display text-[10px] font-bold tracking-[0.18em] text-white uppercase">
-                  2-FORM OVERCLOCK MATRIX
-                </span>
-                <span className="text-[9px] font-bold tracking-wider text-rose-300 uppercase">
-                  NO ELEMENT SWAP
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                <div className="rounded bg-slate-900/90 p-2 ring-1 ring-cyan-400/30">
-                  <p className="text-[8px] font-black tracking-widest text-cyan-300 uppercase">
-                    FORM 01 • BASE
-                  </p>
-                  <p className="font-game-display mt-0.5 text-[11px] font-bold text-white uppercase">
-                    BASIC FORM
-                  </p>
-                  <p className="mt-0.5 text-[9px] text-slate-400">
-                    10.0 m/s Sprint • 2.15× Counter
-                  </p>
-                </div>
-                <div className="rounded bg-cyan-950/55 p-2 ring-1 ring-cyan-300/55">
-                  <p className="text-[8px] font-black tracking-widest text-rose-300 uppercase">
-                    FORM 02 • [F] MAX TIER
-                  </p>
-                  <p className="font-game-display mt-0.5 text-[11px] font-bold text-cyan-200 uppercase">
-                    UPGRADED FORM
-                  </p>
-                  <p className="mt-0.5 text-[9px] text-cyan-100/80">
-                    +40% DMG • 38s • Cyan Afterimage
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-1 border-t border-white/10 pt-1.5 text-[10px] text-slate-300">
-                <div className="flex items-center justify-between">
-                  <span>
-                    <strong className="text-amber-300">[Q]</strong> {displaySkillName}
-                  </span>
-                  <span className="text-[9px] text-slate-400">5.5s CD • Dash X-Slash</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>
-                    <strong className="text-orange-300">[SPACE]</strong> Phantom Kick
-                  </span>
-                  <span className="text-[9px] text-slate-400">6.0s CD • +75 Break</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>
-                    <strong className="text-rose-300">[R]</strong> PHANTOM OMNISLASH
-                  </span>
-                  <span className="text-[9px] text-cyan-300">Cyber Cage • 6 Clones • Kitsune-02</span>
-                </div>
-              </div>
-
-              <p className="rounded bg-slate-950/80 px-2 py-1.5 text-[9px] leading-relaxed text-slate-400">
-                UNIT-02 PHANTOM beroperasi dengan 1 wujud khusus tanpa pergantian 10 elemen seperti
-                UNIT-01 NEXUS. Pilih <strong className="text-rose-300">UNIT-01 NEXUS</strong> di
-                panel kanan jika ingin kustomisasi 10 Elemental Cores.
-              </p>
-            </section>
-          </aside>
-        ) : (
-        <aside className="game-scroll pointer-events-auto flex w-[410px] max-w-full flex-col justify-between gap-2.5 overflow-y-auto pr-1">
-          {/* SECTION 1: ACTIVE K-DRIVER BELT SLOTS [1] [2] [3] */}
-          <section className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between px-0.5">
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-block h-3 w-1"
-                  style={{ backgroundColor: accentColor, boxShadow: `0 0 8px ${accentColor}` }}
-                />
-                <h2 className="font-game-display text-[11px] font-bold tracking-[0.18em] text-white uppercase">
-                  DRIVER BELT DECK
-                </h2>
-              </div>
-              <span className="text-[10px] font-bold tracking-wider text-amber-300 uppercase">
-                SLOT [{editingSlot + 1}] SELECTED
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              {loadoutOrder.map((elemId, idx) => {
-                const cfg = getElementConfig(elemId);
-                const level = getGemLevel(saveRecord, elemId);
-                const isEditing = editingSlot === idx;
-                const isPreviewing = activeElement === elemId;
-                const darkBadgeText =
-                  elemId === 'volt' || elemId === 'lux' || elemId === 'solar';
-
-                return (
-                  <div
-                    key={`${elemId}-${idx}`}
-                    onClick={() => {
-                      setEditingSlot(idx as 0 | 1 | 2);
-                      onPreviewElement(elemId);
-                    }}
-                    className={`game-chamfer-sm game-hud-surface group relative flex cursor-pointer items-center justify-between px-2.5 py-1.5 transition-all ${
-                      isEditing ? 'translate-x-1' : 'hover:translate-x-0.5'
-                    }`}
-                    style={{
-                      borderLeft: `4px solid ${cfg.primaryColor}`,
-                      boxShadow: isEditing
-                        ? `inset 0 0 0 1px ${cfg.primaryColor}aa, 0 0 18px ${cfg.primaryColor}33`
-                        : isPreviewing
-                          ? `inset 0 0 0 1px rgba(56,189,248,0.45)`
-                          : 'inset 0 0 0 1px rgba(148,163,184,0.18)',
-                    }}
-                  >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      {/* Skewed Keycap Slot Trigger */}
-                      <div
-                        className="flex h-8 w-7 shrink-0 -skew-x-12 items-center justify-center font-game-display text-xs font-black shadow"
-                        style={{
-                          backgroundColor: cfg.primaryColor,
-                          color: darkBadgeText ? '#0f172a' : '#ffffff',
-                          boxShadow: `0 0 12px ${cfg.primaryColor}66`,
-                        }}
-                      >
-                        <span className="skew-x-12">{idx + 1}</span>
-                      </div>
-
-                      <ElementEmblem id={elemId} color={cfg.primaryColor} size={18} />
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-game-display truncate text-xs font-bold tracking-wide text-white uppercase">
-                            {cfg.name}
-                          </span>
-                          {/* Level Pips */}
-                          <div className="flex items-center gap-0.5" title={`Level ${level}/${MAX_GEM_LEVEL}`}>
-                            {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
-                              <span
-                                key={p}
-                                className="h-1.5 w-1.5"
-                                style={{
-                                  backgroundColor:
-                                    p < level ? cfg.emissiveColor : 'rgba(148,163,184,0.22)',
-                                }}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-[9px] font-bold tracking-wider text-slate-400">
-                            {formatArchetype(cfg.weapon.archetype)}
-                          </span>
-                        </div>
-                        <p className="truncate text-[10px] text-slate-300/85">
-                          {cfg.weapon.name}{' '}
-                          <span className="text-slate-500">//</span>{' '}
-                          <span className="text-cyan-300">{cfg.pet.name}</span>
-                        </p>
-                      </div>
+                      <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-white uppercase">
+                        DRIVER BELT DECK
+                      </h2>
                     </div>
-
-                    <div className="flex shrink-0 items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={idx === 0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveSlot(idx, -1);
-                        }}
-                        className="cursor-pointer bg-slate-900/90 px-1.5 py-0.5 text-[9px] text-slate-300 ring-1 ring-white/10 hover:bg-cyan-500/20 hover:text-white disabled:cursor-default disabled:opacity-25"
-                        title="Move Up"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        disabled={idx === 2}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          moveSlot(idx, 1);
-                        }}
-                        className="cursor-pointer bg-slate-900/90 px-1.5 py-0.5 text-[9px] text-slate-300 ring-1 ring-white/10 hover:bg-cyan-500/20 hover:text-white disabled:cursor-default disabled:opacity-25"
-                        title="Move Down"
-                      >
-                        ▼
-                      </button>
-                    </div>
+                    <span className="text-[9.5px] font-black tracking-wider text-amber-300 uppercase">
+                      SLOT [{editingSlot + 1}] ARMED
+                    </span>
                   </div>
-                );
-              })}
-            </div>
-          </section>
 
-          {/* SECTION 2: 10-ELEMENT CORE GEM VAULT (Compact 2x5 Cartridges — All Visible!) */}
-          <section className="flex flex-1 flex-col justify-center gap-1.5">
-            <div className="flex items-center justify-between px-0.5">
-              <div className="flex items-center gap-2">
-                <span className="inline-block h-3 w-1 bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
-                <h2 className="font-game-display text-[11px] font-bold tracking-[0.18em] text-amber-200 uppercase">
-                  ELEMENTAL CORES
-                </h2>
-              </div>
-              <span className="text-[10px] tracking-wider text-slate-400 uppercase">
-                CLICK TO SLOT [{editingSlot + 1}]
-              </span>
-            </div>
+                  <div className="flex flex-col gap-1.5">
+                    {loadoutOrder.map((elemId, idx) => {
+                      const cfg = getElementConfig(elemId);
+                      const level = getGemLevel(saveRecord, elemId);
+                      const isEditing = editingSlot === idx;
+                      const isPreviewing = activeElement === elemId;
+                      const darkBadgeText =
+                        elemId === 'volt' || elemId === 'lux' || elemId === 'solar';
 
-            <div className="grid grid-cols-2 gap-1.5">
-              {ALL_ELEMENT_IDS.map((elemId) => {
-                const cfg = getElementConfig(elemId);
-                const unlocked = isElementUnlocked(saveRecord, elemId);
-                const level = getGemLevel(saveRecord, elemId);
-                const upgradeCost = getGemUpgradeCost(level);
-                const equippedIdx = loadoutOrder.indexOf(elemId);
-                const isEquipped = equippedIdx >= 0;
-                const isPreviewing = activeElement === elemId;
-                const canUpgrade =
-                  unlocked && level < MAX_GEM_LEVEL && saveRecord.gemShards >= upgradeCost;
-                const canUnlock = !unlocked && saveRecord.gemShards >= GEM_SHARD_UNLOCK_COST;
-
-                return (
-                  <div
-                    key={elemId}
-                    onClick={() => {
-                      if (unlocked) equipElementToSlot(elemId);
-                    }}
-                    className={`game-chamfer-tr game-hud-surface relative flex flex-col justify-between px-2.5 py-1.5 transition-all ${
-                      unlocked
-                        ? 'cursor-pointer hover:brightness-125'
-                        : 'opacity-65 grayscale-[35%]'
-                    }`}
-                    style={{
-                      borderLeft: `3px solid ${unlocked ? cfg.primaryColor : '#334155'}`,
-                      boxShadow: isPreviewing
-                        ? `inset 0 0 0 1px ${cfg.primaryColor}cc, 0 0 14px ${cfg.primaryColor}33`
-                        : isEquipped
-                          ? `inset 0 0 0 1px ${cfg.primaryColor}66`
-                          : 'inset 0 0 0 1px rgba(148,163,184,0.14)',
-                    }}
-                  >
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="flex min-w-0 items-center gap-1.5">
-                        <ElementEmblem
-                          id={elemId}
-                          color={unlocked ? cfg.primaryColor : '#64748b'}
-                          size={14}
-                        />
-                        <span className="font-game-display truncate text-[10px] font-bold tracking-wider text-white uppercase">
-                          {elemId}
-                        </span>
-                        {unlocked && (
-                          <span className="text-[9px] font-bold text-amber-300">L{level}</span>
-                        )}
-                      </div>
-                      {isEquipped ? (
-                        <span
-                          className="px-1 text-[8px] font-black tracking-wider uppercase"
+                      return (
+                        <motion.div
+                          key={`${elemId}-${idx}`}
+                          whileHover={{ x: 4 }}
+                          whileTap={{ scale: 0.985 }}
+                          transition={SPRING_SNAPPY}
+                          onClick={() => {
+                            setEditingSlot(idx as 0 | 1 | 2);
+                            onPreviewElement(elemId);
+                          }}
+                          className="game-chamfer-sm game-panel-bezel group relative flex cursor-pointer items-center justify-between overflow-hidden px-2.5 py-1.5"
                           style={{
-                            backgroundColor: `${cfg.primaryColor}33`,
-                            color: cfg.emissiveColor,
+                            borderLeft: `4px solid ${cfg.primaryColor}`,
+                            boxShadow: isEditing
+                              ? `inset 0 0 0 1px ${cfg.primaryColor}bb, 0 0 22px ${cfg.primaryColor}38`
+                              : isPreviewing
+                                ? `inset 0 0 0 1px rgba(56,189,248,0.5)`
+                                : 'inset 0 0 0 1px rgba(148,163,184,0.16)',
                           }}
                         >
-                          S{equippedIdx + 1}
-                        </span>
-                      ) : (
-                        <span className="text-[8px] font-semibold tracking-wider text-slate-400 uppercase">
-                          {cfg.weapon.archetype === 'RANGED' ? 'RANGED' : cfg.statusApplied}
-                        </span>
-                      )}
-                    </div>
+                          {isEditing && (
+                            <motion.span
+                              layoutId="belt-slot-rail"
+                              transition={SPRING_SNAPPY}
+                              className="pointer-events-none absolute inset-y-0 right-0 w-1.5"
+                              style={{
+                                backgroundColor: cfg.emissiveColor,
+                                boxShadow: `0 0 14px ${cfg.emissiveColor}`,
+                              }}
+                            />
+                          )}
+                          {isEditing && (
+                            <span
+                              className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/12 to-transparent"
+                              aria-hidden="true"
+                            />
+                          )}
 
-                    <div className="mt-1 flex items-center justify-between gap-1">
-                      <p className="truncate text-[9px] text-slate-300/80">{cfg.weapon.name}</p>
-                      {unlocked ? (
-                        level < MAX_GEM_LEVEL ? (
-                          <button
-                            type="button"
-                            disabled={!canUpgrade}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpgrade(elemId);
-                            }}
-                            className="shrink-0 cursor-pointer bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-amber-200 ring-1 ring-amber-400/40 hover:bg-amber-500/40 disabled:cursor-not-allowed disabled:opacity-30"
-                          >
-                            +{upgradeCost}◆
-                          </button>
-                        ) : (
-                          <span className="shrink-0 bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-black text-emerald-300">
-                            MAX
-                          </span>
-                        )
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={!canUnlock}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShardUnlock(elemId);
-                          }}
-                          className="shrink-0 cursor-pointer bg-violet-500/25 px-1.5 py-0.5 text-[8px] font-bold text-violet-200 ring-1 ring-violet-400/40 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-35"
-                        >
-                          LOCK {GEM_SHARD_UNLOCK_COST}◆
-                        </button>
-                      )}
-                    </div>
+                          <div className="relative z-10 flex min-w-0 items-center gap-2.5">
+                            {/* Skewed Keycap Slot Trigger */}
+                            <div
+                              className="flex h-8 w-7 shrink-0 -skew-x-12 items-center justify-center font-game-display text-xs font-black shadow"
+                              style={{
+                                backgroundColor: cfg.primaryColor,
+                                color: darkBadgeText ? '#0f172a' : '#ffffff',
+                                boxShadow: `0 0 14px ${cfg.primaryColor}70`,
+                              }}
+                            >
+                              <span className="skew-x-12">{idx + 1}</span>
+                            </div>
+
+                            <ElementEmblem id={elemId} color={cfg.primaryColor} size={18} />
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-game-display truncate text-xs font-bold tracking-wide text-white uppercase">
+                                  {cfg.name}
+                                </span>
+                                <div
+                                  className="flex items-center gap-0.5"
+                                  title={`Level ${level}/${MAX_GEM_LEVEL}`}
+                                >
+                                  {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                                    <span
+                                      key={p}
+                                      className="h-1.5 w-1.5"
+                                      style={{
+                                        backgroundColor:
+                                          p < level ? cfg.emissiveColor : 'rgba(148,163,184,0.22)',
+                                        boxShadow:
+                                          p < level ? `0 0 6px ${cfg.emissiveColor}` : 'none',
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="text-[9px] font-bold tracking-wider text-slate-400">
+                                  {formatArchetype(cfg.weapon.archetype)}
+                                </span>
+                              </div>
+                              <p className="truncate text-[10px] text-slate-300/85">
+                                {cfg.weapon.name} <span className="text-slate-500">//</span>{' '}
+                                <span className="text-cyan-300">{cfg.pet.name}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="relative z-10 mr-1 flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveSlot(idx, -1);
+                              }}
+                              className="cursor-pointer bg-slate-900/90 px-1.5 py-0.5 text-[9px] text-slate-300 ring-1 ring-white/10 hover:bg-cyan-500/25 hover:text-white disabled:cursor-default disabled:opacity-25"
+                              title="Move Up"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === 2}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveSlot(idx, 1);
+                              }}
+                              className="cursor-pointer bg-slate-900/90 px-1.5 py-0.5 text-[9px] text-slate-300 ring-1 ring-white/10 hover:bg-cyan-500/25 hover:text-white disabled:cursor-default disabled:opacity-25"
+                              title="Move Down"
+                            >
+                              ▼
+                            </button>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </section>
-        </aside>
-        )}
+                </section>
 
-        {/* CENTER: OPEN 3D RIDER SHOWCASE STAGE (Subtle corner reticle brackets only) */}
+                {/* SECTION 2: 10-ELEMENT CORE GEM VAULT (Compact 2x5 Cartridges — Tactile Spring Chips!) */}
+                <section className="flex flex-1 flex-col justify-center gap-1.5">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-3.5 w-1 bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
+                      <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-amber-200 uppercase">
+                        ELEMENTAL CORES
+                      </h2>
+                    </div>
+                    <span className="text-[9.5px] tracking-wider text-slate-400 uppercase">
+                      LOAD INTO SLOT [{editingSlot + 1}]
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {ALL_ELEMENT_IDS.map((elemId) => {
+                      const cfg = getElementConfig(elemId);
+                      const unlocked = isElementUnlocked(saveRecord, elemId);
+                      const level = getGemLevel(saveRecord, elemId);
+                      const upgradeCost = getGemUpgradeCost(level);
+                      const equippedIdx = loadoutOrder.indexOf(elemId);
+                      const isEquipped = equippedIdx >= 0;
+                      const isPreviewing = activeElement === elemId;
+                      const canUpgrade =
+                        unlocked && level < MAX_GEM_LEVEL && saveRecord.gemShards >= upgradeCost;
+                      const canUnlock = !unlocked && saveRecord.gemShards >= GEM_SHARD_UNLOCK_COST;
+
+                      return (
+                        <motion.div
+                          key={elemId}
+                          whileHover={unlocked ? { y: -1.5, scale: 1.015 } : undefined}
+                          whileTap={unlocked ? { scale: 0.97 } : undefined}
+                          transition={SPRING_SNAPPY}
+                          onClick={() => {
+                            if (unlocked) equipElementToSlot(elemId);
+                          }}
+                          className={`game-chamfer-tr game-panel-bezel relative flex flex-col justify-between px-2.5 py-1.5 ${
+                            unlocked ? 'cursor-pointer' : 'opacity-65 grayscale-[35%]'
+                          }`}
+                          style={{
+                            borderLeft: `3px solid ${unlocked ? cfg.primaryColor : '#334155'}`,
+                            boxShadow: isPreviewing
+                              ? `inset 0 0 0 1px ${cfg.primaryColor}dd, 0 0 16px ${cfg.primaryColor}3d`
+                              : isEquipped
+                                ? `inset 0 0 0 1px ${cfg.primaryColor}66`
+                                : 'inset 0 0 0 1px rgba(148,163,184,0.14)',
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <ElementEmblem
+                                id={elemId}
+                                color={unlocked ? cfg.primaryColor : '#64748b'}
+                                size={14}
+                              />
+                              <span className="font-game-display truncate text-[10px] font-bold tracking-wider text-white uppercase">
+                                {elemId}
+                              </span>
+                              {unlocked && (
+                                <span className="text-[9px] font-bold text-amber-300">L{level}</span>
+                              )}
+                            </div>
+                            {isEquipped ? (
+                              <span
+                                className="px-1 text-[8px] font-black tracking-wider uppercase"
+                                style={{
+                                  backgroundColor: `${cfg.primaryColor}36`,
+                                  color: cfg.emissiveColor,
+                                }}
+                              >
+                                S{equippedIdx + 1}
+                              </span>
+                            ) : (
+                              <span className="text-[8px] font-semibold tracking-wider text-slate-400 uppercase">
+                                {cfg.weapon.archetype === 'RANGED' ? 'RANGED' : cfg.statusApplied}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-1 flex items-center justify-between gap-1">
+                            <p className="truncate text-[9px] text-slate-300/80">{cfg.weapon.name}</p>
+                            {unlocked ? (
+                              level < MAX_GEM_LEVEL ? (
+                                <motion.button
+                                  type="button"
+                                  whileHover={canUpgrade ? { scale: 1.08 } : undefined}
+                                  whileTap={canUpgrade ? { scale: 0.92 } : undefined}
+                                  disabled={!canUpgrade}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUpgrade(elemId);
+                                  }}
+                                  className="shrink-0 cursor-pointer bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-amber-200 ring-1 ring-amber-400/45 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-30"
+                                >
+                                  +{upgradeCost}◆
+                                </motion.button>
+                              ) : (
+                                <span className="shrink-0 bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-black text-emerald-300">
+                                  MAX
+                                </span>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={!canUnlock}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleShardUnlock(elemId);
+                                }}
+                                className="shrink-0 cursor-pointer bg-violet-500/25 px-1.5 py-0.5 text-[8px] font-bold text-violet-200 ring-1 ring-violet-400/40 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-35"
+                              >
+                                LOCK {GEM_SHARD_UNLOCK_COST}◆
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* CENTER: OPEN 3D HOLOGRAPHIC RIDER SHOWCASE VIEWPORT (Diegetic Brackets + Camera Angle Rig) */}
         <div className="pointer-events-none relative hidden flex-1 lg:block">
-          <div className="absolute top-5 left-1/2 -translate-x-1/2 text-center opacity-90">
-            <p className="text-[9px] font-bold tracking-[0.32em] text-slate-300/85 uppercase">
-              {riderConfig.codeName} // {riderConfig.name}
-            </p>
-            <p
-              className="font-game-display text-sm font-black tracking-[0.22em] uppercase italic"
-              style={{ color: glowColor, textShadow: `0 0 14px ${accentColor}88` }}
-            >
-              {displayPedestalSubtitle}
-            </p>
+          {/* Subtle Diegetic Viewfinder Corner Brackets flanking the 3D Hero */}
+          <div className="pointer-events-none absolute inset-x-10 top-6 bottom-16 opacity-45">
+            <span
+              className="absolute top-0 left-0 h-5 w-5 border-t-2 border-l-2"
+              style={{ borderColor: glowColor }}
+            />
+            <span
+              className="absolute top-0 right-0 h-5 w-5 border-t-2 border-r-2"
+              style={{ borderColor: glowColor }}
+            />
+            <span
+              className="absolute bottom-0 left-0 h-5 w-5 border-b-2 border-l-2"
+              style={{ borderColor: glowColor }}
+            />
+            <span
+              className="absolute right-0 bottom-0 h-5 w-5 border-r-2 border-b-2"
+              style={{ borderColor: glowColor }}
+            />
           </div>
 
-          {/* Interactive 3D Inspection Controls Hint */}
-          <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2.5 bg-slate-950/65 px-3.5 py-1.5 text-[10px] font-bold tracking-[0.18em] text-slate-300 uppercase ring-1 ring-white/12 backdrop-blur-sm game-chamfer-sm">
-            <span className="text-cyan-300">⟳ DRAG TO ROTATE</span>
+          {/* Animated Center Rider Designation Header */}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${selectedRiderId}-${displayPedestalSubtitle}`}
+                initial={{ y: -10, opacity: 0, scale: 0.94 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 8, opacity: 0, scale: 0.96 }}
+                transition={SPRING_SNAPPY}
+                className="flex flex-col items-center"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-[1px] w-7 opacity-70"
+                    style={{ backgroundColor: glowColor }}
+                  />
+                  <p className="text-[9px] font-black tracking-[0.34em] text-slate-200/90 uppercase drop-shadow">
+                    {riderConfig.codeName} // {riderConfig.name}
+                  </p>
+                  <span
+                    className="h-[1px] w-7 opacity-70"
+                    style={{ backgroundColor: glowColor }}
+                  />
+                </div>
+                <p
+                  className="font-game-display mt-0.5 text-base font-black tracking-[0.24em] uppercase italic"
+                  style={{ color: glowColor, textShadow: `0 0 18px ${accentColor}aa, 0 2px 10px rgba(0,0,0,0.85)` }}
+                >
+                  {displayPedestalSubtitle}
+                </p>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Interactive 3D Camera Inspection Dock (Quick Angle Presets + Orbit Hint) */}
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ ...SPRING_PANEL, delay: 0.12 }}
+            className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-2 bg-slate-950/78 px-3 py-1.5 text-[9.5px] font-bold tracking-[0.16em] text-slate-300 uppercase ring-1 ring-white/14 backdrop-blur-md game-chamfer-sm"
+          >
+            <div className="flex items-center gap-1 border-r border-white/12 pr-2">
+              {CAMERA_PRESETS.map((p) => {
+                const active = camPreset === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleCameraPresetClick(p.id)}
+                    className={`relative cursor-pointer px-2 py-0.5 font-game-display text-[9px] font-black tracking-wider uppercase transition-colors ${
+                      active ? 'text-slate-950' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="hub-cam-preset"
+                        transition={SPRING_SNAPPY}
+                        className="absolute inset-0 -z-10"
+                        style={{
+                          backgroundColor: glowColor,
+                          boxShadow: `0 0 12px ${accentColor}99`,
+                        }}
+                      />
+                    )}
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-cyan-300">⟳ DRAG</span>
             <span className="text-slate-600">•</span>
-            <span className="text-amber-300">⊕ SCROLL TO ZOOM</span>
+            <span className="text-amber-300">⊕ ZOOM</span>
             {onResetView && (
               <>
                 <span className="text-slate-600">•</span>
                 <button
                   type="button"
-                  onClick={onResetView}
+                  onClick={() => handleCameraPresetClick('full')}
                   className="cursor-pointer text-slate-200 transition-colors hover:text-white"
                   title="Reset 3D Camera View"
                 >
@@ -825,18 +1051,23 @@ export function LoadoutHub({
                 </button>
               </>
             )}
-          </div>
+          </motion.div>
         </div>
 
         {/* RIGHT TACTICAL INTEL + RIDER UNIT SWITCHER + DRAMATIC HENSHIN IGNITION TRIGGER */}
-        <div className="pointer-events-auto flex w-[348px] max-w-full flex-col justify-end gap-2">
-          {/* Playable Rider Selector (UNIT-01 NEXUS 3-Form vs UNIT-02 PHANTOM 2-Form!) */}
+        <motion.div
+          initial={{ x: 36, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={SPRING_PANEL}
+          className="pointer-events-auto flex w-[348px] max-w-full flex-col justify-end gap-2"
+        >
+          {/* Playable Rider Selector with Sliding Neon layoutId Plate */}
           <div
-            className="game-chamfer-sm game-hud-surface p-2.5 ring-1 ring-white/10"
+            className="game-chamfer-sm game-panel-bezel p-2.5 ring-1 ring-white/10"
             style={{ borderRight: `3px solid ${riderConfig.accentColor}` }}
           >
             <div className="flex items-center justify-between px-0.5">
-              <span className="font-game-display text-[9px] font-bold tracking-[0.2em] text-slate-300 uppercase">
+              <span className="font-game-display text-[9px] font-black tracking-[0.22em] text-slate-300 uppercase">
                 RIDER UNIT
               </span>
               <span
@@ -850,24 +1081,31 @@ export function LoadoutHub({
               {RIDER_LIST.map((r) => {
                 const active = r.id === selectedRiderId;
                 return (
-                  <button
+                  <motion.button
                     key={r.id}
                     type="button"
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={SPRING_SNAPPY}
                     onClick={() => onSelectRider(r.id)}
-                    className={`game-chamfer-sm cursor-pointer px-2.5 py-1.5 text-left transition-all ${
+                    className={`game-chamfer-sm relative cursor-pointer overflow-hidden px-2.5 py-1.5 text-left transition-colors ${
                       active
-                        ? 'bg-slate-900/95 text-white'
-                        : 'bg-slate-950/70 text-slate-400 hover:bg-slate-900/85 hover:text-slate-100'
+                        ? 'text-white'
+                        : 'bg-slate-950/75 text-slate-400 hover:bg-slate-900/90 hover:text-slate-100'
                     }`}
-                    style={
-                      active
-                        ? {
-                            borderLeft: `3px solid ${r.accentColor}`,
-                            boxShadow: `inset 0 0 0 1px ${r.accentColor}99, 0 0 14px ${r.accentColor}38`,
-                          }
-                        : { border: '1px solid rgba(148,163,184,0.18)' }
-                    }
                   >
+                    {active && (
+                      <motion.div
+                        layoutId="rider-unit-highlight"
+                        transition={SPRING_SNAPPY}
+                        className="pointer-events-none absolute inset-0 -z-10"
+                        style={{
+                          background: `linear-gradient(125deg, ${r.accentColor}35 0%, rgba(15,23,42,0.96) 100%)`,
+                          borderLeft: `3px solid ${r.accentColor}`,
+                          boxShadow: `inset 0 0 0 1px ${r.accentColor}99, 0 0 16px ${r.accentColor}38`,
+                        }}
+                      />
+                    )}
                     <div className="flex items-center justify-between text-[8px] font-black tracking-[0.14em] uppercase">
                       <span style={{ color: r.glowColor }}>{r.codeName}</span>
                       <span className="text-slate-400">{r.maxForms} FORMS</span>
@@ -875,7 +1113,7 @@ export function LoadoutHub({
                     <p className="font-game-display mt-0.5 truncate text-[10px] font-black tracking-wide uppercase">
                       {r.shortName}
                     </p>
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
@@ -885,49 +1123,104 @@ export function LoadoutHub({
             </div>
           </div>
 
-          {/* Active Form Combat Dossier */}
+          {/* Active Form Combat Dossier with Animated Spring Stat Bars */}
           <div
-            className="game-chamfer game-hud-surface game-scanlines relative p-3.5"
+            className="game-chamfer game-panel-bezel game-scanlines game-corner-brackets relative overflow-hidden p-3"
             style={{
               borderRight: `3px solid ${accentColor}`,
-              boxShadow: `inset 0 0 0 1px ${accentColor}44, 0 14px 36px rgba(2,6,23,0.65)`,
+              boxShadow: `inset 0 0 0 1px ${accentColor}48, 0 14px 36px rgba(2,6,23,0.72)`,
             }}
           >
             {/* Header Row */}
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-[9px] font-bold tracking-[0.24em] text-cyan-300 uppercase">
-                  ARMAMENT SPECS • LV.{previewLevel}
-                </p>
-                <h2 className="font-game-display mt-0.5 text-base font-black tracking-wide text-white uppercase italic">
-                  {displayWeaponName}
-                </h2>
-              </div>
-              <span
-                className="game-chamfer-sm shrink-0 px-2 py-0.5 text-[9px] font-black tracking-widest uppercase"
-                style={{
-                  backgroundColor: `${accentColor}2b`,
-                  color: glowColor,
-                  border: `1px solid ${accentColor}77`,
-                }}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={`${selectedRiderId}-${displayWeaponName}-${previewLevel}`}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -8 }}
+                transition={{ duration: 0.16 }}
               >
-                {displayWeaponTag}
-              </span>
-            </div>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[9px] font-bold tracking-[0.24em] text-cyan-300 uppercase">
+                      ARMAMENT SPECS • LV.{previewLevel}
+                    </p>
+                    <h2 className="font-game-display mt-0.5 text-base font-black tracking-wide text-white uppercase italic">
+                      {displayWeaponName}
+                    </h2>
+                  </div>
+                  <span
+                    className="game-chamfer-sm shrink-0 px-2 py-0.5 text-[9px] font-black tracking-widest uppercase"
+                    style={{
+                      backgroundColor: `${accentColor}2b`,
+                      color: glowColor,
+                      border: `1px solid ${accentColor}77`,
+                    }}
+                  >
+                    {displayWeaponTag}
+                  </span>
+                </div>
 
-            {/* ATK & Status Telemetry Bar */}
-            <div className="mt-2.5 flex items-center justify-between border-y border-white/10 py-1.5 text-[10px]">
-              <span className="font-bold tracking-wider text-slate-300 uppercase">
-                STATUS:{' '}
-                <span style={{ color: glowColor }}>{displayStatus}</span>
-              </span>
-              <span className="font-bold text-emerald-300">
-                ATK +{previewMultPct}%
-              </span>
-            </div>
+                {/* Live Animated Weapon Telemetry Bars */}
+                <div className="mt-2 grid grid-cols-3 gap-2 border-y border-white/10 py-1.5 text-[8.5px]">
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-300">
+                      <span>POWER</span>
+                      <span className="text-emerald-300">+{previewMultPct}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden bg-slate-900">
+                      <motion.div
+                        initial={false}
+                        animate={{ width: `${statPowerPct}%` }}
+                        transition={SPRING_SNAPPY}
+                        className="h-full"
+                        style={{
+                          background: `linear-gradient(90deg, ${accentColor}, ${glowColor})`,
+                          boxShadow: `0 0 8px ${accentColor}`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-300">
+                      <span>SPEED</span>
+                      <span className="text-cyan-300">
+                        {(activeWeaponCfg.attackSpeed * riderConfig.attackSpeedMult).toFixed(2)}×
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden bg-slate-900">
+                      <motion.div
+                        initial={false}
+                        animate={{ width: `${statSpeedPct}%` }}
+                        transition={SPRING_SNAPPY}
+                        className="h-full bg-gradient-to-r from-cyan-500 to-sky-300"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between font-bold text-slate-300">
+                      <span>{isPhantomLocked ? 'CRIT' : 'REACH'}</span>
+                      <span className="text-amber-300">
+                        {isPhantomLocked
+                          ? `${Math.round(riderConfig.baseCritChance * 100)}%`
+                          : `${activeWeaponCfg.range.toFixed(1)}m`}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden bg-slate-900">
+                      <motion.div
+                        initial={false}
+                        animate={{ width: `${statReachOrCritPct}%` }}
+                        transition={SPRING_SNAPPY}
+                        className="h-full bg-gradient-to-r from-amber-500 to-yellow-300"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
 
             {/* Combat Arts Keybinds */}
-            <div className="mt-2.5 space-y-1.5 text-[11px]">
+            <div className="mt-2 space-y-1.5 text-[10.5px]">
               <div className="flex items-center gap-2">
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center bg-amber-500/20 font-game-display text-[10px] font-black text-amber-300 ring-1 ring-amber-400/50">
                   Q
@@ -948,9 +1241,7 @@ export function LoadoutHub({
                     PET{' '}
                   </span>
                   {displayPetName}{' '}
-                  <span className="text-[10px] text-cyan-300/80">
-                    ({displayPetPassive})
-                  </span>
+                  <span className="text-[9.5px] text-cyan-300/80">({displayPetPassive})</span>
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -979,27 +1270,24 @@ export function LoadoutHub({
               </div>
             </div>
 
-            {/* Elemental Reaction / Fixed Style Strip */}
-            <div className="mt-2.5 border-t border-white/10 pt-1.5 text-[9px] tracking-wide text-slate-400">
-              {isPhantomLocked ? (
-                <>
-                  <span className="font-bold text-cyan-300 uppercase">STYLE: </span>
-                  FIXED SINGLE FORM • HIGH-CRIT KATANA • NO ELEMENT SWAP
-                </>
-              ) : (
-                <>
-                  <span className="font-bold text-slate-300 uppercase">REACTIONS: </span>
-                  WET+VOLT • WET+PYRO • BURN+VOLT • ROOT+PYRO • MARK+LUX
-                </>
-              )}
+            {/* Status + Style Strip */}
+            <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5 text-[9px] tracking-wide text-slate-400">
+              <span className="truncate">
+                <span className="font-bold text-slate-300 uppercase">STATUS: </span>
+                <span className="font-black" style={{ color: glowColor }}>
+                  {displayStatus}
+                </span>
+                {' • '}
+                {isPhantomLocked ? 'FIXED SINGLE FORM' : 'REACTION READY'}
+              </span>
             </div>
           </div>
 
-          {/* DIFFICULTY SELECTOR (EASY / MEDIUM / HARD / HELL) + MISSION BRIEF + DEPLOY */}
-          <div className="flex flex-col gap-2">
-            <div className="game-chamfer-sm game-hud-surface p-2.5 ring-1 ring-white/10">
+          {/* DIFFICULTY SELECTOR (layoutId Slider) + MISSION BRIEF + KINETIC IGNITION DEPLOY */}
+          <div className="flex flex-col gap-1.5">
+            <div className="game-chamfer-sm game-panel-bezel p-2.5 ring-1 ring-white/10">
               <div className="flex items-center justify-between px-0.5">
-                <span className="font-game-display text-[9px] font-bold tracking-[0.2em] text-slate-300 uppercase">
+                <span className="font-game-display text-[9px] font-black tracking-[0.22em] text-slate-300 uppercase">
                   HAZARD LEVEL
                 </span>
                 <span
@@ -1013,26 +1301,30 @@ export function LoadoutHub({
                 {DIFFICULTY_LIST.map((diff) => {
                   const active = diff.id === selectedDifficulty;
                   return (
-                    <button
+                    <motion.button
                       key={diff.id}
                       type="button"
+                      whileTap={{ scale: 0.94 }}
                       onClick={() => onSelectDifficulty(diff.id)}
-                      className={`game-chamfer-sm cursor-pointer py-1.5 font-game-display text-[10px] font-black tracking-wider uppercase transition-all ${
+                      className={`game-chamfer-sm relative cursor-pointer overflow-hidden py-1.5 font-game-display text-[10px] font-black tracking-wider uppercase transition-colors ${
                         active
                           ? 'text-slate-950'
                           : 'bg-slate-950/75 text-slate-400 hover:bg-slate-900 hover:text-white'
                       }`}
-                      style={
-                        active
-                          ? {
-                              backgroundColor: diff.accentColor,
-                              boxShadow: `0 0 14px ${diff.accentColor}88`,
-                            }
-                          : { border: '1px solid rgba(148,163,184,0.18)' }
-                      }
                     >
+                      {active && (
+                        <motion.span
+                          layoutId="hazard-active-plate"
+                          transition={SPRING_SNAPPY}
+                          className="pointer-events-none absolute inset-0 -z-10"
+                          style={{
+                            backgroundColor: diff.accentColor,
+                            boxShadow: `0 0 16px ${diff.accentColor}99`,
+                          }}
+                        />
+                      )}
                       {diff.label}
-                    </button>
+                    </motion.button>
                   );
                 })}
               </div>
@@ -1046,36 +1338,45 @@ export function LoadoutHub({
                 <span style={{ color: selectedStage.accentColor }}>▸ </span>
                 {selectedStage.name}
               </span>
-              <span className="shrink-0 font-bold text-amber-300">
-                +{scaledShardPreview} ◆
-              </span>
+              <span className="shrink-0 font-bold text-amber-300">+{scaledShardPreview} ◆</span>
             </div>
 
-            <button
+            <motion.button
               type="button"
               disabled={engineStatus !== 'ready'}
+              whileHover={engineStatus === 'ready' ? { scale: 1.025, filter: 'brightness(1.1)' } : undefined}
+              whileTap={engineStatus === 'ready' ? { scale: 0.965 } : undefined}
+              transition={SPRING_SNAPPY}
               onClick={onDeploy}
-              className="game-skew-cta group relative w-full cursor-pointer overflow-hidden px-6 py-3.5 text-center transition-all hover:scale-[1.02] active:scale-[0.98] disabled:cursor-wait disabled:opacity-50"
+              className="game-skew-cta group relative w-full cursor-pointer overflow-hidden px-6 py-3.5 text-center disabled:cursor-wait disabled:opacity-50"
               style={{
-                background: `linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)`,
-                boxShadow: `0 0 28px rgba(244, 63, 94, 0.55), inset 0 1px 0 rgba(255,255,255,0.35)`,
+                background: isPhantomLocked
+                  ? 'linear-gradient(105deg, #0284c7 0%, #06b6d4 48%, #e11d48 100%)'
+                  : 'linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)',
+                boxShadow: isPhantomLocked
+                  ? '0 0 32px rgba(6, 182, 212, 0.58), inset 0 1px 0 rgba(255,255,255,0.4)'
+                  : '0 0 32px rgba(244, 63, 94, 0.58), inset 0 1px 0 rgba(255,255,255,0.4)',
               }}
             >
               {/* Animated Tokusatsu light-sweep beam */}
               <span
-                className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/45 to-transparent"
                 aria-hidden="true"
               />
               <span className="font-game-display relative z-10 flex items-center justify-center gap-2.5 text-sm font-black tracking-[0.22em] text-white uppercase italic drop-shadow">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
                 </svg>
-                {engineStatus === 'ready' ? 'DEPLOY // HENSHIN!' : 'INITIALIZING DRIVER...'}
+                {engineStatus === 'ready'
+                  ? isPhantomLocked
+                    ? 'DEPLOY // OVERCLOCK!'
+                    : 'DEPLOY // HENSHIN!'
+                  : 'INITIALIZING DRIVER...'}
               </span>
-            </button>
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 }

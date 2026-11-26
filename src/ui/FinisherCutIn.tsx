@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { getElementConfig } from '../game/data/elements';
 import type { ElementId, RiderId } from '../game/types/schema';
 
@@ -10,6 +11,7 @@ interface FinisherCutInProps {
 }
 
 const CUTIN_VISOR_ART_URL = '/assets/textures/cutin_rider_visor.jpg';
+const CUTIN_PHANTOM_VISOR_ART_URL = '/assets/textures/cutin_phantom_visor.jpg';
 
 /** Calibrated CSS hue-rotate degrees from native Pyro Crimson -> each of the 10 Element palettes */
 const CUTIN_HUE_ROTATE_DEG: Readonly<Record<ElementId, number>> = {
@@ -92,9 +94,53 @@ export function FinisherCutIn({
           {fromUltimate && (
             <div className="pointer-events-none absolute inset-x-0 top-2 bottom-2 z-20 border-y border-amber-200/70" />
           )}
-          {/* Layer A: Dedicated UNIT-02 PHANTOM Obsidian-Cyan Cyber Visor OR UNIT-01 Photorealistic Ultimate Visor */}
+          {/* Layer A: Dedicated Photorealistic UNIT-02 PHANTOM Cyber Visor OR UNIT-01 Ultimate Visor */}
           <div className="animate-cutin-visor absolute inset-0 flex items-center justify-center">
-            {isPhantom ? (
+            {isPhantom && hasCustomArt ? (
+              <div className="relative h-full w-full">
+                <motion.img
+                  src={CUTIN_PHANTOM_VISOR_ART_URL}
+                  alt="UNIT-02 PHANTOM Visor Cut-In"
+                  onError={() => setHasCustomArt(false)}
+                  initial={{ scale: 1.18, x: 36, opacity: 0.75 }}
+                  animate={{ scale: 1.03, x: 0, opacity: 1 }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="h-full w-full object-cover object-right md:object-center"
+                  style={{
+                    filter: 'contrast(1.14) saturate(1.18)',
+                  }}
+                />
+                {/* Electric-Cyan + Crimson Cyber Back-Rim & Anamorphic Katana Glint */}
+                <div
+                  className="absolute inset-0 opacity-32 mix-blend-screen"
+                  style={{
+                    background:
+                      'radial-gradient(circle at 68% 44%, #22d3ee 0%, rgba(244,63,94,0.35) 38%, transparent 62%)',
+                  }}
+                />
+                <motion.div
+                  initial={{ scaleX: 0.2, opacity: 0 }}
+                  animate={{ scaleX: 1, opacity: 0.92 }}
+                  transition={{ duration: 0.34, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute inset-x-0 top-[43%] h-2 origin-right mix-blend-screen"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent 4%, #22d3ee 36%, #ffffff 66%, #38bdf8 86%, transparent 100%)',
+                    boxShadow: '0 0 36px #22d3ee, 0 0 72px #ffffff',
+                  }}
+                />
+                <motion.div
+                  initial={{ scaleX: 0.2, opacity: 0 }}
+                  animate={{ scaleX: 1, opacity: 0.65 }}
+                  transition={{ duration: 0.38, delay: 0.14, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute inset-x-0 top-[46.5%] h-0.5 origin-right mix-blend-screen"
+                  style={{
+                    background:
+                      'linear-gradient(90deg, transparent 14%, #f43f5e 48%, #ffffff 70%, transparent 94%)',
+                  }}
+                />
+              </div>
+            ) : isPhantom ? (
               <svg
                 viewBox="0 0 1600 680"
                 className="h-full w-full object-cover"

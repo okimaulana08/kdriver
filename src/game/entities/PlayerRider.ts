@@ -1945,6 +1945,7 @@ export class PlayerRider implements HurtboxTarget {
     }
     this.prevVisualState = state;
     this.prevVisualSwingId = swingId;
+    this.dodgeRingMesh.visible = true;
     this.updateMaterialFeedback();
 
     if (this.fsm.isHitboxActive) {
@@ -1960,6 +1961,8 @@ export class PlayerRider implements HurtboxTarget {
   public updateHubPedestalVisuals(renderDt: number): void {
     this.animTime += renderDt * 2.8;
     this.root.position.set(0, PLAYER_SPAWN_Y, 0);
+    // Hub uses the full 3D Cyber Armory Pedestal instead of the small combat dodge ring
+    this.dodgeRingMesh.visible = false;
 
     if (this.riderId === 'phantom' && this.unit2BasicRigHost) {
       const hasUnit2IdleClip = Boolean(this.unit2BasicSkeletalAnimator?.hasClipForState('IDLE'));

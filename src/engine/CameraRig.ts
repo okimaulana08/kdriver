@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { LookDelta2D } from './InputManager';
 import { ARENA_RADIUS } from './PhysicsWorld';
 
+export type HubCameraPreset = 'full' | 'helmet' | 'weapon';
+
 export type CameraMode =
   | 'HUB_PEDESTAL'
   | 'ARENA_ENTRY'
@@ -164,6 +166,29 @@ export class CameraRig {
     this.hubTargetPitch = HUB_DEFAULT_PITCH;
     this.hubTargetDistance = HUB_DEFAULT_DISTANCE;
     this.hubUserInteracted = false;
+  }
+
+  public setHubCameraPreset(preset: HubCameraPreset): void {
+    if (preset === 'full') {
+      this.resetHubOrbit();
+      return;
+    }
+    this.hubUserInteracted = true;
+    if (preset === 'helmet') {
+      this.hubTargetYaw = 0.24;
+      this.hubTargetPitch = 0.05;
+      this.hubTargetDistance = 2.1;
+    } else if (preset === 'weapon') {
+      this.hubTargetYaw = -0.66;
+      this.hubTargetPitch = 0.03;
+      this.hubTargetDistance = 2.52;
+    }
+  }
+
+  public triggerHubSwitchPulse(): void {
+    if (this.mode !== 'HUB_PEDESTAL') return;
+    // Brief kinetic camera dolly kick that springs smoothly back to target distance
+    this.hubDistance = Math.min(HUB_MAX_DISTANCE, this.hubDistance + 0.3);
   }
 
   public update(

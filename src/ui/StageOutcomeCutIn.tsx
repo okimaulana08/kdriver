@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { useGameStore } from '../store/useGameStore';
 
 /**
@@ -6,11 +7,16 @@ import { useGameStore } from '../store/useGameStore';
  */
 export function StageOutcomeCutIn() {
   const cutIn = useGameStore((s) => s.stageOutcomeCutIn);
+  const selectedRiderId = useGameStore((s) => s.selectedRiderId);
   if (!cutIn) return null;
 
   const isVictory = cutIn.victory;
-  const accent = isVictory ? '#fbbf24' : '#f43f5e';
-  const secondary = isVictory ? '#22d3ee' : '#9f1239';
+  const isPhantom = selectedRiderId === 'phantom';
+  const accent = isVictory ? (isPhantom ? '#22d3ee' : '#fbbf24') : '#f43f5e';
+  const secondary = isVictory ? (isPhantom ? '#0284c7' : '#22d3ee') : '#9f1239';
+  const visorArtUrl = isPhantom
+    ? '/assets/textures/cutin_phantom_visor.jpg'
+    : '/assets/textures/cutin_rider_visor.jpg';
 
   return (
     <div
@@ -39,15 +45,20 @@ export function StageOutcomeCutIn() {
         {/* High-Speed Diagonal Speedlines */}
         <div className="animate-cutin-speedlines absolute inset-[-10%] opacity-55 mix-blend-screen" />
 
-        {/* Subtle Live-Action Rider Visor Silhouette on Right Edge */}
-        <img
-          src="/assets/textures/cutin_rider_visor.jpg"
+        {/* Live-Action Active Rider Visor Silhouette on Right Edge */}
+        <motion.img
+          src={visorArtUrl}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-right opacity-30 mix-blend-lighten"
+          initial={{ scale: 1.15, x: 40, opacity: 0 }}
+          animate={{ scale: 1.02, x: 0, opacity: isPhantom ? 0.42 : 0.32 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute inset-0 h-full w-full object-cover object-right mix-blend-lighten"
           style={{
             filter: isVictory
-              ? 'hue-rotate(28deg) contrast(1.2) saturate(1.15)'
+              ? isPhantom
+                ? 'contrast(1.18) saturate(1.2)'
+                : 'hue-rotate(28deg) contrast(1.2) saturate(1.15)'
               : 'grayscale(0.55) contrast(1.35) brightness(0.75)',
           }}
         />

@@ -12,7 +12,8 @@ import {
 } from './arenas/ArenaAtmosphere';
 import { AssetLoader } from './AssetLoader';
 import { AudioManager, type BgmIntensity } from './AudioManager';
-import { CameraRig } from './CameraRig';
+import { CameraRig, type HubCameraPreset } from './CameraRig';
+import { HubArmoryStage } from './HubArmoryStage';
 import { InputManager, type LookDelta2D } from './InputManager';
 import { Loop } from './Loop';
 import { bindPbrMaterials, type PbrTextureSet } from './PbrMaterialSystem';
@@ -92,6 +93,7 @@ export class GameApp {
   private readonly afterimageTrail: AfterimageTrail;
   private readonly playerProjectilePool: PlayerProjectilePool;
   private readonly arenaThemeManager: ArenaThemeManager;
+  private readonly hubArmoryStage: HubArmoryStage;
   private readonly playerHitbox: HitboxSystem;
   private readonly skillHitbox: HitboxSystem;
 
@@ -222,6 +224,10 @@ export class GameApp {
     this.gemShardPool = new GemShardPool();
     this.scene.add(this.gemShardPool.root);
 
+    this.hubArmoryStage = new HubArmoryStage();
+    this.hubArmoryStage.setVisible(true);
+    this.scene.add(this.hubArmoryStage.root);
+
     this.playerHitbox = new HitboxSystem();
     this.skillHitbox = new HitboxSystem();
     this.physics = new PhysicsWorld();
@@ -331,6 +337,7 @@ export class GameApp {
       this.warmUpVfxShaders();
 
       this.updateBgmIntensity('HUB');
+      this.syncHubPedestalTheme(false);
       useGameStore.getState().setLoadProgress(100, 'Ready');
       useGameStore.getState().setEngineStatus('ready');
       this.loop.start();
@@ -398,12 +405,15 @@ export class GameApp {
     this.audio.playFormSwitch(this.player.currentElementId, false);
     this.scratchColorHelper.set(cfg.accentColor);
     this.particlePool.emitBeltSwitchBurst(0, 1.0, 0, this.scratchColorHelper.getHex());
+    this.syncHubPedestalTheme(true);
+    this.cameraRig.triggerHubSwitchPulse();
   }
 
   public syncGemProgression(): void {
     const record = useGameStore.getState().saveRecord;
     this.player?.setGemLevels(record.gemLevels);
     this.player?.setPhantomCoreLevel(getPhantomCoreLevel(record));
+    this.hubArmoryStage.triggerPulse();
   }
 
   public previewHubElement(elementId: ElementId): void {
@@ -415,6 +425,8 @@ export class GameApp {
     this.scratchColorHelper.set(cfg.emissiveColor);
     this.particlePool.emitBeltSwitchBurst(0, 1.0, 0, this.scratchColorHelper.getHex());
     useGameStore.getState().setActiveElement(elementId);
+    this.syncHubPedestalTheme(true);
+    this.cameraRig.triggerHubSwitchPulse();
   }
 
   public setLoadoutOrder(order: [ElementId, ElementId, ElementId]): void {
@@ -425,6 +437,22 @@ export class GameApp {
 
   public resetHubCamera(): void {
     this.cameraRig.resetHubOrbit();
+  }
+
+  public setHubCameraPreset(preset: HubCameraPreset): void {
+    this.cameraRig.setHubCameraPreset(preset);
+    this.hubArmoryStage.triggerPulse();
+  }
+
+  private syncHubPedestalTheme(triggerSurge: boolean): void {
+    const store = useGameStore.getState();
+    const riderCfg = getRiderConfig(store.selectedRiderId);
+    if (riderCfg.locksElementSelection) {
+      this.hubArmoryStage.setThemeColors(riderCfg.accentColor, riderCfg.glowColor, triggerSurge);
+    } else {
+      const elemCfg = getElementConfig(store.activeElement);
+      this.hubArmoryStage.setThemeColors(elemCfg.primaryColor, elemCfg.emissiveColor, triggerSurge);
+    }
   }
 
   public deployToArena(): void {
@@ -477,6 +505,7 @@ export class GameApp {
     this.player.triggerEntryHenshinVisual();
 
     this.stageManager.startStage();
+    this.hubArmoryStage.setVisible(false);
     this.cameraRig.setLockedOn(false);
     this.cameraRig.setMode('ARENA_ENTRY', Math.PI);
 
@@ -531,6 +560,8 @@ export class GameApp {
 
     this.cameraRig.setLockedOn(false);
     this.cameraRig.setMode('HUB_PEDESTAL', 0);
+    this.hubArmoryStage.setVisible(true);
+    this.syncHubPedestalTheme(true);
     this.updateBgmIntensity('HUB');
 
     store.resetArenaState();
@@ -562,6 +593,7 @@ export class GameApp {
     this.elementSkillVfx.dispose();
     this.riderKickVfx.dispose();
     this.afterimageTrail.dispose();
+    this.hubArmoryStage.dispose();
     this.cameraRig.dispose();
     this.audio.dispose();
 
@@ -2893,6 +2925,7 @@ export class GameApp {
         }
       }
       this.player.updateHubPedestalVisuals(rawDt);
+      this.hubArmoryStage.update(rawDt);
       this.particlePool.update(rawDt);
       this.scratchRenderPos.set(0, PLAYER_SPAWN_Y, 0);
       this.cameraRig.update(rawDt, this.scratchRenderPos, null);
