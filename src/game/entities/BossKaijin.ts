@@ -86,12 +86,15 @@ interface PooledProjectile {
 interface PooledHazardZone {
   phase: 'IDLE' | 'TELEGRAPH' | 'ERUPTING';
   root: THREE.Group;
-  borderMesh: THREE.Mesh;
-  fillMesh: THREE.Mesh;
-  pillarMesh: THREE.Mesh;
-  borderMat: THREE.MeshBasicMaterial;
-  fillMat: THREE.MeshBasicMaterial;
-  pillarMat: THREE.MeshBasicMaterial;
+  warningMesh: THREE.Mesh;
+  warningMat: THREE.ShaderMaterial;
+  warningUniforms: {
+    uTime: { value: number };
+    uCharge: { value: number };
+    uOpacity: { value: number };
+    uColor: { value: THREE.Color };
+    uIsBriar: { value: number };
+  };
   x: number;
   z: number;
   radius: number;
@@ -102,6 +105,47 @@ interface PooledHazardZone {
   isHeavy: boolean;
   hitPlayer: boolean;
 }
+
+const HAZARD_WARN_VERTEX_SHADER = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const HAZARD_WARN_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uTime;
+  uniform float uCharge;
+  uniform float uOpacity;
+  uniform vec3 uColor;
+  uniform float uIsBriar;
+
+  varying vec2 vUv;
+
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    if (r > 1.0) discard;
+
+    float angle = atan(p.y, p.x);
+    float outerRing = exp(-pow((r - 0.93) * 20.0, 2.0));
+    float innerWave = smoothstep(uCharge + 0.04, uCharge - 0.08, r);
+    float chargeRim = exp(-pow((r - max(0.06, uCharge)) * 22.0, 2.0));
+
+    float pattern = uIsBriar > 0.5
+      ? smoothstep(0.35, 0.92, sin(angle * 8.0 + r * 10.0 - uTime * 5.0) * 0.5 + 0.5)
+      : smoothstep(0.3, 0.9, sin(angle * 6.0 - r * 9.0 + uTime * 4.0) * sin(r * 14.0 - uTime * 7.0) * 0.5 + 0.5);
+
+    float pulse = 0.78 + 0.22 * sin(uTime * 22.0);
+    float glow = outerRing * (0.95 + 0.25 * pulse) + chargeRim * 1.15 + innerWave * (0.24 + pattern * 0.42);
+
+    vec3 col = mix(uColor, vec3(1.0, 0.96, 0.85), clamp(chargeRim * 0.8 + outerRing * 0.45, 0.0, 1.0));
+    float alpha = clamp(glow * uOpacity, 0.0, 0.95);
+    if (alpha < 0.02) discard;
+    gl_FragColor = vec4(col * 1.5, alpha);
+  }
+`;
 
 export interface BossProjectileHitResult {
   damage: number;
@@ -149,9 +193,7 @@ export class BossKaijin extends EnemyBase {
   private readonly projectileMat: THREE.MeshStandardMaterial;
 
   private readonly hazards: PooledHazardZone[] = [];
-  private readonly hazardBorderGeo: THREE.RingGeometry;
-  private readonly hazardFillGeo: THREE.CircleGeometry;
-  private readonly hazardPillarGeo: THREE.CylinderGeometry;
+  private readonly hazardWarningGeo: THREE.PlaneGeometry;
 
   // Reusable scratch objects (Zero-Allocation Hot Path)
   private readonly scratchProjPlayerPos: Vec3Snapshot = { x: 0, y: 0, z: 0 };
@@ -208,65 +250,44 @@ export class BossKaijin extends EnemyBase {
       });
     }
 
-    // Pooled 3D Floor Hazard Zones (Volcanic Magma Fissures / Sylvan Briar Spires)
-    this.hazardBorderGeo = new THREE.RingGeometry(0.86, 1.0, 28);
-    this.hazardFillGeo = new THREE.CircleGeometry(1.0, 28);
+    // Pooled 3D Floor Hazard Telegraph Zones (GLSL Molten Cracks / Sylvan Briar Warning Rune — zero blocky cylinders!)
+    this.hazardWarningGeo = new THREE.PlaneGeometry(2.0, 2.0);
+    this.hazardWarningGeo.rotateX(-Math.PI / 2);
     const isBriar = config.id === 'sylvan_sovereign';
-    this.hazardPillarGeo = isBriar
-      ? new THREE.CylinderGeometry(0.06, 0.72, 3.8, 7, 1)
-      : new THREE.CylinderGeometry(0.56, 0.85, 4.4, 14, 1);
 
     for (let i = 0; i < MAX_BOSS_HAZARDS; i++) {
       const zoneRoot = new THREE.Group();
       zoneRoot.visible = false;
 
-      const borderMat = new THREE.MeshBasicMaterial({
-        color: this.profile.hazardColorHex,
+      const warningUniforms = {
+        uTime: { value: 0 },
+        uCharge: { value: 0.08 },
+        uOpacity: { value: 0.9 },
+        uColor: { value: new THREE.Color(this.profile.hazardColorHex) },
+        uIsBriar: { value: isBriar ? 1.0 : 0.0 },
+      };
+      const warningMat = new THREE.ShaderMaterial({
+        uniforms: warningUniforms,
+        vertexShader: HAZARD_WARN_VERTEX_SHADER,
+        fragmentShader: HAZARD_WARN_FRAGMENT_SHADER,
         transparent: true,
-        opacity: 0.92,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
       });
-      const borderMesh = new THREE.Mesh(this.hazardBorderGeo, borderMat);
-      borderMesh.rotation.x = -Math.PI / 2;
-      borderMesh.position.y = 0.055;
+      const warningMesh = new THREE.Mesh(this.hazardWarningGeo, warningMat);
+      warningMesh.position.y = 0.055;
+      warningMesh.frustumCulled = false;
 
-      const fillMat = new THREE.MeshBasicMaterial({
-        color: this.profile.hazardColorHex,
-        transparent: true,
-        opacity: 0.28,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const fillMesh = new THREE.Mesh(this.hazardFillGeo, fillMat);
-      fillMesh.rotation.x = -Math.PI / 2;
-      fillMesh.position.y = 0.045;
-
-      const pillarMat = new THREE.MeshBasicMaterial({
-        color: isBriar ? 0x34d399 : 0xffa726,
-        transparent: true,
-        opacity: 0.88,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const pillarMesh = new THREE.Mesh(this.hazardPillarGeo, pillarMat);
-      pillarMesh.position.y = isBriar ? 1.85 : 2.15;
-      pillarMesh.visible = false;
-
-      zoneRoot.add(borderMesh, fillMesh, pillarMesh);
+      zoneRoot.add(warningMesh);
       this.hazardGroup.add(zoneRoot);
 
       this.hazards.push({
         phase: 'IDLE',
         root: zoneRoot,
-        borderMesh,
-        fillMesh,
-        pillarMesh,
-        borderMat,
-        fillMat,
-        pillarMat,
+        warningMesh,
+        warningMat,
+        warningUniforms,
         x: 0,
         z: 0,
         radius: 2.2,
@@ -354,34 +375,24 @@ export class BossKaijin extends EnemyBase {
       if (h.phase === 'IDLE') continue;
 
       h.timer += dt;
+      h.warningUniforms.uTime.value += dt;
       if (h.phase === 'TELEGRAPH') {
         const frac = Math.min(1, h.timer / Math.max(0.45, h.telegraphDuration));
-        h.fillMesh.scale.setScalar(Math.max(0.06, frac) * h.radius);
-        h.fillMat.opacity = 0.16 + frac * 0.44;
-        h.borderMat.opacity = 0.55 + Math.sin(h.timer * 24) * 0.35;
+        h.warningUniforms.uCharge.value = Math.max(0.08, frac);
+        h.warningUniforms.uOpacity.value = 0.65 + frac * 0.35;
 
         if (h.timer >= h.telegraphDuration) {
           h.phase = 'ERUPTING';
           h.timer = 0;
           h.hitPlayer = false;
-          h.pillarMesh.visible = true;
-          h.pillarMesh.scale.set(h.radius * 0.58, 0.25, h.radius * 0.58);
-          h.pillarMat.opacity = 0.92;
+          h.warningUniforms.uCharge.value = 1.0;
           out.eruptedCount++;
           out.lastEruptX = h.x;
           out.lastEruptZ = h.z;
         }
       } else if (h.phase === 'ERUPTING') {
         const frac = Math.min(1, h.timer / h.eruptionDuration);
-        const rise = frac < 0.25 ? frac / 0.25 : 1 - (frac - 0.25) / 0.75;
-        h.pillarMesh.scale.set(
-          h.radius * (0.58 + frac * 0.24),
-          Math.max(0.08, rise * 1.25),
-          h.radius * (0.58 + frac * 0.24)
-        );
-        h.pillarMat.opacity = Math.max(0, (1 - frac) * 0.95);
-        h.borderMat.opacity = Math.max(0, (1 - frac) * 0.7);
-        h.fillMat.opacity = Math.max(0, (1 - frac) * 0.4);
+        h.warningUniforms.uOpacity.value = Math.max(0, (1 - frac) * 0.85);
 
         // Active damage window during early peak eruption (respects Perfect Dodge!)
         if (!h.hitPlayer && frac <= 0.42) {
@@ -401,7 +412,6 @@ export class BossKaijin extends EnemyBase {
         if (h.timer >= h.eruptionDuration) {
           h.phase = 'IDLE';
           h.root.visible = false;
-          h.pillarMesh.visible = false;
         }
       }
     }
@@ -422,7 +432,6 @@ export class BossKaijin extends EnemyBase {
       const h = this.hazards[i]!;
       h.phase = 'IDLE';
       h.root.visible = false;
-      h.pillarMesh.visible = false;
     }
   }
 
@@ -431,14 +440,9 @@ export class BossKaijin extends EnemyBase {
     this.clearHazards();
     this.projectileGeo.dispose();
     this.projectileMat.dispose();
-    this.hazardBorderGeo.dispose();
-    this.hazardFillGeo.dispose();
-    this.hazardPillarGeo.dispose();
+    this.hazardWarningGeo.dispose();
     for (let i = 0; i < this.hazards.length; i++) {
-      const h = this.hazards[i]!;
-      h.borderMat.dispose();
-      h.fillMat.dispose();
-      h.pillarMat.dispose();
+      this.hazards[i]!.warningMat.dispose();
     }
     super.dispose();
   }
@@ -627,9 +631,10 @@ export class BossKaijin extends EnemyBase {
 
     slot.root.position.set(clampedX, 0, clampedZ);
     slot.root.visible = true;
-    slot.borderMesh.scale.setScalar(radius);
-    slot.fillMesh.scale.setScalar(0.1 * radius);
-    slot.pillarMesh.visible = false;
+    slot.warningMesh.scale.set(radius, 1, radius);
+    slot.warningUniforms.uTime.value = 0;
+    slot.warningUniforms.uCharge.value = 0.08;
+    slot.warningUniforms.uOpacity.value = 0.72;
   }
 
   private spawnMagmaFissures(): void {

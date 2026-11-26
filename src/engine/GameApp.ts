@@ -437,7 +437,8 @@ export class GameApp {
 
     this.updateBgmIntensity('COMBAT');
     this.audio.playHenshinSuper('HENSHIN!');
-    this.particlePool.emitElementBurst(store.loadoutOrder[0], 0, 1.1, 3.5, 42, 1.4);
+    this.elementSkillVfx.spawnHenshinSuper(store.loadoutOrder[0], 0, 3.5, Math.PI);
+    this.particlePool.emitHenshinAscension(store.loadoutOrder[0], 0, 1.1, 3.5, false);
   }
 
   public retryStage(): void {
@@ -1136,12 +1137,36 @@ export class GameApp {
         if (hazardStep.eruptedCount > 0) {
           this.audio.playBossHazardErupt(enemy.config.id);
           this.cameraRig.addShake(0.32, 0.22);
-          this.elementSkillVfx.spawnExplosionPillar(
-            enemy.signatureProfile.hazardElement,
-            hazardStep.lastEruptX,
-            hazardStep.lastEruptZ,
-            2.35
-          );
+          if (enemy.config.id === 'sylvan_sovereign') {
+            this.elementSkillVfx.spawnBriarEruption(
+              enemy.signatureProfile.hazardElement,
+              hazardStep.lastEruptX,
+              hazardStep.lastEruptZ,
+              2.55
+            );
+            this.particlePool.emitElementBurst(
+              enemy.signatureProfile.hazardElement,
+              hazardStep.lastEruptX,
+              0.45,
+              hazardStep.lastEruptZ,
+              32,
+              1.25
+            );
+          } else {
+            this.elementSkillVfx.spawnExplosionPillar(
+              enemy.signatureProfile.hazardElement,
+              hazardStep.lastEruptX,
+              hazardStep.lastEruptZ,
+              2.55
+            );
+            this.particlePool.emitTokusatsuExplosion(
+              enemy.signatureProfile.hazardElement,
+              hazardStep.lastEruptX,
+              0.35,
+              hazardStep.lastEruptZ,
+              0.85
+            );
+          }
         }
         if (hazardStep.damage > 0) {
           this.resolveIncomingHitOnPlayer(
@@ -1257,19 +1282,18 @@ export class GameApp {
     this.audio.playHenshinSuper();
     this.cameraRig.addShake(0.4, 0.35);
     this.player.getPosition(this.scratchOriginSnapshot);
-    this.elementSkillVfx.spawnSkillVfx(
+    this.elementSkillVfx.spawnHenshinSuper(
       elemId,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.z,
-      this.player.facingYaw,
-      7.5,
-      true
+      this.player.facingYaw
     );
-    this.particlePool.emitReactionBurst(
-      'OVERLOAD',
+    this.particlePool.emitHenshinAscension(
+      elemId,
       this.scratchOriginSnapshot.x,
-      this.scratchOriginSnapshot.y + 0.4,
-      this.scratchOriginSnapshot.z
+      this.scratchOriginSnapshot.y + 0.3,
+      this.scratchOriginSnapshot.z,
+      false
     );
     useGameStore
       .getState()
@@ -1308,17 +1332,18 @@ export class GameApp {
     this.audio.playHenshinUltimate();
     this.cameraRig.addShake(0.5, 0.4);
     this.player.getPosition(this.scratchOriginSnapshot);
-    this.elementSkillVfx.spawnFinisherClimax(
+    this.elementSkillVfx.spawnHenshinUltimate(
       elemId,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.z,
-      9.2
+      this.player.facingYaw
     );
-    this.particlePool.emitReactionBurst(
-      'ELECTRO_SURGE',
+    this.particlePool.emitHenshinAscension(
+      elemId,
       this.scratchOriginSnapshot.x,
-      this.scratchOriginSnapshot.y + 0.5,
-      this.scratchOriginSnapshot.z
+      this.scratchOriginSnapshot.y + 0.35,
+      this.scratchOriginSnapshot.z,
+      true
     );
     useGameStore
       .getState()
@@ -1394,6 +1419,7 @@ export class GameApp {
 
     this.elementSkillVfx.spawnFinisherClimax(elemId, impactX, impactZ, 12.5);
     this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, 6.2, true);
+    this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.55, impactZ, 1.45);
     this.loop.triggerHitStop(0.14);
     this.cameraRig.addShake(0.6, 0.45);
     this.audio.playRiderKickImpact();
@@ -1444,8 +1470,8 @@ export class GameApp {
       fz * (3.5 + Math.random() * 2.5) +
       (Math.random() - 0.5) * 3.0;
 
-    this.elementSkillVfx.spawnExplosionPillar(this.player.currentElementId, bx, bz, 3.6);
-    this.particlePool.emitReactionBurst('OVERLOAD', bx, 1.2, bz);
+    this.elementSkillVfx.spawnExplosionPillar(this.player.currentElementId, bx, bz, 3.85);
+    this.particlePool.emitTokusatsuExplosion(this.player.currentElementId, bx, 0.45, bz, 1.25);
     this.cameraRig.addShake(0.36, 0.22);
     this.audio.playReaction('OVERLOAD');
   }
@@ -1729,10 +1755,9 @@ export class GameApp {
     this.audio.playRiderKickImpact();
     this.loop.triggerHitStop(0.1);
     this.cameraRig.addShake(0.48, 0.32);
-    this.elementSkillVfx.spawnSkillVfx(elemId, impactX, impactZ, this.player.facingYaw, kickRadius, isSuper);
-    this.elementSkillVfx.spawnExplosionPillar(elemId, impactX, impactZ, isSuper ? 3.2 : 2.6);
+    this.elementSkillVfx.spawnExplosionPillar(elemId, impactX, impactZ, isSuper ? 3.5 : 2.85);
     this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, kickRadius * 0.94, isSuper);
-    this.particlePool.emitReactionBurst('OVERLOAD', impactX, 0.9, impactZ);
+    this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.45, impactZ, isSuper ? 1.2 : 0.96);
 
     let connected = false;
     for (let i = 0; i < this.enemies.length; i++) {

@@ -107,4 +107,19 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       }
     }
   });
+
+  it('verifies VFX systems use volumetric GLSL shaders with zero raw Box/Dodecahedron/Cone/Cylinder primitives', () => {
+    const vfxFiles = [
+      'src/game/vfx/ParticlePool.ts',
+      'src/game/vfx/ElementSkillVfx.ts',
+      'src/game/vfx/RiderKickVfx.ts',
+      'src/game/entities/BossKaijin.ts',
+    ];
+    for (const rel of vfxFiles) {
+      const content = fs.readFileSync(path.resolve(process.cwd(), rel), 'utf8');
+      expect(content, `Primitive blocky/conical geometry found in ${rel}`).not.toMatch(
+        /new\s+THREE\.(BoxGeometry|DodecahedronGeometry|ConeGeometry|CylinderGeometry)\s*\(/
+      );
+    }
+  });
 });

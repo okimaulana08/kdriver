@@ -82,6 +82,41 @@ export interface PlayerFrameEvents {
   state: PlayerStateId;
 }
 
+const RIDER_AURA_VERTEX_SHADER = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const RIDER_AURA_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uTime;
+  uniform float uOpacity;
+  uniform float uIsUltimate;
+  uniform vec3 uColor;
+  varying vec2 vUv;
+
+  void main() {
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    if (r > 1.0 || r < 0.16) discard;
+
+    float angle = atan(p.y, p.x);
+    float outerBand = exp(-pow((r - 0.84) * 14.0, 2.0));
+    float innerBand = exp(-pow((r - 0.56) * 16.0, 2.0)) * 0.65;
+    float ticks = smoothstep(0.25, 0.9, sin(angle * 20.0 + uTime * 3.8) * 0.5 + 0.5);
+    float sweep = smoothstep(0.15, 0.95, sin(angle * 4.0 - uTime * 4.6) * 0.5 + 0.5);
+    float glow = outerBand * (0.55 + 0.65 * sweep) + innerBand * (0.4 + 0.6 * ticks);
+
+    vec3 baseCol = uIsUltimate > 0.5 ? mix(uColor, vec3(1.0, 0.9, 0.45), 0.45) : uColor;
+    vec3 col = mix(baseCol, vec3(1.0, 0.98, 0.92), smoothstep(0.75, 1.35, glow) * 0.75);
+    float alpha = clamp(glow * uOpacity, 0.0, 1.0);
+    if (alpha < 0.015) discard;
+    gl_FragColor = vec4(col * (1.45 + uIsUltimate * 0.45), alpha);
+  }
+`;
+
 /**
  * Stylized Kamen Rider driven by the sculpted `rider_base.glb` shared rig + named bone sockets
  * (`RightHand`, `LeftHand`, `ChestArmor`, `ShoulderL`, `ShoulderR`, `BackWing`),
@@ -219,9 +254,21 @@ export class PlayerRider implements HurtboxTarget {
 
   private readonly dodgeRingMat: THREE.MeshBasicMaterial;
   private readonly dodgeRingMesh: THREE.Mesh;
-  private readonly superAuraRingMat: THREE.MeshBasicMaterial;
+  private readonly superAuraUniforms: {
+    uTime: { value: number };
+    uOpacity: { value: number };
+    uIsUltimate: { value: number };
+    uColor: { value: THREE.Color };
+  };
+  private readonly superAuraRingMat: THREE.ShaderMaterial;
   private readonly superAuraRingMesh: THREE.Mesh;
-  private readonly beltBurstRingMat: THREE.MeshBasicMaterial;
+  private readonly beltBurstUniforms: {
+    uTime: { value: number };
+    uOpacity: { value: number };
+    uIsUltimate: { value: number };
+    uColor: { value: THREE.Color };
+  };
+  private readonly beltBurstRingMat: THREE.ShaderMaterial;
   private readonly beltBurstRingMesh: THREE.Mesh;
   private readonly ownedMaterials: THREE.Material[] = [];
 
@@ -308,18 +355,32 @@ export class PlayerRider implements HurtboxTarget {
       opacity: 0.35,
       side: THREE.DoubleSide,
     });
-    this.superAuraRingMat = new THREE.MeshBasicMaterial({
-      color: 0xfacc15,
+    this.superAuraUniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0.78 },
+      uIsUltimate: { value: 0 },
+      uColor: { value: new THREE.Color(0xfacc15) },
+    };
+    this.superAuraRingMat = new THREE.ShaderMaterial({
+      uniforms: this.superAuraUniforms,
+      vertexShader: RIDER_AURA_VERTEX_SHADER,
+      fragmentShader: RIDER_AURA_FRAGMENT_SHADER,
       transparent: true,
-      opacity: 0.28,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    this.beltBurstRingMat = new THREE.MeshBasicMaterial({
-      color: emissiveHex,
+    this.beltBurstUniforms = {
+      uTime: { value: 0 },
+      uOpacity: { value: 0 },
+      uIsUltimate: { value: 0 },
+      uColor: { value: new THREE.Color(emissiveHex) },
+    };
+    this.beltBurstRingMat = new THREE.ShaderMaterial({
+      uniforms: this.beltBurstUniforms,
+      vertexShader: RIDER_AURA_VERTEX_SHADER,
+      fragmentShader: RIDER_AURA_FRAGMENT_SHADER,
       transparent: true,
-      opacity: 0,
       blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
       depthWrite: false,
@@ -715,7 +776,7 @@ export class PlayerRider implements HurtboxTarget {
     this.dodgeRingMesh.position.y = -PLAYER_SPAWN_Y + 0.03;
 
     this.superAuraRingMesh = new THREE.Mesh(
-      new THREE.RingGeometry(0.88, 1.0, 36),
+      new THREE.PlaneGeometry(2.55, 2.55),
       this.superAuraRingMat
     );
     this.superAuraRingMesh.rotation.x = -Math.PI / 2;
@@ -723,7 +784,7 @@ export class PlayerRider implements HurtboxTarget {
     this.superAuraRingMesh.visible = false;
 
     this.beltBurstRingMesh = new THREE.Mesh(
-      new THREE.RingGeometry(0.5, 0.85, 32),
+      new THREE.PlaneGeometry(2.0, 2.0),
       this.beltBurstRingMat
     );
     this.beltBurstRingMesh.rotation.x = -Math.PI / 2;
@@ -1028,7 +1089,7 @@ export class PlayerRider implements HurtboxTarget {
     this.superWingMat.emissive.set(this.elementConfig.emissiveColor);
     this.bladeEdgeMat.color.set(this.elementConfig.emissiveColor);
     this.bladeEdgeMat.emissive.set(this.elementConfig.emissiveColor);
-    this.beltBurstRingMat.color.set(this.elementConfig.emissiveColor);
+    this.beltBurstUniforms.uColor.value.set(this.elementConfig.emissiveColor);
 
     // Data-driven selective PBR Armor Hue-Shift on Basic & Super Form sculpted suits (PYRO=native crimson, VOLT=electric gold, AQUA=sapphire blue!)
     for (let i = 0; i < this.armorHueUniforms.length; i++) {
@@ -2123,17 +2184,22 @@ export class PlayerRider implements HurtboxTarget {
 
   private updateMaterialFeedback(): void {
     if (this.superAuraRingMesh.visible) {
-      this.superAuraRingMesh.rotation.z = this.animTime * 2.0;
-      const pulse = 1 + Math.sin(this.animTime * 6) * 0.08;
-      this.superAuraRingMesh.scale.setScalar(this.formTier === 'ULTIMATE' ? pulse * 1.25 : pulse);
-      this.superAuraRingMat.color.set(this.elementConfig.emissiveColor);
+      this.superAuraUniforms.uTime.value = this.animTime;
+      const isUlt = this.formTier === 'ULTIMATE';
+      this.superAuraUniforms.uIsUltimate.value = isUlt ? 1.0 : 0.0;
+      this.superAuraUniforms.uOpacity.value = isUlt ? 0.92 : 0.72;
+      const pulse = 1 + Math.sin(this.animTime * 4.5) * 0.06;
+      this.superAuraRingMesh.scale.setScalar(isUlt ? pulse * 1.24 : pulse);
+      this.superAuraUniforms.uColor.value.set(this.elementConfig.emissiveColor);
     }
 
     if (this.beltBurstTimer > 0) {
       const t = 1 - Math.min(1, this.beltBurstTimer / 0.65);
       this.beltBurstRingMesh.visible = true;
-      this.beltBurstRingMesh.scale.setScalar(0.8 + t * 5.2);
-      this.beltBurstRingMat.opacity = Math.max(0, (1 - t) * 0.9);
+      this.beltBurstUniforms.uTime.value = this.animTime;
+      this.beltBurstUniforms.uIsUltimate.value = this.formTier === 'ULTIMATE' ? 1.0 : 0.0;
+      this.beltBurstRingMesh.scale.setScalar(0.7 + t * 4.6);
+      this.beltBurstUniforms.uOpacity.value = Math.max(0, (1 - t) * 0.95);
     } else {
       this.beltBurstRingMesh.visible = false;
     }
