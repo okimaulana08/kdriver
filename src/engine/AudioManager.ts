@@ -9,6 +9,25 @@ const BASS_PATTERN_COMBAT = [146.83, 146.83, 174.61, 146.83, 130.81, 130.81, 164
 const LEAD_PATTERN_COMBAT = [587.33, 0, 659.25, 698.46, 587.33, 0, 523.25, 440.0];
 const LEAD_PATTERN_BOSS = [880.0, 698.46, 880.0, 1046.5, 987.77, 880.0, 783.99, 659.25];
 
+interface ElementDriverVoiceSpec {
+  phrase: string;
+  notes: readonly [number, number, number];
+  wave: OscillatorType;
+}
+
+const ELEMENT_DRIVER_VOICES: Readonly<Record<ElementId, ElementDriverVoiceSpec>> = {
+  pyro: { phrase: 'PYRO!', notes: [587.33, 739.99, 880.0], wave: 'triangle' },
+  volt: { phrase: 'VOLT!', notes: [659.25, 880.0, 1318.5], wave: 'sawtooth' },
+  aqua: { phrase: 'AQUA!', notes: [523.25, 659.25, 1046.5], wave: 'sine' },
+  terra: { phrase: 'TERRA!', notes: [293.66, 369.99, 440.0], wave: 'triangle' },
+  aero: { phrase: 'AERO!', notes: [698.46, 880.0, 1396.91], wave: 'sine' },
+  flora: { phrase: 'FLORA!', notes: [523.25, 659.25, 783.99], wave: 'triangle' },
+  solar: { phrase: 'SOLAR!', notes: [587.33, 880.0, 1174.66], wave: 'sawtooth' },
+  lunar: { phrase: 'LUNAR!', notes: [493.88, 659.25, 987.77], wave: 'sine' },
+  umbra: { phrase: 'UMBRA!', notes: [311.13, 392.0, 622.25], wave: 'sawtooth' },
+  lux: { phrase: 'LUX!', notes: [659.25, 987.77, 1567.98], wave: 'triangle' },
+};
+
 /**
  * Tokusatsu Audio Engine combining Howler.js external clip hooks with layered
  * Web Audio procedural SFX (belt clicks, Gem chimes, Henshin jingles, elemental slashes)
@@ -74,6 +93,9 @@ export class AudioManager {
   public setMuted(muted: boolean): void {
     this.muted = muted;
     Howler.mute(muted);
+    if (muted) {
+      this.cancelDriverSpeech();
+    }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(muted ? 0 : 0.36, this.ctx.currentTime, 0.015);
     }
@@ -107,7 +129,7 @@ export class AudioManager {
   }
 
   /**
-   * Element-aware Tokusatsu slash / ranged shot SFX across all 10 elements.
+   * Element-aware Tokusatsu slash / bow twang / dual-pistol plasma burst SFX across all 10 elements.
    */
   public playSlash(comboStep: 1 | 2 | 3, element: ElementId = 'pyro'): void {
     const ext = this.externalHowls.get(`slash_${element}`);
@@ -121,13 +143,92 @@ export class AudioManager {
     const { ctx, out } = ready;
     const now = ctx.currentTime;
 
+    // Dedicated Flora Verdant Longbow elastic string twang + feathered arrow release
+    if (element === 'flora') {
+      const twang = ctx.createOscillator();
+      twang.type = 'triangle';
+      twang.frequency.setValueAtTime(comboStep === 3 ? 340 : 280, now);
+      twang.frequency.exponentialRampToValueAtTime(118, now + 0.14);
+      const tGain = ctx.createGain();
+      tGain.gain.setValueAtTime(0.001, now);
+      tGain.gain.linearRampToValueAtTime(0.32, now + 0.01);
+      tGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      twang.connect(tGain);
+      tGain.connect(out);
+      twang.start(now);
+      twang.stop(now + 0.19);
+
+      if (this.noiseBuffer) {
+        const zip = ctx.createBufferSource();
+        zip.buffer = this.noiseBuffer;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.setValueAtTime(3400, now);
+        bp.frequency.exponentialRampToValueAtTime(1200, now + 0.12);
+        bp.Q.value = 3.2;
+        const zGain = ctx.createGain();
+        zGain.gain.setValueAtTime(0.32, now);
+        zGain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+        zip.connect(bp);
+        bp.connect(zGain);
+        zGain.connect(out);
+        zip.start(now);
+        zip.stop(now + 0.14);
+      }
+      return;
+    }
+
+    // Dedicated Umbra Twin Energy-Pistol plasma shots (comboStep 3 = double-tap twin salvo!)
+    if (element === 'umbra') {
+      const shots = comboStep === 3 ? 2 : 1;
+      for (let s = 0; s < shots; s++) {
+        const t = now + s * 0.068;
+        const pew = ctx.createOscillator();
+        pew.type = 'sawtooth';
+        pew.frequency.setValueAtTime(comboStep === 2 ? 1280 : 1480, t);
+        pew.frequency.exponentialRampToValueAtTime(210, t + 0.095);
+
+        const pGain = ctx.createGain();
+        pGain.gain.setValueAtTime(0.001, t);
+        pGain.gain.linearRampToValueAtTime(0.28, t + 0.008);
+        pGain.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+
+        pew.connect(pGain);
+        pGain.connect(out);
+        pew.start(t);
+        pew.stop(t + 0.12);
+
+        if (this.noiseBuffer) {
+          const snap = ctx.createBufferSource();
+          snap.buffer = this.noiseBuffer;
+          const hp = ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.setValueAtTime(2200, t);
+          const sGain = ctx.createGain();
+          sGain.gain.setValueAtTime(0.26, t);
+          sGain.gain.exponentialRampToValueAtTime(0.001, t + 0.055);
+          snap.connect(hp);
+          hp.connect(sGain);
+          sGain.connect(out);
+          snap.start(t);
+          snap.stop(t + 0.06);
+        }
+      }
+      return;
+    }
+
     if (this.noiseBuffer) {
       const noise = ctx.createBufferSource();
       noise.buffer = this.noiseBuffer;
 
       const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
-      const elemShift = element === 'volt' ? 650 : element === 'aqua' ? -250 : 0;
+      const elemShift =
+        element === 'volt' || element === 'lux'
+          ? 650
+          : element === 'aqua' || element === 'terra'
+            ? -250
+            : 0;
       const startFreq = (comboStep === 3 ? 1600 : comboStep === 2 ? 2100 : 1850) + elemShift;
       const endFreq = (comboStep === 3 ? 280 : 420) + Math.max(0, elemShift * 0.25);
       filter.frequency.setValueAtTime(Math.max(200, startFreq), now);
@@ -149,15 +250,15 @@ export class AudioManager {
       noise.stop(now + 0.26);
     }
 
-    // Distinct elemental blade tone
+    // Distinct elemental blade tone + bright steel shimmer harmonic
     const osc = ctx.createOscillator();
-    osc.type = element === 'volt' ? 'sawtooth' : element === 'aqua' ? 'sine' : 'triangle';
+    osc.type = element === 'volt' || element === 'solar' ? 'sawtooth' : element === 'aqua' ? 'sine' : 'triangle';
     const baseHz =
-      element === 'volt'
+      element === 'volt' || element === 'lux'
         ? comboStep === 3
           ? 640
           : 820
-        : element === 'aqua'
+        : element === 'aqua' || element === 'lunar'
           ? comboStep === 3
             ? 390
             : 520
@@ -176,6 +277,20 @@ export class AudioManager {
     oscGain.connect(out);
     osc.start(now);
     osc.stop(now + 0.19);
+
+    // Metallic sword shimmer harmonic
+    const ring = ctx.createOscillator();
+    ring.type = 'sine';
+    ring.frequency.setValueAtTime(comboStep === 3 ? 2640 : 2120, now);
+    ring.frequency.exponentialRampToValueAtTime(1180, now + 0.11);
+    const ringGain = ctx.createGain();
+    ringGain.gain.setValueAtTime(0.001, now);
+    ringGain.gain.linearRampToValueAtTime(comboStep === 3 ? 0.12 : 0.07, now + 0.008);
+    ringGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    ring.connect(ringGain);
+    ringGain.connect(out);
+    ring.start(now);
+    ring.stop(now + 0.13);
   }
 
   public playHitImpact(isCrit: boolean, isHeavy: boolean): void {
@@ -368,18 +483,19 @@ export class AudioManager {
   }
 
   /**
-   * Iconic Tokusatsu K-DRIVER mechanical belt latch click + crystalline Gem shimmer + jingle!
+   * Iconic Tokusatsu K-DRIVER mechanical belt latch click + 10-element Gem jingle + Electronic Driver voice!
    */
-  public playFormSwitch(element: ElementId): void {
+  public playFormSwitch(element: ElementId, announceVoice = true): void {
     const ready = this.ensureReady();
     if (!ready) return;
     const { ctx, out } = ready;
     const now = ctx.currentTime;
+    const spec = ELEMENT_DRIVER_VOICES[element];
 
     // 1. Crisp mechanical belt click transient
     const click = ctx.createOscillator();
     click.type = 'square';
-    click.frequency.setValueAtTime(1800, now);
+    click.frequency.setValueAtTime(1850, now);
     click.frequency.exponentialRampToValueAtTime(240, now + 0.025);
     const clickGain = ctx.createGain();
     clickGain.gain.setValueAtTime(0.28, now);
@@ -389,19 +505,12 @@ export class AudioManager {
     click.start(now);
     click.stop(now + 0.035);
 
-    // 2. Crystalline Gem chime + 3-note Tokusatsu form jingle
-    const notes =
-      element === 'pyro'
-        ? [587.33, 739.99, 880.0]
-        : element === 'volt'
-          ? [659.25, 880.0, 1318.5]
-          : [523.25, 659.25, 1046.5];
-
-    for (let i = 0; i < notes.length; i++) {
+    // 2. Crystalline Gem chime + 3-note Tokusatsu form jingle unique to all 10 elements
+    for (let i = 0; i < spec.notes.length; i++) {
       const t = now + 0.03 + i * 0.048;
       const osc = ctx.createOscillator();
-      osc.type = element === 'volt' ? 'sawtooth' : 'triangle';
-      osc.frequency.setValueAtTime(notes[i]!, t);
+      osc.type = spec.wave;
+      osc.frequency.setValueAtTime(spec.notes[i]!, t);
 
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.001, t);
@@ -412,6 +521,10 @@ export class AudioManager {
       gain.connect(out);
       osc.start(t);
       osc.stop(t + 0.18);
+    }
+
+    if (announceVoice) {
+      this.announceDriverVoice(spec.phrase, 0.92, 1.3);
     }
   }
 
@@ -558,16 +671,31 @@ export class AudioManager {
     osc.stop(now + 0.15);
   }
 
-  public playHenshinSuper(): void {
+  public playHenshinSuper(voiceCue: string | null = 'HENSHIN! SUPER DRIVE!'): void {
     const ready = this.ensureReady();
     if (!ready) return;
     const { ctx, out } = ready;
     const now = ctx.currentTime;
 
-    // Belt lock-in click + ascending Tokusatsu Henshin fanfare + activation shockwave
+    // Belt double-latch lock-in + ascending Tokusatsu Henshin fanfare + activation shockwave
+    for (let c = 0; c < 2; c++) {
+      const ct = now + c * 0.045;
+      const latch = ctx.createOscillator();
+      latch.type = 'square';
+      latch.frequency.setValueAtTime(c === 0 ? 1950 : 2400, ct);
+      latch.frequency.exponentialRampToValueAtTime(320, ct + 0.03);
+      const lGain = ctx.createGain();
+      lGain.gain.setValueAtTime(0.24, ct);
+      lGain.gain.exponentialRampToValueAtTime(0.001, ct + 0.035);
+      latch.connect(lGain);
+      lGain.connect(out);
+      latch.start(ct);
+      latch.stop(ct + 0.04);
+    }
+
     const fanfare = [392, 493.9, 587.3, 784, 1046.5];
     for (let i = 0; i < fanfare.length; i++) {
-      const t = now + i * 0.085;
+      const t = now + 0.06 + i * 0.082;
       const osc = ctx.createOscillator();
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(fanfare[i]!, t);
@@ -592,6 +720,48 @@ export class AudioManager {
     boomGain.connect(out);
     boom.start(now + 0.35);
     boom.stop(now + 0.92);
+
+    if (voiceCue) {
+      this.announceDriverVoice(voiceCue, 0.82, 1.18);
+    }
+  }
+
+  public playHenshinUltimate(): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    // Dramatic Ultimate Awakening harmonic rise + heroic brass chord + K-Driver voice!
+    const chord = [293.66, 440.0, 587.33, 739.99, 880.0, 1174.66];
+    for (let i = 0; i < chord.length; i++) {
+      const t = now + i * 0.065;
+      const osc = ctx.createOscillator();
+      osc.type = i % 2 === 0 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(chord[i]!, t);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.linearRampToValueAtTime(0.2, t + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(t);
+      osc.stop(t + 0.88);
+    }
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(140, now + 0.28);
+    sub.frequency.exponentialRampToValueAtTime(28, now + 1.05);
+    const sGain = ctx.createGain();
+    sGain.gain.setValueAtTime(0.75, now + 0.28);
+    sGain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+    sub.connect(sGain);
+    sGain.connect(out);
+    sub.start(now + 0.28);
+    sub.stop(now + 1.12);
+
+    this.announceDriverVoice('ULTIMATE AWAKENING!', 0.74, 1.12);
   }
 
   public playUltimateFinisher(): void {
@@ -603,7 +773,7 @@ export class AudioManager {
     const riser = ctx.createOscillator();
     riser.type = 'sawtooth';
     riser.frequency.setValueAtTime(140, now);
-    riser.frequency.exponentialRampToValueAtTime(1180, now + 1.05);
+    riser.frequency.exponentialRampToValueAtTime(1280, now + 1.05);
     const rGain = ctx.createGain();
     rGain.gain.setValueAtTime(0.02, now);
     rGain.gain.linearRampToValueAtTime(0.3, now + 1.0);
@@ -625,6 +795,127 @@ export class AudioManager {
       gain.connect(out);
       osc.start(now + 1.15);
       osc.stop(now + 2.45);
+    }
+
+    this.announceDriverVoice('MAXIMUM DRIVE! RIDER KICK!', 0.78, 1.16);
+  }
+
+  public playRiderKickImpact(): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    // Supersonic boot impact thunder + harmonic shock crack
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(220, now);
+    sub.frequency.exponentialRampToValueAtTime(28, now + 0.52);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.82, now);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.56);
+    sub.connect(subGain);
+    subGain.connect(out);
+    sub.start(now);
+    sub.stop(now + 0.58);
+
+    if (this.noiseBuffer) {
+      const crack = ctx.createBufferSource();
+      crack.buffer = this.noiseBuffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(1600, now);
+      bp.frequency.exponentialRampToValueAtTime(240, now + 0.35);
+      const cGain = ctx.createGain();
+      cGain.gain.setValueAtTime(0.55, now);
+      cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+      crack.connect(bp);
+      bp.connect(cGain);
+      cGain.connect(out);
+      crack.start(now);
+      crack.stop(now + 0.4);
+    }
+  }
+
+  public playWarpCounter(): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    // Iconic Tokusatsu Clock-Up / Warp Counter time-zip + gleaming steel slash chime
+    const zip = ctx.createOscillator();
+    zip.type = 'sawtooth';
+    zip.frequency.setValueAtTime(2200, now);
+    zip.frequency.exponentialRampToValueAtTime(280, now + 0.08);
+    zip.frequency.exponentialRampToValueAtTime(1760, now + 0.18);
+    const zGain = ctx.createGain();
+    zGain.gain.setValueAtTime(0.28, now);
+    zGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    zip.connect(zGain);
+    zGain.connect(out);
+    zip.start(now);
+    zip.stop(now + 0.24);
+
+    const chime = ctx.createOscillator();
+    chime.type = 'triangle';
+    chime.frequency.setValueAtTime(1318.5, now + 0.05);
+    chime.frequency.exponentialRampToValueAtTime(1975.5, now + 0.22);
+    const cGain = ctx.createGain();
+    cGain.gain.setValueAtTime(0.22, now + 0.05);
+    cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    chime.connect(cGain);
+    cGain.connect(out);
+    chime.start(now + 0.05);
+    chime.stop(now + 0.3);
+
+    this.announceDriverVoice('COUNTER!', 0.98, 1.38);
+  }
+
+  public playBossHazardErupt(bossId: string): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    const isBriar = bossId === 'sylvan_sovereign';
+    const osc = ctx.createOscillator();
+    osc.type = isBriar ? 'sawtooth' : 'triangle';
+    osc.frequency.setValueAtTime(isBriar ? 480 : 125, now);
+    osc.frequency.exponentialRampToValueAtTime(isBriar ? 110 : 34, now + 0.32);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.55, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+    osc.connect(gain);
+    gain.connect(out);
+    osc.start(now);
+    osc.stop(now + 0.38);
+
+    if (this.noiseBuffer) {
+      const burst = ctx.createBufferSource();
+      burst.buffer = this.noiseBuffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = isBriar ? 'bandpass' : 'lowpass';
+      filter.frequency.setValueAtTime(isBriar ? 1850 : 620, now);
+      const bGain = ctx.createGain();
+      bGain.gain.setValueAtTime(0.45, now);
+      bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      burst.connect(filter);
+      filter.connect(bGain);
+      bGain.connect(out);
+      burst.start(now);
+      burst.stop(now + 0.32);
+    }
+  }
+
+  public playStageOutcome(victory: boolean): void {
+    if (victory) {
+      this.playHenshinSuper('STAGE CLEAR!');
+    } else {
+      this.playBossPhase2();
+      this.announceDriverVoice('MISSION FAILED!', 0.68, 1.05);
     }
   }
 
@@ -650,6 +941,7 @@ export class AudioManager {
   public dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.cancelDriverSpeech();
     this.stopBgmScheduler();
     for (const h of this.externalHowls.values()) {
       h.unload();
@@ -779,6 +1071,46 @@ export class AudioManager {
       lGain.connect(out);
       lead.start(time);
       lead.stop(time + STEP_DURATION_SEC);
+    }
+  }
+
+  private announceDriverVoice(phrase: string, pitch = 0.86, rate = 1.24): void {
+    if (
+      this.muted ||
+      this.disposed ||
+      typeof window === 'undefined' ||
+      !('speechSynthesis' in window) ||
+      typeof SpeechSynthesisUtterance === 'undefined'
+    ) {
+      return;
+    }
+    try {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const utter = new SpeechSynthesisUtterance(phrase);
+      utter.lang = 'en-US';
+      utter.pitch = pitch;
+      utter.rate = rate;
+      utter.volume = 0.72;
+      const voices = synth.getVoices();
+      const preferred =
+        voices.find((v) => /^en[-_]/i.test(v.lang) && /(david|mark|google us english|daniel)/i.test(v.name)) ??
+        voices.find((v) => /^en[-_]/i.test(v.lang));
+      if (preferred) {
+        utter.voice = preferred;
+      }
+      synth.speak(utter);
+    } catch {
+      // Ignore Web Speech errors in restricted/headless contexts.
+    }
+  }
+
+  private cancelDriverSpeech(): void {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // Ignore cancel errors.
     }
   }
 

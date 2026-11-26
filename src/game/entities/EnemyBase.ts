@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { AssetKey, AssetLoader } from '../../engine/AssetLoader';
+import type { AssetKey, AssetLoader, OptionalCustomAssetKey } from '../../engine/AssetLoader';
 import { HumanoidBoneDriver } from '../../engine/HumanoidBoneDriver';
 import {
   bindPbrMaterials,
@@ -115,6 +115,8 @@ export class EnemyBase implements HurtboxTarget {
   protected readonly skeletalAnimator: SkeletalAnimator;
   protected readonly boneDriver: HumanoidBoneDriver;
   protected readonly baseVisualScale: number;
+  protected readonly usesDedicatedBossRig: boolean;
+  protected readonly bossAmbientEmissiveHex: number;
   protected readonly telegraphFillMat: THREE.MeshBasicMaterial;
   protected readonly shockwaveMat: THREE.MeshBasicMaterial;
   protected readonly ownedMaterials: THREE.Material[] = [];
@@ -161,13 +163,28 @@ export class EnemyBase implements HurtboxTarget {
     this.root.add(this.visualPivot);
 
     // Clone .glb monster rig (uses SkeletonUtils.clone automatically for Mixamo SkinnedMeshes!)
+    const optionalBossKey: OptionalCustomAssetKey | null =
+      config.id === 'magma_overlord'
+        ? 'boss_magma'
+        : config.id === 'sylvan_sovereign'
+          ? 'boss_sylvan'
+          : null;
+    const dedicatedBossRig = optionalBossKey ? assetLoader.cloneOptionalRig(optionalBossKey) : null;
+    this.usesDedicatedBossRig = dedicatedBossRig !== null;
+    this.bossAmbientEmissiveHex =
+      config.id === 'magma_overlord'
+        ? 0xc2410c
+        : config.id === 'sylvan_sovereign'
+          ? 0x047857
+          : 0x7f1d1d;
+
     const assetKey: AssetKey =
       config.tier === 'BOSS'
         ? 'enemy_boss'
         : config.tier === 'ELITE'
           ? 'enemy_brute'
           : 'enemy_grunt';
-    const cloned = assetLoader.cloneRig(assetKey);
+    const cloned = dedicatedBossRig ?? assetLoader.cloneRig(assetKey);
     const enemyModel = cloned.scene;
     this.baseVisualScale = cloned.isCustomExternal ? 1.0 : config.scale;
     if (!cloned.isCustomExternal) {
@@ -229,11 +246,17 @@ export class EnemyBase implements HurtboxTarget {
     this.guardShieldRing.visible = this.guard > 0;
     this.root.add(this.guardShieldRing);
 
-    // Phase 2 Crimson-Obsidian Halo (ignites on Boss Phase 2)
+    // Phase 2 Boss Aura Halo (distinct per Sector Boss!)
+    const haloColor =
+      config.id === 'magma_overlord'
+        ? 0xf97316
+        : config.id === 'sylvan_sovereign'
+          ? 0x10b981
+          : 0xf43f5e;
     this.phase2HaloMesh = new THREE.Mesh(
       new THREE.TorusGeometry(1.15, 0.06, 8, 28),
       new THREE.MeshBasicMaterial({
-        color: 0xf43f5e,
+        color: haloColor,
         transparent: true,
         opacity: 0.85,
         blending: THREE.AdditiveBlending,
@@ -747,14 +770,23 @@ export class EnemyBase implements HurtboxTarget {
       this.telegraphFillMesh.scale.setScalar(Math.max(0.05, t) * this.activeAttackRadius);
       this.telegraphFillMat.opacity = 0.16 + t * 0.38;
     } else {
-      this.bodyMat.color.set(this.bossPhase === 2 ? '#991b1b' : this.config.color);
-      this.bodyMat.emissive.setHex(this.bossPhase === 2 ? 0x7f1d1d : 0x000000);
-      this.bodyMat.emissiveIntensity = this.bossPhase === 2 ? 0.28 : 0;
+      const isDistinctVariantBoss =
+        this.config.tier === 'BOSS' &&
+        !this.usesDedicatedBossRig &&
+        (this.config.id === 'magma_overlord' || this.config.id === 'sylvan_sovereign');
+      const idleEmissiveHex =
+        this.bossPhase === 2 || isDistinctVariantBoss ? this.bossAmbientEmissiveHex : 0x000000;
+      const idleBodyEmissiveInt = this.bossPhase === 2 ? 0.3 : isDistinctVariantBoss ? 0.2 : 0;
+      const idleExtEmissiveInt = this.bossPhase === 2 ? 0.22 : isDistinctVariantBoss ? 0.16 : 0;
+
+      this.bodyMat.color.set(this.bossPhase === 2 && this.config.id === 'obsidian_kaijin' ? '#991b1b' : this.config.color);
+      this.bodyMat.emissive.setHex(idleEmissiveHex);
+      this.bodyMat.emissiveIntensity = idleBodyEmissiveInt;
       this.eyeMat.emissiveIntensity = this.bossPhase === 2 ? 2.6 : 1.85;
       for (let i = 0; i < this.externalMaterials.length; i++) {
         const m = this.externalMaterials[i]!;
-        m.emissive.setHex(this.bossPhase === 2 ? 0x7f1d1d : 0x000000);
-        m.emissiveIntensity = this.bossPhase === 2 ? 0.16 : 0;
+        m.emissive.setHex(idleEmissiveHex);
+        m.emissiveIntensity = idleExtEmissiveInt;
       }
       if (!usesSkeletalDriver) {
         if (this.aiState === 'ATTACK_ACTIVE') {
@@ -870,11 +902,23 @@ export class EnemyBase implements HurtboxTarget {
     }
   }
 
+  protected healHp(amount: number): number {
+    if (!this.isAlive || amount <= 0 || this.hp >= this.config.maxHp) return 0;
+    const before = this.hp;
+    this.hp = Math.min(this.config.maxHp, this.hp + Math.round(amount));
+    return this.hp - before;
+  }
+
+  protected onStaggerEntered(): void {
+    // Overridden by BossKaijin to interrupt active channels (e.g., Sanctuary Mend)
+  }
+
   protected enterStaggered(): void {
     this.aiState = 'STAGGERED';
     this.stateTimer = 0;
     this.attackHitbox.endSwing();
     this.hideTelegraph();
+    this.onStaggerEntered();
   }
 
   protected enterDead(): void {

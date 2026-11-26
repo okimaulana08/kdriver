@@ -318,29 +318,60 @@ export class HumanoidBoneDriver {
     }
 
     if (state === 'ULTIMATE_CINEMATIC') {
-      if (stateTime < 1.15) {
-        this.offsetHips(0, -0.12 + Math.sin(stateTime * 14) * 0.025, 0);
-        this.rotateBone('SpineUpper', -0.18, -0.45, 0);
-        this.rotateBone('RightArm', -2.35, -0.15, 0.25);
-        this.rotateBone('RightForeArm', -0.55, 0, 0);
-        this.rotateBone('LeftArm', -0.85, 0.35, -0.32);
-        this.rotateBone('LeftForeArm', -0.75, 0, 0);
-        this.rotateBone('LeftUpLeg', -0.38, 0, 0.08);
-        this.rotateBone('LeftLeg', 0.65, 0, 0);
-        this.rotateBone('RightUpLeg', 0.25, 0, -0.08);
-        this.rotateBone('RightLeg', 0.42, 0, 0);
-      } else if (stateTime < 2.2) {
-        const slashT = Math.min(1, (stateTime - 1.15) / 0.45);
-        this.offsetHips(0, Math.sin(slashT * Math.PI) * 0.45, 0);
-        this.rotateBone('Hips', THREE.MathUtils.lerp(-0.18, 0.35, slashT), 0, 0);
-        this.rotateBone('SpineUpper', 0.22, THREE.MathUtils.lerp(-0.65, 0.78, slashT), 0);
-        this.rotateBone('RightArm', THREE.MathUtils.lerp(-2.4, 0.45, slashT), -0.12, 0.42);
-        this.rotateBone('RightForeArm', -0.35, 0, 0);
-        this.rotateBone('LeftArm', -0.35, 0.35, -0.32);
-        this.rotateBone('LeftUpLeg', -0.55 * slashT, 0, 0);
-        this.rotateBone('LeftLeg', 0.85 * slashT, 0, 0);
-        this.rotateBone('RightUpLeg', 0.32 * slashT, 0, 0);
+      if (stateTime < 1.02) {
+        // Beat 1: Deep Rider Kick crouch-charge over glowing K-Driver belt
+        const charge = Math.min(1, stateTime / 0.85);
+        this.offsetHips(0, -0.22 * charge + Math.sin(stateTime * 16) * 0.02, -0.05 * charge);
+        this.rotateBone('Hips', 0.24 * charge, -0.28 * charge, 0);
+        this.rotateBone('SpineUpper', 0.16 * charge, -0.32 * charge, 0);
+        this.rotateBone('Head', -0.26 * charge, 0.45 * charge, 0);
+        this.rotateBone('RightArm', 0.35 * charge - 0.3, -0.35, 0.48);
+        this.rotateBone('RightForeArm', -0.75, 0, 0);
+        this.rotateBone('LeftArm', -0.82, 0.24, -0.36);
+        this.rotateBone('LeftForeArm', -0.95, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.68 * charge, 0, 0.1);
+        this.rotateBone('LeftLeg', 1.12 * charge, 0, 0);
+        this.rotateBone('RightUpLeg', 0.35 * charge, 0, -0.1);
+        this.rotateBone('RightLeg', 0.65 * charge, 0, 0);
+      } else if (stateTime < 1.3) {
+        // Beat 2a: Explosive skyward vault tuck before the Flying Rider Kick!
+        const vaultT = (stateTime - 1.02) / 0.28;
+        this.offsetHips(0, 0.18 * Math.sin(vaultT * Math.PI), 0);
+        this.rotateBone('Hips', THREE.MathUtils.lerp(0.25, -0.45, vaultT), 0, 0);
+        this.rotateBone('SpineUpper', 0.32 * (1 - vaultT), 0, 0);
+        this.rotateBone('Head', 0.22, 0, 0);
+        this.rotateBone('LeftArm', -1.25, 0.3, -0.5);
+        this.rotateBone('LeftForeArm', -1.1, 0, 0);
+        this.rotateBone('RightArm', -1.25, -0.3, 0.5);
+        this.rotateBone('RightForeArm', -1.1, 0, 0);
+        this.rotateBone('LeftUpLeg', -1.12, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.78, 0, 0);
+        this.rotateBone('RightUpLeg', -1.08, 0, -0.08);
+        this.rotateBone('RightLeg', 1.72, 0, 0);
+      } else if (stateTime < 2.22) {
+        // Beat 2b: ICONIC FLYING RIDER KICK! Right leg locked ramrod-straight forward, left knee tucked!
+        const landT = stateTime > 1.96 ? Math.min(1, (stateTime - 1.96) / 0.26) : 0;
+        const kickHold = 1 - landT;
+        this.offsetHips(0, -0.16 * landT, 0.06 * kickHold);
+        this.rotateBone('Hips', THREE.MathUtils.lerp(-0.56, 0.18, landT), -0.18 * kickHold, 0.08 * kickHold);
+        this.rotateBone('SpineLower', -0.14 * kickHold, 0.08 * kickHold, 0);
+        this.rotateBone('SpineUpper', -0.18 * kickHold + 0.12 * landT, 0.14 * kickHold, 0);
+        this.rotateBone('Head', 0.46 * kickHold - 0.12 * landT, 0.08 * kickHold, 0);
+        // Aerodynamic swept-back Kamen Rider arms
+        this.rotateBone('RightArm', THREE.MathUtils.lerp(0.54, -0.35, landT), -0.36, 0.58);
+        this.rotateBone('RightForeArm', -0.52, 0, 0);
+        this.rotateBone('LeftArm', THREE.MathUtils.lerp(0.62, -0.45, landT), 0.38, -0.58);
+        this.rotateBone('LeftForeArm', -0.58, 0, 0);
+        // Right leg: BLAZING EXTENDED RIDER KICK!
+        this.rotateBone('RightUpLeg', THREE.MathUtils.lerp(-1.22, -0.28, landT), 0.04, -0.05);
+        this.rotateBone('RightLeg', THREE.MathUtils.lerp(0.05, 0.52, landT), 0, 0);
+        this.rotateBone('RightFoot', THREE.MathUtils.lerp(0.42, -0.15, landT), 0, 0);
+        // Left leg: Classic tucked aerial kick counterbalance
+        this.rotateBone('LeftUpLeg', THREE.MathUtils.lerp(-1.08, -0.42, landT), 0, 0.08);
+        this.rotateBone('LeftLeg', THREE.MathUtils.lerp(1.88, 0.72, landT), 0, 0);
+        this.rotateBone('LeftFoot', 0.24 * kickHold, 0, 0);
       } else {
+        // Beat 3: Iconic Kamen Rider Back-Turned Explosion Pose!
         this.rotateBone('Hips', 0, Math.PI, 0);
         this.rotateBone('SpineUpper', 0, 0.24, 0);
         this.rotateBone('Head', 0, -0.35, 0);
@@ -349,7 +380,7 @@ export class HumanoidBoneDriver {
         this.rotateBone('LeftArm', -0.42, 0.22, -0.44);
         this.rotateBone('LeftForeArm', -0.82, 0, 0);
       }
-      this.commitPose(dt, 18);
+      this.commitPose(dt, 22);
       return;
     }
 
@@ -485,16 +516,69 @@ export class HumanoidBoneDriver {
       return;
     }
 
+    const isPolearm =
+      activeElementId === 'aqua' || activeElementId === 'solar' || activeElementId === 'lux';
+    const isBow = activeElementId === 'flora';
+    const isDualGuns = activeElementId === 'umbra';
+
     if (state === 'ATTACK_1') {
+      if (isBow) {
+        // Flora Verdant Longbow: crisp sideways archery profile, Left arm aims bow straight forward, Right hand draws & releases!
+        const draw = this.smoothSwingCurve(p, 0.08, 0.36);
+        const release = this.smoothSwingCurve(p, 0.4, 0.72);
+        this.offsetHips(0, -0.09, -0.03 * release);
+        this.rotateBone('Hips', 0.08, -0.42, 0);
+        this.rotateBone('SpineUpper', 0.06, -0.48 + release * 0.14, 0);
+        this.rotateBone('Head', -0.05, 0.86 - release * 0.12, 0);
+        // Bow hand (LeftArm): straight forward toward target
+        this.rotateBone('LeftArm', -1.42 - release * 0.12, 0.72, -0.12);
+        this.rotateBone('LeftForeArm', -0.12, 0, 0);
+        // String hand (RightArm): draws to cheek then snaps cleanly back on loose
+        this.rotateBone(
+          'RightArm',
+          THREE.MathUtils.lerp(-1.12, -1.36, draw) + release * 0.42,
+          THREE.MathUtils.lerp(-0.22, -0.68, draw) - release * 0.32,
+          0.32
+        );
+        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.85, -1.78, draw) + release * 1.15, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.34, 0.22, 0.1);
+        this.rotateBone('LeftLeg', 0.46, 0, 0);
+        this.rotateBone('RightUpLeg', 0.22, -0.22, -0.1);
+        this.rotateBone('RightLeg', 0.34, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
+      if (isDualGuns) {
+        // Umbra Twin Pistols: sharp Right-Hand Gun-Kata snap-shot + muzzle kick while Left guards!
+        const recoil = Math.sin(Math.min(1, Math.max(0, (p - 0.18) / 0.42)) * Math.PI);
+        this.offsetHips(0, -0.09, -0.04 * recoil);
+        this.rotateBone('Hips', 0.1, 0.24, 0);
+        this.rotateBone('SpineUpper', 0.08, 0.34, 0);
+        this.rotateBone('Head', -0.06, -0.52, 0);
+        this.rotateBone('RightArm', -1.46 - recoil * 0.28, -0.18, 0.18);
+        this.rotateBone('RightForeArm', -0.12 - recoil * 0.24, 0, 0);
+        this.rotateBone('LeftArm', -0.55, 0.34, -0.44);
+        this.rotateBone('LeftForeArm', -1.15, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.38, 0, 0.08);
+        this.rotateBone('LeftLeg', 0.52, 0, 0);
+        this.rotateBone('RightUpLeg', 0.28, 0, -0.08);
+        this.rotateBone('RightLeg', 0.36, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
       const swing = this.smoothSwingCurve(p, 0.2, 0.58);
       this.offsetHips(0, -0.1, 0.06 * swing);
       this.rotateBone('Hips', 0.14, THREE.MathUtils.lerp(-0.35, 0.42, swing), 0);
       this.rotateBone('SpineUpper', 0.12, THREE.MathUtils.lerp(-0.55, 0.68, swing), 0);
       this.rotateBone('Head', -0.1, THREE.MathUtils.lerp(0.45, -0.55, swing), 0);
 
-      if (activeElementId === 'aqua') {
-        this.rotateBone('RightArm', THREE.MathUtils.lerp(0.35, -1.45, swing), -0.12, 0.48);
-        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-1.35, -0.12, swing), 0, 0);
+      if (isPolearm) {
+        this.rotateBone('RightArm', THREE.MathUtils.lerp(0.35, -1.48, swing), -0.12, 0.44);
+        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-1.35, -0.1, swing), 0, 0);
+        this.rotateBone('LeftArm', THREE.MathUtils.lerp(-0.25, -1.15, swing), 0.28, -0.35);
+        this.rotateBone('LeftForeArm', THREE.MathUtils.lerp(-1.1, -0.35, swing), 0, 0);
       } else {
         this.rotateBone(
           'RightArm',
@@ -503,9 +587,9 @@ export class HumanoidBoneDriver {
           THREE.MathUtils.lerp(0.12, 0.58, swing)
         );
         this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.85, -0.25, swing), 0, 0);
+        this.rotateBone('LeftArm', 0.15, 0.32, -0.42);
+        this.rotateBone('LeftForeArm', -0.85, 0, 0);
       }
-      this.rotateBone('LeftArm', 0.15, 0.32, -0.42);
-      this.rotateBone('LeftForeArm', -0.85, 0, 0);
       this.rotateBone('LeftUpLeg', -0.42, 0, 0.08);
       this.rotateBone('LeftLeg', 0.58, 0, 0);
       this.rotateBone('RightUpLeg', 0.35, 0, -0.08);
@@ -515,6 +599,50 @@ export class HumanoidBoneDriver {
     }
 
     if (state === 'ATTACK_2') {
+      if (isBow) {
+        // Flora Agile Crouched Quick-Shot
+        const draw = this.smoothSwingCurve(p, 0.06, 0.32);
+        const release = this.smoothSwingCurve(p, 0.36, 0.68);
+        this.offsetHips(0, -0.22, 0.04);
+        this.rotateBone('Hips', 0.18, -0.36, 0);
+        this.rotateBone('SpineUpper', 0.14, -0.42 + release * 0.16, 0);
+        this.rotateBone('Head', -0.18, 0.74, 0);
+        this.rotateBone('LeftArm', -1.48 - release * 0.14, 0.62, -0.14);
+        this.rotateBone('LeftForeArm', -0.12, 0, 0);
+        this.rotateBone(
+          'RightArm',
+          THREE.MathUtils.lerp(-1.05, -1.38, draw) + release * 0.5,
+          THREE.MathUtils.lerp(-0.18, -0.65, draw) - release * 0.28,
+          0.34
+        );
+        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.8, -1.72, draw) + release * 1.1, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.64, 0.14, 0.12);
+        this.rotateBone('LeftLeg', 0.96, 0, 0);
+        this.rotateBone('RightUpLeg', 0.36, -0.14, -0.12);
+        this.rotateBone('RightLeg', 0.68, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
+      if (isDualGuns) {
+        // Umbra Left-Hand Cross-Body Gun-Kata Snap-Shot!
+        const recoil = Math.sin(Math.min(1, Math.max(0, (p - 0.18) / 0.42)) * Math.PI);
+        this.offsetHips(0, -0.1, -0.04 * recoil);
+        this.rotateBone('Hips', 0.1, -0.26, 0);
+        this.rotateBone('SpineUpper', 0.08, -0.36, 0);
+        this.rotateBone('Head', -0.06, 0.54, 0);
+        this.rotateBone('LeftArm', -1.48 - recoil * 0.28, 0.18, -0.18);
+        this.rotateBone('LeftForeArm', -0.12 - recoil * 0.24, 0, 0);
+        this.rotateBone('RightArm', -0.48, -0.34, 0.44);
+        this.rotateBone('RightForeArm', -1.12, 0, 0);
+        this.rotateBone('RightUpLeg', -0.4, 0, -0.08);
+        this.rotateBone('RightLeg', 0.55, 0, 0);
+        this.rotateBone('LeftUpLeg', 0.26, 0, 0.08);
+        this.rotateBone('LeftLeg', 0.36, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
       const swing = this.smoothSwingCurve(p, 0.2, 0.6);
       this.offsetHips(0, -0.11, 0.08 * swing);
       this.rotateBone('Hips', 0.16, THREE.MathUtils.lerp(0.45, -0.45, swing), 0);
@@ -529,7 +657,7 @@ export class HumanoidBoneDriver {
       );
       this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.55, -0.22, swing), 0, 0);
 
-      if (activeElementId === 'volt') {
+      if (activeElementId === 'volt' || activeElementId === 'aero') {
         this.rotateBone(
           'LeftArm',
           THREE.MathUtils.lerp(-1.0, -0.55, swing),
@@ -550,6 +678,51 @@ export class HumanoidBoneDriver {
     }
 
     if (state === 'ATTACK_3') {
+      if (isBow) {
+        // Flora Aerial Tri-Arrow Fan Volley Leap!
+        const jumpArc = Math.sin(Math.min(1, p * 1.25) * Math.PI) * 0.34;
+        const draw = this.smoothSwingCurve(p, 0.1, 0.38);
+        const release = this.smoothSwingCurve(p, 0.42, 0.78);
+        this.offsetHips(0, jumpArc - 0.06, -0.08 * release);
+        this.rotateBone('Hips', 0.14, -0.44, 0);
+        this.rotateBone('SpineUpper', 0.12, -0.48 + release * 0.2, 0);
+        this.rotateBone('Head', -0.08, 0.88, 0);
+        this.rotateBone('LeftArm', -1.26 - release * 0.18, 0.72, -0.1);
+        this.rotateBone('LeftForeArm', -0.1, 0, 0);
+        this.rotateBone(
+          'RightArm',
+          THREE.MathUtils.lerp(-1.1, -1.42, draw) + release * 0.6,
+          THREE.MathUtils.lerp(-0.2, -0.78, draw) - release * 0.34,
+          0.32
+        );
+        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.85, -1.85, draw) + release * 1.35, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.68, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.18, 0, 0);
+        this.rotateBone('RightUpLeg', 0.25, 0, -0.08);
+        this.rotateBone('RightLeg', 0.65, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
+      if (isDualGuns) {
+        // Umbra Twin-Gun Equilibrium Full Salvo! Both pistols aimed forward firing double-burst!
+        const recoil = Math.abs(Math.sin(Math.min(1, p * 2.4) * Math.PI));
+        this.offsetHips(0, -0.14, -0.06 * recoil);
+        this.rotateBone('Hips', 0.12, 0, 0);
+        this.rotateBone('SpineUpper', 0.08 - recoil * 0.08, 0, 0);
+        this.rotateBone('Head', -0.1, 0, 0);
+        this.rotateBone('RightArm', -1.48 - recoil * 0.24, -0.24, 0.18);
+        this.rotateBone('RightForeArm', -0.14 - recoil * 0.2, 0, 0);
+        this.rotateBone('LeftArm', -1.48 - recoil * 0.24, 0.24, -0.18);
+        this.rotateBone('LeftForeArm', -0.14 - recoil * 0.2, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.46, 0.14, 0.12);
+        this.rotateBone('LeftLeg', 0.62, 0, 0);
+        this.rotateBone('RightUpLeg', -0.46, -0.14, -0.12);
+        this.rotateBone('RightLeg', 0.62, 0, 0);
+        this.commitPose(dt, blendRate);
+        return;
+      }
+
       const swing = this.smoothSwingCurve(p, 0.24, 0.62);
       const jumpArc = Math.sin(Math.min(1, p * 1.35) * Math.PI) * 0.24;
       this.offsetHips(0, jumpArc - 0.08, 0.08 * swing);

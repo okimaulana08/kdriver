@@ -41,6 +41,16 @@
     "targetHeightMeters": 2.75,
     "animationUrls": {}
   },
+  "boss_magma": {
+    "modelUrl": "/assets/models/custom/boss_magma.glb",
+    "targetHeightMeters": 2.85,
+    "animationUrls": {}
+  },
+  "boss_sylvan": {
+    "modelUrl": "/assets/models/custom/boss_sylvan.glb",
+    "targetHeightMeters": 2.85,
+    "animationUrls": {}
+  },
   "weapon_pyro": {
     "modelUrl": "/assets/models/custom/weapon_pyro.glb",
     "targetHeightMeters": 2.1

@@ -21,6 +21,10 @@ import {
   pickBossDropUnlock,
 } from '../game/ProgressionSystem';
 import {
+  BOSS_SIGNATURE_PROFILES,
+  getBossSignatureProfile,
+} from '../game/entities/BossKaijin';
+import {
   PET_ASSIST_STRIKE_DURATION_SEC,
   PET_AUTO_SHOT_INTERVAL_SEC,
   PET_COMPANION_DURATION_SEC,
@@ -33,6 +37,8 @@ import {
   SUPER_FORM_MAX_DURATION_SEC,
   ULTIMATE_FORM_DURATION_SEC,
   ULTIMATE_FORM_MAX_DURATION_SEC,
+  WARP_COUNTER_DAMAGE_MULTIPLIER,
+  WARP_COUNTER_WINDOW_SEC,
 } from '../game/entities/PlayerRider';
 import { DEFAULT_SAVE_RECORD, StageManager } from '../game/StageManager';
 import type { SaveRecord } from '../game/types/schema';
@@ -222,5 +228,28 @@ describe('Phase 5 Expansion: 10 Elements, RANGED, Lazy Arenas, Progression & Gam
     expect(PET_POST_FOLLOW_COOLDOWN_SEC).toBe(20);
     expect(PET_AUTO_SHOT_INTERVAL_SEC).toBeGreaterThanOrEqual(1.0);
     expect(PET_AUTO_SHOT_INTERVAL_SEC).toBeLessThanOrEqual(2.0);
+    expect(WARP_COUNTER_WINDOW_SEC).toBeGreaterThanOrEqual(1.0);
+    expect(WARP_COUNTER_DAMAGE_MULTIPLIER).toBeGreaterThan(1.5);
+  });
+
+  it('defines distinct Sector Boss signature profiles & floor hazards for Magma Overlord and Sylvan Sovereign', () => {
+    expect(Object.keys(BOSS_SIGNATURE_PROFILES)).toEqual(
+      expect.arrayContaining(['obsidian_kaijin', 'magma_overlord', 'sylvan_sovereign'])
+    );
+
+    const magma = getBossSignatureProfile('magma_overlord');
+    expect(magma.phase1Patterns).toContain('MAGMA_FISSURES');
+    expect(magma.phase2ClosePatterns).toContain('MOLTEN_RING');
+    expect(magma.hazardElement).toBe('pyro');
+
+    const sylvan = getBossSignatureProfile('sylvan_sovereign');
+    expect(sylvan.phase1Patterns).toContain('BRIAR_SURGE');
+    expect(sylvan.phase2ClosePatterns).toContain('SANCTUARY_MEND');
+    expect(sylvan.hazardElement).toBe('flora');
+
+    // Enforce GEMINI.md Rule #3: every enemy telegraph >= 0.45s
+    for (const cfg of Object.values(ENEMY_CONFIGS)) {
+      expect(cfg.telegraphDurationSec).toBeGreaterThanOrEqual(0.45);
+    }
   });
 });

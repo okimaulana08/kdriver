@@ -48,6 +48,7 @@ export function CombatHUD() {
   const canActivateSuper = useGameStore((s) => s.canActivateSuper);
   const canActivateUltimateForm = useGameStore((s) => s.canActivateUltimateForm);
   const canActivateUltimate = useGameStore((s) => s.canActivateUltimate);
+  const warpCounterReady = useGameStore((s) => s.warpCounterReady);
   const ultimateBannerTitle = useGameStore((s) => s.ultimateBannerTitle);
   const finisherCinematicId = useGameStore((s) => s.finisherCinematicId);
   const finisherCinematicElement = useGameStore((s) => s.finisherCinematicElement);
@@ -286,9 +287,14 @@ export function CombatHUD() {
         </div>
       )}
 
-      {/* Contextual [F] Henshin / Ultimate Evolution & [R] Instant Finisher Callouts */}
-      {(canActivateSuper || canActivateUltimateForm || canActivateUltimate) && (
+      {/* Contextual [F] Henshin / Ultimate Evolution, [R] Instant Finisher & [LMB] Warp Counter Callouts */}
+      {(canActivateSuper || canActivateUltimateForm || canActivateUltimate || warpCounterReady) && (
         <div className="fixed inset-x-0 bottom-30 flex flex-wrap items-center justify-center gap-3">
+          {warpCounterReady && (
+            <div className="animate-bounce rounded-xl border-2 border-cyan-300 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-cyan-200 uppercase shadow-[0_0_28px_rgba(34,211,238,0.75)]">
+              ⚡ [LMB] WARP COUNTER! (CRIT 1.65×)
+            </div>
+          )}
           {canActivateSuper && (
             <div className="animate-pulse rounded-xl border-2 border-amber-300 bg-slate-950/90 px-5 py-2 font-mono text-sm font-black tracking-widest text-amber-300 uppercase shadow-[0_0_28px_rgba(251,191,36,0.65)]">
               ⚡ PRESS [F] — HENSHIN SUPER FORM!

@@ -38,7 +38,11 @@ import { BossKaijin } from '../game/entities/BossKaijin';
 import { EnemyBase } from '../game/entities/EnemyBase';
 import { GemShardPool } from '../game/entities/GemShardPool';
 import { PetEntity } from '../game/entities/PetEntity';
-import { PlayerRider, type PlayerDesiredMovement } from '../game/entities/PlayerRider';
+import {
+  PlayerRider,
+  WARP_COUNTER_DAMAGE_MULTIPLIER,
+  type PlayerDesiredMovement,
+} from '../game/entities/PlayerRider';
 import type {
   ElementId,
   FloatingTextKind,
@@ -104,6 +108,7 @@ export class GameApp {
 
   private readonly enemies: EnemyBase[] = [];
   private lockedEnemy: EnemyBase | null = null;
+  private lastPerfectDodgeAttacker: EnemyBase | null = null;
   private nextEnemyUid = 1;
 
   private pmremRenderTarget: THREE.WebGLRenderTarget | null = null;
@@ -420,7 +425,7 @@ export class GameApp {
     store.triggerWaveBanner(stage.name.toUpperCase(), stage.subtitle.toUpperCase(), stage.accentColor);
 
     this.updateBgmIntensity('COMBAT');
-    this.audio.playHenshinSuper();
+    this.audio.playHenshinSuper('HENSHIN!');
     this.particlePool.emitElementBurst(store.loadoutOrder[0], 0, 1.1, 3.5, 42, 1.4);
   }
 
@@ -835,6 +840,7 @@ export class GameApp {
     if (playerEvents.ultimateExplosionPulseThisStep) this.triggerUltimateBackExplosionVfx();
     if (playerEvents.switchedToElement) this.handleFormSwitchEvent(playerEvents.switchedToElement);
     if (playerEvents.startedSkillElement) this.handleSkillStartEvent(playerEvents.startedSkillElement);
+    if (playerEvents.triggeredWarpCounter) this.handleWarpCounterEvent();
     if (playerEvents.startedSwingStep !== 0) {
       const elemId = this.player.currentElementId;
       this.audio.playSlash(playerEvents.startedSwingStep, elemId);
@@ -1036,9 +1042,16 @@ export class GameApp {
           this.scratchTargetSnapshot.y,
           this.scratchTargetSnapshot.z
         );
-        useGameStore
-          .getState()
-          .triggerWaveBanner('PHASE 2 — OBSIDIAN OVERDRIVE!', 'DARK ENERGY UNLEASHED', '#f43f5e');
+        if (enemy instanceof BossKaijin) {
+          const prof = enemy.signatureProfile;
+          useGameStore
+            .getState()
+            .triggerWaveBanner(prof.phase2Title, prof.phase2Subtitle, prof.phase2BannerColor);
+        } else {
+          useGameStore
+            .getState()
+            .triggerWaveBanner('PHASE 2 — OBSIDIAN OVERDRIVE!', 'DARK ENERGY UNLEASHED', '#f43f5e');
+        }
       }
       if (ev.hitPlayerDamage > 0) {
         enemy.getPosition(this.scratchTargetSnapshot);
@@ -1046,7 +1059,8 @@ export class GameApp {
           ev.hitPlayerDamage,
           this.scratchCurrPos.x - this.scratchTargetSnapshot.x,
           this.scratchCurrPos.z - this.scratchTargetSnapshot.z,
-          ev.hitPlayerHeavy
+          ev.hitPlayerHeavy,
+          enemy
         );
       }
       if (ev.burnTickDamage > 0) {
@@ -1095,7 +1109,58 @@ export class GameApp {
       if (enemy instanceof BossKaijin && !freezeEnemies) {
         const projHit = enemy.stepProjectiles(fixedDt, this.player);
         if (projHit.damage > 0) {
-          this.resolveIncomingHitOnPlayer(projHit.damage, projHit.dirX, projHit.dirZ, false);
+          this.resolveIncomingHitOnPlayer(projHit.damage, projHit.dirX, projHit.dirZ, false, enemy);
+        }
+
+        const hazardStep = enemy.stepHazards(fixedDt, this.player);
+        if (hazardStep.eruptedCount > 0) {
+          this.audio.playBossHazardErupt(enemy.config.id);
+          this.cameraRig.addShake(0.32, 0.22);
+          this.elementSkillVfx.spawnExplosionPillar(
+            enemy.signatureProfile.hazardElement,
+            hazardStep.lastEruptX,
+            hazardStep.lastEruptZ,
+            2.35
+          );
+        }
+        if (hazardStep.damage > 0) {
+          this.resolveIncomingHitOnPlayer(
+            hazardStep.damage,
+            hazardStep.dirX,
+            hazardStep.dirZ,
+            hazardStep.isHeavy,
+            enemy
+          );
+        }
+        if (hazardStep.healedBossAmount > 0) {
+          enemy.getPosition(this.scratchTargetSnapshot);
+          this.particlePool.emitElementBurst(
+            'flora',
+            this.scratchTargetSnapshot.x,
+            this.scratchTargetSnapshot.y + 0.6,
+            this.scratchTargetSnapshot.z,
+            26,
+            1.1
+          );
+          this.emitFloatingTextAtWorld(
+            this.scratchTargetSnapshot.x,
+            this.scratchTargetSnapshot.y + 1.6,
+            this.scratchTargetSnapshot.z,
+            `+${hazardStep.healedBossAmount} HP`,
+            'heal',
+            'SANCTUARY MEND'
+          );
+        }
+        if (hazardStep.channelInterrupted) {
+          enemy.getPosition(this.scratchTargetSnapshot);
+          this.emitFloatingTextAtWorld(
+            this.scratchTargetSnapshot.x,
+            this.scratchTargetSnapshot.y + 1.8,
+            this.scratchTargetSnapshot.z,
+            'INTERRUPTED!',
+            'dodge',
+            'MEND BROKEN'
+          );
         }
       }
 
@@ -1122,7 +1187,7 @@ export class GameApp {
     const bannerColor =
       wave.waveNumber === 3 ? '#f43f5e' : wave.waveNumber === 2 ? '#a855f7' : '#38bdf8';
     store.triggerWaveBanner(wave.title, wave.subtitle, bannerColor);
-    this.audio.playFormSwitch(this.player.currentElementId);
+    this.audio.playFormSwitch(this.player.currentElementId, false);
 
     const flatIds: EnemyConfigId[] = [];
     for (let i = 0; i < wave.spawns.length; i++) {
@@ -1151,6 +1216,7 @@ export class GameApp {
       this.scene.add(enemy.root);
       if (enemy instanceof BossKaijin) {
         this.scene.add(enemy.projectileGroup);
+        this.scene.add(enemy.hazardGroup);
       }
       this.enemies.push(enemy);
 
@@ -1219,7 +1285,7 @@ export class GameApp {
     if (!this.player) return;
     const elemId = this.player.currentElementId;
     const cfg = getElementConfig(elemId);
-    this.audio.playUltimateFinisher();
+    this.audio.playHenshinUltimate();
     this.cameraRig.addShake(0.5, 0.4);
     this.player.getPosition(this.scratchOriginSnapshot);
     this.elementSkillVfx.spawnFinisherClimax(
@@ -1308,6 +1374,7 @@ export class GameApp {
     this.elementSkillVfx.spawnFinisherClimax(elemId, impactX, impactZ, 12.5);
     this.loop.triggerHitStop(0.14);
     this.cameraRig.addShake(0.6, 0.45);
+    this.audio.playRiderKickImpact();
     this.audio.playReaction('STEAM_BURST');
 
     const finisherMult = this.player.wasFinisherCastFromUltimate ? 7.8 : 6.2;
@@ -1589,6 +1656,73 @@ export class GameApp {
     }
   }
 
+  private handleWarpCounterEvent(): void {
+    if (!this.player) return;
+    const target =
+      this.lastPerfectDodgeAttacker && this.lastPerfectDodgeAttacker.isAlive
+        ? this.lastPerfectDodgeAttacker
+        : this.lockedEnemy && this.lockedEnemy.isAlive
+          ? this.lockedEnemy
+          : this.findPriorityTarget();
+    this.lastPerfectDodgeAttacker = null;
+
+    if (!target || !target.isAlive) return;
+
+    const elemId = this.player.currentElementId;
+    this.player.getPosition(this.scratchOriginSnapshot);
+    this.particlePool.emitElementBurst(
+      elemId,
+      this.scratchOriginSnapshot.x,
+      this.scratchOriginSnapshot.y + 0.5,
+      this.scratchOriginSnapshot.z,
+      20,
+      0.85
+    );
+
+    target.getPosition(this.scratchTargetSnapshot);
+    const targetYaw = target.root.rotation.y;
+    const warpDist = target.radius + 1.45;
+    let warpX = this.scratchTargetSnapshot.x - Math.sin(targetYaw) * warpDist;
+    let warpZ = this.scratchTargetSnapshot.z - Math.cos(targetYaw) * warpDist;
+    const maxR = ARENA_RADIUS - 1.5;
+    const radial = Math.hypot(warpX, warpZ);
+    if (radial > maxR && radial > 0.001) {
+      const s = maxR / radial;
+      warpX *= s;
+      warpZ *= s;
+    }
+
+    this.physics.resetPlayerPosition(warpX, warpZ);
+    this.physics.getPlayerPosition(this.scratchCurrPos);
+    this.scratchPrevPos.copy(this.scratchCurrPos);
+    this.player.root.position.copy(this.scratchCurrPos);
+    this.player.faceToward(this.scratchTargetSnapshot.x, this.scratchTargetSnapshot.z);
+
+    this.audio.playWarpCounter();
+    this.cameraRig.addShake(0.32, 0.2);
+    this.particlePool.emitElementBurst(
+      elemId,
+      this.scratchCurrPos.x,
+      this.scratchCurrPos.y + 0.6,
+      this.scratchCurrPos.z,
+      26,
+      1.05
+    );
+
+    this.player.addDriverGauge(12);
+    this.applyElementalStrikeOnEnemy(
+      target,
+      elemId,
+      WARP_COUNTER_DAMAGE_MULTIPLIER,
+      38,
+      80,
+      true,
+      'WARP COUNTER!',
+      false,
+      true
+    );
+  }
+
   private applyElementalStrikeOnEnemy(
     enemy: EnemyBase,
     elementId: ElementId,
@@ -1597,7 +1731,8 @@ export class GameApp {
     hitStopMs: number,
     isHeavy: boolean,
     label: string | undefined,
-    isUltimateFinisher: boolean
+    isUltimateFinisher: boolean,
+    forceGuaranteedCrit = false
   ): void {
     if (!this.player || !enemy.isAlive) return;
     const cfg = getElementConfig(elementId);
@@ -1616,6 +1751,7 @@ export class GameApp {
       targetStaggered: enemy.isStaggered,
       targetStatuses: currentStatuses,
       ignoresDefense: reactionSpec?.ignoresDefense ?? false,
+      critRoll: forceGuaranteedCrit ? 0 : undefined,
     });
 
     const guardDamage = baseGuardDamage * (reactionSpec ? reactionSpec.guardDamageMultiplier : 1.0);
@@ -1837,13 +1973,15 @@ export class GameApp {
     damage: number,
     dirX: number,
     dirZ: number,
-    isHeavy: boolean
+    isHeavy: boolean,
+    attacker?: EnemyBase
   ): void {
     if (!this.player) return;
     const len = Math.hypot(dirX, dirZ) || 1;
     const outcome = this.player.receiveEnemyAttack(damage, dirX / len, dirZ / len, isHeavy);
 
     if (outcome === 'PERFECT_DODGE') {
+      this.lastPerfectDodgeAttacker = attacker ?? null;
       this.loop.setTimeScale(PERFECT_DODGE_SLOWMO_SCALE, PERFECT_DODGE_SLOWMO_DURATION);
       this.player.addDriverGauge(PERFECT_DODGE_GAUGE_BONUS);
       this.stageManager.recordPerfectDodge();
@@ -1857,7 +1995,7 @@ export class GameApp {
         this.scratchCurrPos.z,
         'PERFECT DODGE!',
         'dodge',
-        `+${PERFECT_DODGE_GAUGE_BONUS} GAUGE`
+        'WARP COUNTER READY!'
       );
     } else if (outcome === 'DAMAGED') {
       this.stageManager.recordDamageTaken(damage);
@@ -1894,8 +2032,8 @@ export class GameApp {
     this.cameraRig.setMode('STAGE_OUTCOME', this.player.facingYaw);
 
     this.player.getPosition(this.scratchOriginSnapshot);
+    this.audio.playStageOutcome(victory);
     if (victory) {
-      this.audio.playHenshinSuper();
       this.cameraRig.addShake(0.26, 0.25);
       this.particlePool.emitReactionBurst(
         'ELECTRO_SURGE',
@@ -1904,7 +2042,6 @@ export class GameApp {
         this.scratchOriginSnapshot.z
       );
     } else {
-      this.audio.playBossPhase2();
       this.cameraRig.addShake(0.4, 0.35);
       this.particlePool.emitReactionBurst(
         'OVERLOAD',
@@ -1976,6 +2113,7 @@ export class GameApp {
       canActivateSuper: this.player.canActivateSuperForm(),
       canActivateUltimateForm: this.player.canActivateUltimateForm(bossStaggered),
       canActivateUltimate: this.player.canActivateFinisher(),
+      warpCounterReady: this.player.isWarpCounterReady,
       ultimateBannerTitle: ultimateTitle,
       comboCount: this.comboCount,
       isLockedOn: this.cameraRig.isLockedOn && this.lockedEnemy !== null,
@@ -2047,9 +2185,13 @@ export class GameApp {
     if (this.lockedEnemy === enemy) {
       this.lockedEnemy = null;
     }
+    if (this.lastPerfectDodgeAttacker === enemy) {
+      this.lastPerfectDodgeAttacker = null;
+    }
     this.scene.remove(enemy.root);
     if (enemy instanceof BossKaijin) {
       this.scene.remove(enemy.projectileGroup);
+      this.scene.remove(enemy.hazardGroup);
     }
     enemy.dispose();
     this.enemies.splice(index, 1);
@@ -2057,6 +2199,7 @@ export class GameApp {
 
   private disposeAllEnemies(): void {
     this.lockedEnemy = null;
+    this.lastPerfectDodgeAttacker = null;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       this.removeAndDisposeEnemyAt(i);
     }

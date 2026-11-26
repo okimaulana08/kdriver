@@ -48,6 +48,8 @@ export const FINISHER_COOLDOWN_SEC = 7.0;
 export const FINISHER_SUPER_DURATION_COST_SEC = 7.0;
 export const ULTIMATE_UNLOCK_REMAINING_SEC = 10.0;
 export const ULTIMATE_IMPACT_TIME_SEC = 1.5;
+export const WARP_COUNTER_WINDOW_SEC = 1.45;
+export const WARP_COUNTER_DAMAGE_MULTIPLIER = 1.65;
 const BASIC_GAUGE_ACCELERATION = 1.45;
 const SUPER_OVERDRIVE_MULTIPLIER = 2.8;
 const SUPER_PASSIVE_OVERDRIVE_PER_SEC = 2.2;
@@ -59,6 +61,7 @@ export interface PlayerDesiredMovement {
 
 export interface PlayerFrameEvents {
   startedSwingStep: 0 | 1 | 2 | 3;
+  triggeredWarpCounter: boolean;
   startedDodge: boolean;
   startedSkillElement: ElementId | null;
   switchedToElement: ElementId | null;
@@ -117,6 +120,8 @@ export class PlayerRider implements HurtboxTarget {
     lux: 0,
   };
   private recentSwitchTimer = 0;
+  private warpCounterTimer = 0;
+  private activeSwingIsWarpCounter = false;
   private passiveRegenAccumulator = 0;
 
   private yaw = Math.PI;
@@ -211,6 +216,8 @@ export class PlayerRider implements HurtboxTarget {
   private readonly superAuraRingMesh: THREE.Mesh;
   private readonly beltBurstRingMat: THREE.MeshBasicMaterial;
   private readonly beltBurstRingMesh: THREE.Mesh;
+  private readonly riderKickConeMat: THREE.MeshBasicMaterial;
+  private readonly riderKickConeMesh: THREE.Mesh;
   private readonly ownedMaterials: THREE.Material[] = [];
 
   // Reusable scratch objects (Zero-Allocation Hot Path)
@@ -232,6 +239,7 @@ export class PlayerRider implements HurtboxTarget {
   };
   private readonly frameEvents: PlayerFrameEvents = {
     startedSwingStep: 0,
+    triggeredWarpCounter: false,
     startedDodge: false,
     startedSkillElement: null,
     switchedToElement: null,
@@ -713,7 +721,29 @@ export class PlayerRider implements HurtboxTarget {
     this.beltBurstRingMesh.position.y = 0.05;
     this.beltBurstRingMesh.visible = false;
 
-    this.root.add(this.dodgeRingMesh, this.superAuraRingMesh, this.beltBurstRingMesh);
+    // Flying Rider Kick supersonic elemental energy cone projecting from the Rider's boot!
+    this.riderKickConeMat = new THREE.MeshBasicMaterial({
+      color: this.elementConfig.emissiveColor,
+      transparent: true,
+      opacity: 0.78,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    this.ownedMaterials.push(this.riderKickConeMat);
+    const kickConeGeo = new THREE.ConeGeometry(0.72, 2.35, 18, 1, true);
+    kickConeGeo.rotateX(Math.PI / 2 + 0.34);
+    this.ownedGeometries.push(kickConeGeo);
+    this.riderKickConeMesh = new THREE.Mesh(kickConeGeo, this.riderKickConeMat);
+    this.riderKickConeMesh.position.set(-0.14, -0.25, 1.38);
+    this.riderKickConeMesh.visible = false;
+
+    this.root.add(
+      this.dodgeRingMesh,
+      this.superAuraRingMesh,
+      this.beltBurstRingMesh,
+      this.riderKickConeMesh
+    );
 
     this.applyActiveWeaponMesh(initialElement);
     this.setModularSuperArmorVisible(false);
@@ -754,6 +784,27 @@ export class PlayerRider implements HurtboxTarget {
 
   public get wasFinisherCastFromUltimate(): boolean {
     return this.preCinematicFormTier === 'ULTIMATE';
+  }
+
+  public get isWarpCounterReady(): boolean {
+    return this.warpCounterTimer > 0 && this.isAlive && !this.fsm.isInCinematic;
+  }
+
+  public get currentWarpCounterRemaining(): number {
+    return this.warpCounterTimer;
+  }
+
+  public get isActiveSwingWarpCounter(): boolean {
+    return this.activeSwingIsWarpCounter;
+  }
+
+  public faceToward(targetX: number, targetZ: number): void {
+    const dx = targetX - this.root.position.x;
+    const dz = targetZ - this.root.position.z;
+    if (dx * dx + dz * dz > 0.0004) {
+      this.yaw = Math.atan2(dx, dz);
+      this.root.rotation.y = this.yaw;
+    }
   }
 
   public get currentElementId(): ElementId {
@@ -848,6 +899,8 @@ export class PlayerRider implements HurtboxTarget {
       this.skillCooldowns[ALL_ELEMENT_IDS[i]!] = 0;
     }
     this.recentSwitchTimer = 0;
+    this.warpCounterTimer = 0;
+    this.activeSwingIsWarpCounter = false;
     this.hitFlashRemaining = 0;
     this.dodgeFlashRemaining = 0;
     this.beltBurstTimer = 0;
@@ -924,6 +977,7 @@ export class PlayerRider implements HurtboxTarget {
     this.bladeEdgeMat.color.set(this.elementConfig.emissiveColor);
     this.bladeEdgeMat.emissive.set(this.elementConfig.emissiveColor);
     this.beltBurstRingMat.color.set(this.elementConfig.emissiveColor);
+    this.riderKickConeMat.color.set(this.elementConfig.emissiveColor);
 
     // Data-driven selective PBR Armor Hue-Shift on Basic & Super Form sculpted suits (PYRO=native crimson, VOLT=electric gold, AQUA=sapphire blue!)
     for (let i = 0; i < this.armorHueUniforms.length; i++) {
@@ -950,6 +1004,7 @@ export class PlayerRider implements HurtboxTarget {
     const outcome = this.fsm.receiveIncomingHit(hasSuperArmor, effectiveHeavy);
     if (outcome === 'PERFECT_DODGE') {
       this.dodgeFlashRemaining = 0.45;
+      this.warpCounterTimer = WARP_COUNTER_WINDOW_SEC;
       return outcome;
     }
     if (outcome === 'DAMAGED') {
@@ -986,6 +1041,10 @@ export class PlayerRider implements HurtboxTarget {
 
     if (this.recentSwitchTimer > 0) {
       this.recentSwitchTimer = Math.max(0, this.recentSwitchTimer - dt);
+    }
+
+    if (this.warpCounterTimer > 0) {
+      this.warpCounterTimer = Math.max(0, this.warpCounterTimer - dt);
     }
 
     if (this.finisherCooldownSec > 0 && !this.fsm.isInCinematic) {
@@ -1114,6 +1173,7 @@ export class PlayerRider implements HurtboxTarget {
       this.fsm.skillId !== prevSkillId;
 
     this.frameEvents.startedSwingStep = 0;
+    this.frameEvents.triggeredWarpCounter = false;
     this.frameEvents.startedDodge = false;
     this.frameEvents.startedSkillElement = null;
     this.frameEvents.switchedToElement = null;
@@ -1221,6 +1281,15 @@ export class PlayerRider implements HurtboxTarget {
         }
       } else if (nextState === 'ATTACK_1' || nextState === 'ATTACK_2' || nextState === 'ATTACK_3') {
         this.frameEvents.startedSwingStep = this.fsm.comboStep as 1 | 2 | 3;
+        if (this.warpCounterTimer > 0) {
+          this.warpCounterTimer = 0;
+          this.activeSwingIsWarpCounter = true;
+          this.frameEvents.triggeredWarpCounter = true;
+          this.beltBurstTimer = 0.35;
+          this.dodgeFlashRemaining = 0.38;
+        } else {
+          this.activeSwingIsWarpCounter = false;
+        }
         if (lockTargetPos) {
           const toX = lockTargetPos.x - this.root.position.x;
           const toZ = lockTargetPos.z - this.root.position.z;
@@ -1337,17 +1406,63 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   public updateVisuals(renderDt: number, interpolatedPos: THREE.Vector3): void {
-    this.root.position.copy(interpolatedPos);
-    this.root.rotation.y = this.yaw;
-
     const state = this.fsm.state;
     const progress = this.fsm.normalizedStateProgress;
     const swingId = this.fsm.swingId;
     const enteredNewVisualAction = state !== this.prevVisualState || swingId !== this.prevVisualSwingId;
+
+    // Physical soaring vault + diagonal Flying Rider Kick dive during Beat 2 of ULTIMATE_CINEMATIC!
+    if (state === 'ULTIMATE_CINEMATIC') {
+      const t = this.fsm.stateTime;
+      let kickOffsetY = 0;
+      let kickOffsetForward = 0;
+      if (t >= 1.0 && t < 1.32) {
+        const u = (t - 1.0) / 0.32;
+        const easeOut = 1 - (1 - u) * (1 - u);
+        kickOffsetY = 2.45 * easeOut;
+        kickOffsetForward = -1.25 * easeOut;
+      } else if (t >= 1.32 && t < 1.56) {
+        const u = (t - 1.32) / 0.24;
+        kickOffsetY = THREE.MathUtils.lerp(2.45, 0.55, u * u);
+        kickOffsetForward = THREE.MathUtils.lerp(-1.25, 1.85, u);
+      } else if (t >= 1.56 && t < 1.96) {
+        const u = (t - 1.56) / 0.4;
+        kickOffsetY = 0.55 + Math.sin(u * Math.PI) * 0.4;
+        kickOffsetForward = THREE.MathUtils.lerp(1.85, 0.45, u);
+      } else if (t >= 1.96 && t < 2.22) {
+        const u = (t - 1.96) / 0.26;
+        kickOffsetY = THREE.MathUtils.lerp(0.55, 0, u);
+        kickOffsetForward = THREE.MathUtils.lerp(0.45, 0, u);
+      }
+      this.root.position.set(
+        interpolatedPos.x + Math.sin(this.yaw) * kickOffsetForward,
+        interpolatedPos.y + kickOffsetY,
+        interpolatedPos.z + Math.cos(this.yaw) * kickOffsetForward
+      );
+
+      const showCone = t >= 1.24 && t <= 1.84;
+      this.riderKickConeMesh.visible = showCone;
+      if (showCone) {
+        const pulse = 0.92 + Math.sin(t * 42) * 0.14;
+        this.riderKickConeMesh.scale.set(pulse, 1.0 + (t > 1.44 && t < 1.62 ? 0.35 : 0), pulse);
+        this.riderKickConeMesh.rotation.z += renderDt * 18;
+        this.riderKickConeMat.opacity = t > 1.68 ? Math.max(0, (1.84 - t) / 0.16) * 0.8 : 0.82;
+      }
+    } else {
+      this.root.position.copy(interpolatedPos);
+      this.riderKickConeMesh.visible = false;
+    }
+    this.root.rotation.y = this.yaw;
     this.animTime += renderDt * (state === 'MOVE' ? 9.6 : 3.0);
 
+    // Route RANGED Bow/Dual-Gun attacks & Flying Rider Kick directly to HumanoidBoneDriver so bespoke poses play cleanly!
+    const forceBespokeProceduralPose =
+      state === 'ULTIMATE_CINEMATIC' ||
+      (this.elementConfig.weapon.archetype === 'RANGED' &&
+        (state === 'ATTACK_1' || state === 'ATTACK_2' || state === 'ATTACK_3'));
+
     if (this.activeBodyMode === 'ULTIMATE' && this.ultimateRigHost) {
-      if (this.ultimateSkeletalAnimator?.hasClipForState(state)) {
+      if (!forceBespokeProceduralPose && this.ultimateSkeletalAnimator?.hasClipForState(state)) {
         this.driveSkeletalClipForState(this.ultimateSkeletalAnimator, state, enteredNewVisualAction, renderDt);
       } else if (this.ultimateBoneDriver?.isActive) {
         this.ultimateSkeletalAnimator?.pauseForProceduralBlend();
@@ -1364,7 +1479,7 @@ export class PlayerRider implements HurtboxTarget {
         this.applyUnriggedFormBodyMotion(this.ultimateRigHost, state, progress);
       }
     } else if (this.activeBodyMode !== 'BASIC' && this.superRigHost) {
-      if (this.superSkeletalAnimator?.hasClipForState(state)) {
+      if (!forceBespokeProceduralPose && this.superSkeletalAnimator?.hasClipForState(state)) {
         this.driveSkeletalClipForState(this.superSkeletalAnimator, state, enteredNewVisualAction, renderDt);
       } else if (this.superBoneDriver?.isActive) {
         this.superSkeletalAnimator?.pauseForProceduralBlend();
@@ -1381,11 +1496,11 @@ export class PlayerRider implements HurtboxTarget {
         // Kinetic hover/lunge/slash body motion for unrigged custom Super Form Armored Warrior!
         this.applyUnriggedFormBodyMotion(this.superRigHost, state, progress);
       }
-    } else if (this.skeletalAnimator.hasClipForState(state)) {
+    } else if (!forceBespokeProceduralPose && this.skeletalAnimator.hasClipForState(state)) {
       // Hybrid real Meshy mocap clips (Idle_5, Running, Roll_Dodge, Thrust_Slash Atk1/Atk2, Dead)!
       this.driveSkeletalClipForState(this.skeletalAnimator, state, enteredNewVisualAction, renderDt);
     } else if (this.boneDriver.isActive) {
-      // Smooth procedural 24-bone handoff for Tokusatsu states without a mocap clip (ATTACK_3 slam, SKILL, FORM_SWITCH, HENSHIN, ULTIMATE, HITSTUN)
+      // Smooth procedural 24-bone handoff for Bow Draw, Dual-Gun Gun-Kata, Flying Rider Kick, ATTACK_3 slam, SKILL, FORM_SWITCH, HENSHIN, HITSTUN
       this.skeletalAnimator.pauseForProceduralBlend();
       this.boneDriver.applyRiderPose(
         state,

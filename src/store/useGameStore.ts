@@ -93,6 +93,7 @@ interface GameStoreState {
   canActivateSuper: boolean;
   canActivateUltimateForm: boolean;
   canActivateUltimate: boolean;
+  warpCounterReady: boolean;
   ultimateBannerTitle: string | null;
   finisherCinematicId: number;
   finisherCinematicElement: ElementId;
@@ -161,6 +162,7 @@ interface GameStoreState {
     canActivateSuper: boolean;
     canActivateUltimateForm: boolean;
     canActivateUltimate: boolean;
+    warpCounterReady: boolean;
     ultimateBannerTitle: string | null;
     comboCount: number;
     isLockedOn: boolean;
@@ -309,6 +311,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   canActivateSuper: false,
   canActivateUltimateForm: false,
   canActivateUltimate: false,
+  warpCounterReady: false,
   ultimateBannerTitle: null,
   finisherCinematicId: 0,
   finisherCinematicElement: initialSave.loadoutOrder[0],
@@ -503,6 +506,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       state.canActivateSuper === snap.canActivateSuper &&
       state.canActivateUltimateForm === snap.canActivateUltimateForm &&
       state.canActivateUltimate === snap.canActivateUltimate &&
+      state.warpCounterReady === snap.warpCounterReady &&
       state.ultimateBannerTitle === snap.ultimateBannerTitle &&
       state.comboCount === snap.comboCount &&
       state.isLockedOn === snap.isLockedOn &&
@@ -530,6 +534,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       canActivateSuper: snap.canActivateSuper,
       canActivateUltimateForm: snap.canActivateUltimateForm,
       canActivateUltimate: snap.canActivateUltimate,
+      warpCounterReady: snap.warpCounterReady,
       ultimateBannerTitle: snap.ultimateBannerTitle,
       comboCount: snap.comboCount,
       isLockedOn: snap.isLockedOn,
@@ -722,6 +727,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       canActivateSuper: false,
       canActivateUltimateForm: false,
       canActivateUltimate: false,
+      warpCounterReady: false,
       ultimateBannerTitle: null,
       finisherCinematicFromUltimate: false,
       stageOutcomeCutIn: null,
