@@ -58,9 +58,9 @@ describe('Paket A — Difficulty Modes (Easy/Medium/Hard/Hell), S+ Rank & Boss R
     expect(hellShards.shardsEarned).toBeGreaterThan(medShards.shardsEarned * 2);
   });
 
-  it('runs 3-Boss Boss Rush gauntlet and triggers +35% HP recovery between Boss waves', () => {
+  it('runs 5-Boss Boss Rush gauntlet and triggers +35% HP recovery between Boss waves', () => {
     expect(STAGE_LIST.some((s) => s.id === 'stage_boss_rush')).toBe(true);
-    expect(STAGE_BOSS_RUSH.waves).toHaveLength(3);
+    expect(STAGE_BOSS_RUSH.waves).toHaveLength(5);
     expect(STAGE_BOSS_RUSH.isBossRush).toBe(true);
 
     const mgr = new StageManager(STAGE_BOSS_RUSH, 'hell');

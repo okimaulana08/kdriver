@@ -112,9 +112,15 @@ export class ArenaThemeManager {
     if (themeId === 'volcanic_crater') {
       const mod = await import('./arenas/volcanicArena');
       built = mod.buildVolcanicArenaTheme(pbrTextures, arenaRadius);
-    } else {
+    } else if (themeId === 'forest_ruins') {
       const mod = await import('./arenas/forestArena');
       built = mod.buildForestRuinsArenaTheme(pbrTextures, arenaRadius);
+    } else if (themeId === 'neon_district') {
+      const mod = await import('./arenas/neonDistrictArena');
+      built = mod.buildNeonDistrictArenaTheme(pbrTextures, arenaRadius);
+    } else {
+      const mod = await import('./arenas/glacialCitadelArena');
+      built = mod.buildGlacialCitadelArenaTheme(pbrTextures, arenaRadius);
     }
 
     if (this.disposed || gen !== this.loadGeneration) {

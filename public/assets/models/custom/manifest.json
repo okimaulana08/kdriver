@@ -51,6 +51,16 @@
     "targetHeightMeters": 2.85,
     "animationUrls": {}
   },
+  "boss_chrono": {
+    "modelUrl": "/assets/models/custom/boss_chrono.glb?v=rig1",
+    "targetHeightMeters": 2.75,
+    "animationUrls": {}
+  },
+  "boss_cryo": {
+    "modelUrl": "/assets/models/custom/boss_cryo.glb?v=rig1",
+    "targetHeightMeters": 2.95,
+    "animationUrls": {}
+  },
   "weapon_pyro": {
     "modelUrl": "/assets/models/custom/weapon_pyro.glb",
     "targetHeightMeters": 2.1

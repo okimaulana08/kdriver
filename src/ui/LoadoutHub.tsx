@@ -201,25 +201,25 @@ export function LoadoutHub({
       />
 
       {/* ================= TOP COMMAND BAR ================= */}
-      <header className="pointer-events-auto flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent px-5 py-2.5 backdrop-blur-sm">
+      <header className="pointer-events-auto flex items-center justify-between gap-2 border-b border-white/10 bg-gradient-to-b from-slate-950/90 via-slate-950/75 to-transparent px-4 py-2 backdrop-blur-sm">
         {/* Game Brand Crest */}
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center gap-2.5">
           <div
-            className="game-hex flex h-10 w-11 items-center justify-center shadow-lg"
+            className="game-hex flex h-9 w-10 items-center justify-center shadow-lg"
             style={{
               background: `linear-gradient(135deg, ${accentColor}, #0f172a)`,
               boxShadow: `0 0 18px ${accentColor}66`,
             }}
           >
-            <ElementEmblem id={activeElement} color="#ffffff" size={20} />
+            <ElementEmblem id={activeElement} color="#ffffff" size={18} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-game-display text-lg font-black tracking-wider text-white italic">
+            <div className="flex items-center gap-1.5">
+              <span className="font-game-display text-base font-black tracking-wider text-white italic">
                 K-DRIVER
               </span>
               <span
-                className="game-chamfer-sm px-2 py-0.5 text-[9px] font-bold tracking-[0.2em] uppercase"
+                className="game-chamfer-sm hidden px-1.5 py-0.5 text-[8px] font-bold tracking-[0.18em] uppercase 2xl:inline-block"
                 style={{
                   backgroundColor: `${accentColor}26`,
                   color: glowColor,
@@ -229,14 +229,14 @@ export function LoadoutHub({
                 HENSHIN ARMORY
               </span>
             </div>
-            <p className="text-[10px] tracking-[0.22em] text-slate-400 uppercase">
-              Tokusatsu 3D Action • {gamepadConnected ? 'Gamepad Linked' : 'KBM / Gamepad'}
+            <p className="text-[9px] tracking-[0.18em] text-slate-400 uppercase">
+              {gamepadConnected ? 'Gamepad Linked' : 'KBM / Gamepad'}
             </p>
           </div>
         </div>
 
-        {/* Center: Mission Sector + Boss Rush Selector Ribbon */}
-        <div className="flex items-center gap-1.5">
+        {/* Center: Mission Sector (01-05) + Boss Rush Selector Ribbon */}
+        <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto">
           {STAGE_LIST.map((stage, idx) => {
             const isSelected = stage.id === selectedStageId;
             const isCleared = saveRecord.clearedStageIds.includes(stage.id);
@@ -249,19 +249,19 @@ export function LoadoutHub({
                 key={stage.id}
                 type="button"
                 onClick={() => onSelectStage(stage.id)}
-                className={`game-chamfer-sm group relative cursor-pointer px-3 py-1.5 text-left transition-all ${
+                className={`game-chamfer-sm group relative shrink-0 cursor-pointer px-2 py-1 text-left transition-all ${
                   isSelected
                     ? 'bg-slate-900/95 text-white'
                     : 'bg-slate-950/65 text-slate-400 hover:bg-slate-900/80 hover:text-slate-100'
                 }`}
                 style={{
                   borderBottom: `2px solid ${isSelected ? stage.accentColor : 'rgba(148,163,184,0.2)'}`,
-                  boxShadow: isSelected ? `0 4px 18px ${stage.accentColor}35` : 'none',
+                  boxShadow: isSelected ? `0 4px 16px ${stage.accentColor}35` : 'none',
                 }}
               >
-                <div className="flex items-center justify-between gap-2.5 text-[9px] font-bold tracking-[0.15em] uppercase">
+                <div className="flex items-center justify-between gap-1.5 text-[8px] font-bold tracking-[0.12em] uppercase">
                   <span style={{ color: stage.accentColor }}>
-                    {stage.isBossRush ? '★ ENDGAME' : `SECTOR 0${idx + 1}`}
+                    {stage.isBossRush ? '★ ENDGAME' : `SEC 0${idx + 1}`}
                   </span>
                   <span className="text-slate-400">
                     {modeBestRank ? (
@@ -277,11 +277,11 @@ export function LoadoutHub({
                     ) : isCleared ? (
                       <span className="text-emerald-400">CLR</span>
                     ) : (
-                      `LV.${stage.recommendedLevel}+`
+                      `L${stage.recommendedLevel}+`
                     )}
                   </span>
                 </div>
-                <p className="font-game-display mt-0.5 text-[11px] font-bold tracking-wide uppercase">
+                <p className="font-game-display mt-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-wide uppercase">
                   {stage.name}
                 </p>
               </button>
@@ -290,8 +290,8 @@ export function LoadoutHub({
         </div>
 
         {/* Right: Pilot Telemetry & Shard Crystal Counter */}
-        <div className="flex items-center gap-3">
-          <div className="hidden items-center gap-3 border-r border-white/10 pr-3 text-[10px] xl:flex">
+        <div className="flex shrink-0 items-center gap-2.5">
+          <div className="hidden items-center gap-2.5 border-r border-white/10 pr-2.5 text-[10px] 2xl:flex">
             <div className="flex items-center gap-1.5">
               <div className="game-hex flex h-7 w-7 items-center justify-center bg-amber-500/20 text-xs font-black text-amber-300 ring-1 ring-amber-400/50">
                 {saveRecord.bestRank ?? '—'}

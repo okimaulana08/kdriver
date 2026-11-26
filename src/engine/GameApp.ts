@@ -133,6 +133,8 @@ export class GameApp {
   private kickSparkCooldown = 0;
   private afterimageCooldown = 0;
   private bossIntroTimer = 0;
+  private bossPullX = 0;
+  private bossPullZ = 0;
   private ultimateSealSpawned = false;
   private telemetryCooldownSec = 0;
   private disposed = false;
@@ -1007,7 +1009,19 @@ export class GameApp {
       }
     }
 
-    // 5. Physics step for Rider
+    // 5. Physics step for Rider (including any active Boss Eclipse Gravity Pull when not invulnerable!)
+    if (
+      !controlsLocked &&
+      !this.player.fsm.isInCinematic &&
+      !this.player.fsm.isInvulnerable &&
+      (this.bossPullX !== 0 || this.bossPullZ !== 0)
+    ) {
+      this.scratchDesiredMove.dx += this.bossPullX * fixedDt;
+      this.scratchDesiredMove.dz += this.bossPullZ * fixedDt;
+    }
+    this.bossPullX = 0;
+    this.bossPullZ = 0;
+
     this.scratchPrevPos.copy(this.scratchCurrPos);
     const moveResult = this.physics.stepPlayerMovement(
       this.scratchDesiredMove.dx,
@@ -1276,9 +1290,42 @@ export class GameApp {
         }
 
         const hazardStep = enemy.stepHazards(fixedDt, this.player);
+        if (hazardStep.pullForceX !== 0 || hazardStep.pullForceZ !== 0) {
+          this.bossPullX += hazardStep.pullForceX;
+          this.bossPullZ += hazardStep.pullForceZ;
+        }
+        if (hazardStep.blinkOccurred) {
+          this.audio.playDodge();
+          this.afterimageTrail.spawnGhost(
+            hazardStep.blinkFromX,
+            0,
+            hazardStep.blinkFromZ,
+            enemy.root.rotation.y,
+            0x22d3ee,
+            0.38,
+            0.46,
+            1.45
+          );
+          this.particlePool.emitElementBurst(
+            'volt',
+            hazardStep.blinkFromX,
+            1.2,
+            hazardStep.blinkFromZ,
+            18,
+            0.85
+          );
+          this.particlePool.emitElementBurst(
+            'volt',
+            hazardStep.blinkToX,
+            1.2,
+            hazardStep.blinkToZ,
+            24,
+            1.0
+          );
+        }
         if (hazardStep.eruptedCount > 0) {
           this.audio.playBossHazardErupt(enemy.config.id);
-          this.cameraRig.addShake(0.32, 0.22);
+          this.cameraRig.addShake(hazardStep.eruptedShape === 'GRAVITY_NOVA' ? 0.46 : 0.32, 0.24);
           if (enemy.config.id === 'sylvan_sovereign') {
             this.elementSkillVfx.spawnBriarEruption(
               enemy.signatureProfile.hazardElement,
@@ -1294,6 +1341,64 @@ export class GameApp {
               32,
               1.25
             );
+          } else if (enemy.config.id === 'chrono_volt_striker' && hazardStep.eruptedShape === 'LANE') {
+            const laneSin = Math.sin(hazardStep.lastEruptYaw);
+            const laneCos = Math.cos(hazardStep.lastEruptYaw);
+            this.elementSkillVfx.spawnSkillVfx(
+              'volt',
+              hazardStep.lastEruptX,
+              hazardStep.lastEruptZ,
+              hazardStep.lastEruptYaw,
+              2.4,
+              false
+            );
+            for (let seg = -2; seg <= 2; seg++) {
+              this.particlePool.emitElementBurst(
+                'volt',
+                hazardStep.lastEruptX + laneSin * seg * 4.2,
+                0.75,
+                hazardStep.lastEruptZ + laneCos * seg * 4.2,
+                14,
+                0.95
+              );
+            }
+          } else if (enemy.config.id === 'cryo_eclipse_emperor') {
+            if (hazardStep.eruptedShape === 'GRAVITY_NOVA') {
+              this.elementSkillVfx.spawnExplosionPillar(
+                'umbra',
+                hazardStep.lastEruptX,
+                hazardStep.lastEruptZ,
+                4.4
+              );
+              this.elementSkillVfx.spawnBriarEruption(
+                'aqua',
+                hazardStep.lastEruptX,
+                hazardStep.lastEruptZ,
+                4.0
+              );
+              this.particlePool.emitTokusatsuExplosion(
+                'aqua',
+                hazardStep.lastEruptX,
+                0.45,
+                hazardStep.lastEruptZ,
+                1.2
+              );
+            } else {
+              this.elementSkillVfx.spawnBriarEruption(
+                'aqua',
+                hazardStep.lastEruptX,
+                hazardStep.lastEruptZ,
+                2.7
+              );
+              this.particlePool.emitElementBurst(
+                'aqua',
+                hazardStep.lastEruptX,
+                0.5,
+                hazardStep.lastEruptZ,
+                30,
+                1.2
+              );
+            }
           } else {
             this.elementSkillVfx.spawnExplosionPillar(
               enemy.signatureProfile.hazardElement,
@@ -1340,13 +1445,15 @@ export class GameApp {
         }
         if (hazardStep.channelInterrupted) {
           enemy.getPosition(this.scratchTargetSnapshot);
+          const breakLabel =
+            enemy.config.id === 'cryo_eclipse_emperor' ? 'ECLIPSE BROKEN' : 'MEND BROKEN';
           this.emitFloatingTextAtWorld(
             this.scratchTargetSnapshot.x,
             this.scratchTargetSnapshot.y + 1.8,
             this.scratchTargetSnapshot.z,
             'INTERRUPTED!',
             'dodge',
-            'MEND BROKEN'
+            breakLabel
           );
         }
       }
@@ -1372,7 +1479,13 @@ export class GameApp {
     if (!this.player) return;
     const store = useGameStore.getState();
     const bannerColor =
-      wave.waveNumber === 3 ? '#f43f5e' : wave.waveNumber === 2 ? '#a855f7' : '#38bdf8';
+      wave.waveNumber >= 4
+        ? '#c084fc'
+        : wave.waveNumber === 3
+          ? '#f43f5e'
+          : wave.waveNumber === 2
+            ? '#a855f7'
+            : '#38bdf8';
     store.triggerWaveBanner(wave.title, wave.subtitle, bannerColor);
     this.audio.playFormSwitch(this.player.currentElementId, false);
 

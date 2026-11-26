@@ -942,10 +942,15 @@ export class AudioManager {
     const now = ctx.currentTime;
 
     const isBriar = bossId === 'sylvan_sovereign';
+    const isChrono = bossId === 'chrono_volt_striker';
+    const isCryo = bossId === 'cryo_eclipse_emperor';
+
     const osc = ctx.createOscillator();
-    osc.type = isBriar ? 'sawtooth' : 'triangle';
-    osc.frequency.setValueAtTime(isBriar ? 480 : 125, now);
-    osc.frequency.exponentialRampToValueAtTime(isBriar ? 110 : 34, now + 0.32);
+    osc.type = isChrono || isBriar ? 'sawtooth' : 'triangle';
+    const startHz = isChrono ? 960 : isCryo ? 640 : isBriar ? 480 : 125;
+    const endHz = isChrono ? 140 : isCryo ? 52 : isBriar ? 110 : 34;
+    osc.frequency.setValueAtTime(startHz, now);
+    osc.frequency.exponentialRampToValueAtTime(endHz, now + 0.32);
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.55, now);
@@ -956,12 +961,27 @@ export class AudioManager {
     osc.start(now);
     osc.stop(now + 0.38);
 
+    if (isCryo) {
+      // Crystalline ice-spire shatter harmonic chime
+      const chime = ctx.createOscillator();
+      chime.type = 'sine';
+      chime.frequency.setValueAtTime(1680, now);
+      chime.frequency.exponentialRampToValueAtTime(840, now + 0.24);
+      const cGain = ctx.createGain();
+      cGain.gain.setValueAtTime(0.24, now);
+      cGain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+      chime.connect(cGain);
+      cGain.connect(out);
+      chime.start(now);
+      chime.stop(now + 0.28);
+    }
+
     if (this.noiseBuffer) {
       const burst = ctx.createBufferSource();
       burst.buffer = this.noiseBuffer;
       const filter = ctx.createBiquadFilter();
-      filter.type = isBriar ? 'bandpass' : 'lowpass';
-      filter.frequency.setValueAtTime(isBriar ? 1850 : 620, now);
+      filter.type = isChrono ? 'highpass' : isBriar || isCryo ? 'bandpass' : 'lowpass';
+      filter.frequency.setValueAtTime(isChrono ? 2400 : isCryo ? 2100 : isBriar ? 1850 : 620, now);
       const bGain = ctx.createGain();
       bGain.gain.setValueAtTime(0.45, now);
       bGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);

@@ -386,7 +386,11 @@ export class EnemyBase implements HurtboxTarget {
         ? 'boss_magma'
         : config.id === 'sylvan_sovereign'
           ? 'boss_sylvan'
-          : null;
+          : config.id === 'chrono_volt_striker'
+            ? 'boss_chrono'
+            : config.id === 'cryo_eclipse_emperor'
+              ? 'boss_cryo'
+              : null;
     const dedicatedBossRig = optionalBossKey ? assetLoader.cloneOptionalRig(optionalBossKey) : null;
     this.usesDedicatedBossRig = dedicatedBossRig !== null;
     this.bossAmbientEmissiveHex =
@@ -394,7 +398,11 @@ export class EnemyBase implements HurtboxTarget {
         ? 0xc2410c
         : config.id === 'sylvan_sovereign'
           ? 0x047857
-          : 0x7f1d1d;
+          : config.id === 'chrono_volt_striker'
+            ? 0x0891b2
+            : config.id === 'cryo_eclipse_emperor'
+              ? 0x6d28d9
+              : 0x7f1d1d;
 
     const assetKey: AssetKey =
       config.tier === 'BOSS'
@@ -480,7 +488,11 @@ export class EnemyBase implements HurtboxTarget {
         ? 0xf97316
         : config.id === 'sylvan_sovereign'
           ? 0x10b981
-          : 0xf43f5e;
+          : config.id === 'chrono_volt_striker'
+            ? 0x22d3ee
+            : config.id === 'cryo_eclipse_emperor'
+              ? 0xc084fc
+              : 0xf43f5e;
     this.phase2HaloUniforms = {
       uTime: { value: 0 },
       uOpacity: { value: 0.92 },
@@ -558,17 +570,25 @@ export class EnemyBase implements HurtboxTarget {
         ? 0xea580c
         : config.id === 'sylvan_sovereign'
           ? 0x059669
-          : config.tier === 'ELITE'
-            ? 0xa855f7
-            : 0xe11d48;
+          : config.id === 'chrono_volt_striker'
+            ? 0x06b6d4
+            : config.id === 'cryo_eclipse_emperor'
+              ? 0x38bdf8
+              : config.tier === 'ELITE'
+                ? 0xa855f7
+                : 0xe11d48;
     const slashEmissiveHex =
       config.id === 'magma_overlord'
         ? 0xfde047
         : config.id === 'sylvan_sovereign'
           ? 0x6ee7b7
-          : config.tier === 'ELITE'
-            ? 0xe879f9
-            : 0xff4d6d;
+          : config.id === 'chrono_volt_striker'
+            ? 0xa5f3fc
+            : config.id === 'cryo_eclipse_emperor'
+              ? 0xe879f9
+              : config.tier === 'ELITE'
+                ? 0xe879f9
+                : 0xff4d6d;
     this.attackSlashUniforms = {
       uProgress: { value: 0 },
       uStyle: { value: config.tier === 'MINION' ? 0.0 : 1.0 },

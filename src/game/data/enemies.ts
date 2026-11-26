@@ -6,7 +6,9 @@ export type EnemyConfigId =
   | 'armored_brute'
   | 'obsidian_kaijin'
   | 'magma_overlord'
-  | 'sylvan_sovereign';
+  | 'sylvan_sovereign'
+  | 'chrono_volt_striker'
+  | 'cryo_eclipse_emperor';
 
 export const ENEMY_CONFIGS: Readonly<Record<EnemyConfigId, EnemyConfig>> = {
   training_dummy: {
@@ -86,6 +88,32 @@ export const ENEMY_CONFIGS: Readonly<Record<EnemyConfigId, EnemyConfig>> = {
     telegraphDurationSec: 0.54,
     scale: 1.7,
     color: '#15803d',
+  },
+  chrono_volt_striker: {
+    id: 'chrono_volt_striker',
+    name: 'Chrono-Volt Striker',
+    tier: 'BOSS',
+    maxHp: 2650,
+    maxGuard: 340,
+    defense: 46,
+    moveSpeed: 6.1,
+    attackDamage: 40,
+    telegraphDurationSec: 0.5,
+    scale: 1.68,
+    color: '#06b6d4',
+  },
+  cryo_eclipse_emperor: {
+    id: 'cryo_eclipse_emperor',
+    name: 'Cryo-Eclipse Emperor',
+    tier: 'BOSS',
+    maxHp: 3100,
+    maxGuard: 380,
+    defense: 50,
+    moveSpeed: 4.9,
+    attackDamage: 44,
+    telegraphDurationSec: 0.54,
+    scale: 1.78,
+    color: '#38bdf8',
   },
 };
 

@@ -126,9 +126,16 @@ export type StageId =
   | 'stage_01_nexus_arena'
   | 'stage_02_volcanic_crater'
   | 'stage_03_forest_ruins'
+  | 'stage_04_neon_district'
+  | 'stage_05_glacial_citadel'
   | 'stage_boss_rush';
 
-export type ArenaThemeId = 'coastal_quarry' | 'volcanic_crater' | 'forest_ruins';
+export type ArenaThemeId =
+  | 'coastal_quarry'
+  | 'volcanic_crater'
+  | 'forest_ruins'
+  | 'neon_district'
+  | 'glacial_citadel';
 
 export interface WaveSpawnEntry {
   enemyId:
@@ -136,7 +143,9 @@ export interface WaveSpawnEntry {
     | 'armored_brute'
     | 'obsidian_kaijin'
     | 'magma_overlord'
-    | 'sylvan_sovereign';
+    | 'sylvan_sovereign'
+    | 'chrono_volt_striker'
+    | 'cryo_eclipse_emperor';
   count: number;
 }
 

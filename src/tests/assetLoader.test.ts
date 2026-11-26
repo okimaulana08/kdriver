@@ -40,10 +40,12 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
     const parsedManifest = JSON.parse(fs.readFileSync(customManifestPath, 'utf8'));
     expect(parsedManifest).toHaveProperty('rider');
 
-    // Verify dedicated Sector 02 & 03 Boss GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons (skins + JOINTS_0 + WEIGHTS_0)
+    // Verify dedicated Sector 02–05 Boss GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons (skins + JOINTS_0 + WEIGHTS_0)
     const riggedSpecs: readonly { file: string; minJoints: number }[] = [
       { file: 'boss_magma.glb', minJoints: 20 },
       { file: 'boss_sylvan.glb', minJoints: 20 },
+      { file: 'boss_chrono.glb', minJoints: 20 },
+      { file: 'boss_cryo.glb', minJoints: 20 },
       { file: 'pet_phoenix.glb', minJoints: 8 },
       { file: 'pet_raiju.glb', minJoints: 9 },
       { file: 'pet_leviathan.glb', minJoints: 7 },
@@ -82,6 +84,8 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       'src/engine/PbrMaterialSystem.ts',
       'src/engine/ArenaThemeManager.ts',
       'src/engine/arenas/ArenaAtmosphere.ts',
+      'src/engine/arenas/neonDistrictArena.ts',
+      'src/engine/arenas/glacialCitadelArena.ts',
       'src/game/combat/PlayerProjectilePool.ts',
       'src/game/entities/PlayerRider.ts',
       'src/game/entities/EnemyBase.ts',

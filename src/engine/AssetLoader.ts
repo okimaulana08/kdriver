@@ -64,6 +64,8 @@ export interface CustomRigManifest {
   enemy_boss?: CustomRigSlotConfig;
   boss_magma?: CustomRigSlotConfig;
   boss_sylvan?: CustomRigSlotConfig;
+  boss_chrono?: CustomRigSlotConfig;
+  boss_cryo?: CustomRigSlotConfig;
   weapon_pyro?: CustomRigSlotConfig;
   weapon_volt?: CustomRigSlotConfig;
   weapon_aqua?: CustomRigSlotConfig;
@@ -84,6 +86,8 @@ export type OptionalCustomAssetKey =
   | 'rider_ultimate'
   | 'boss_magma'
   | 'boss_sylvan'
+  | 'boss_chrono'
+  | 'boss_cryo'
   | 'weapon_terra'
   | 'weapon_aero'
   | 'weapon_flora'
@@ -97,6 +101,8 @@ const OPTIONAL_CUSTOM_KEYS: readonly OptionalCustomAssetKey[] = [
   'rider_ultimate',
   'boss_magma',
   'boss_sylvan',
+  'boss_chrono',
+  'boss_cryo',
   'weapon_terra',
   'weapon_aero',
   'weapon_flora',
@@ -152,6 +158,8 @@ const DEFAULT_TARGET_HEIGHTS: Readonly<Record<keyof CustomRigManifest, number>> 
   enemy_boss: 2.7,
   boss_magma: 2.85,
   boss_sylvan: 2.85,
+  boss_chrono: 2.75,
+  boss_cryo: 2.95,
   weapon_pyro: 2.1,
   weapon_volt: 1.28,
   weapon_aqua: 2.65,
