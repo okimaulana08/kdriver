@@ -21,6 +21,12 @@ export const ELEMENT_SKILL_DURATION_SEC = 0.56;
 export const ELEMENT_SKILL_ACTIVE_START_SEC = 0.16;
 export const ELEMENT_SKILL_ACTIVE_END_SEC = 0.32;
 
+export const RIDER_KICK_DURATION_SEC = 1.15;
+export const RIDER_KICK_VAULT_END_SEC = 0.34;
+export const RIDER_KICK_DIVE_END_SEC = 0.68;
+export const RIDER_KICK_IMPACT_TIME_SEC = 0.64;
+export const RIDER_KICK_COOLDOWN_SEC = 8.0;
+
 export const HENSHIN_SUPER_DURATION_SEC = 1.0;
 export const ULTIMATE_CINEMATIC_DURATION_SEC = 3.5;
 
@@ -56,6 +62,7 @@ export interface PlayerFSMInput {
   wantsAttack: boolean;
   wantsDodge: boolean;
   wantsSkill?: boolean;
+  wantsRiderKick?: boolean;
   wantsFormSwitch?: boolean;
   wantsHenshinSuper?: boolean;
   wantsUltimateFinisher?: boolean;
@@ -76,8 +83,10 @@ export class PlayerFSM {
   private currentAttackSpeed = 1.0;
   private dodgeCooldownRemainingSec = 0;
   private formSwitchCooldownRemainingSec = 0;
+  private riderKickCooldownRemainingSec = 0;
   private swingSequenceId = 0;
   private skillSequenceId = 0;
+  private kickSequenceId = 0;
   private perfectDodgeTriggeredThisDodge = false;
 
   public get state(): PlayerStateId {
@@ -96,12 +105,20 @@ export class PlayerFSM {
     return this.skillSequenceId;
   }
 
+  public get kickId(): number {
+    return this.kickSequenceId;
+  }
+
   public get dodgeCooldown(): number {
     return this.dodgeCooldownRemainingSec;
   }
 
   public get formSwitchCooldown(): number {
     return this.formSwitchCooldownRemainingSec;
+  }
+
+  public get riderKickCooldown(): number {
+    return this.riderKickCooldownRemainingSec;
   }
 
   public get isAttacking(): boolean {
@@ -133,6 +150,9 @@ export class PlayerFSM {
       this.currentState === 'ULTIMATE_CINEMATIC' ||
       this.currentState === 'DEAD'
     ) {
+      return true;
+    }
+    if (this.currentState === 'RIDER_KICK' && this.stateElapsedSec <= 0.85) {
       return true;
     }
     return this.currentState === 'DODGE' && this.stateElapsedSec <= DODGE_IFRAME_SEC;
@@ -202,6 +222,17 @@ export class PlayerFSM {
     return true;
   }
 
+  public canRiderKickNow(): boolean {
+    if (this.riderKickCooldownRemainingSec > 0) return false;
+    return (
+      this.currentState === 'IDLE' ||
+      this.currentState === 'MOVE' ||
+      this.isAttacking ||
+      this.currentState === 'DODGE' ||
+      this.currentState === 'FORM_SWITCH'
+    );
+  }
+
   public canCastSkillNow(): boolean {
     if (this.currentState === 'IDLE' || this.currentState === 'MOVE') {
       return true;
@@ -245,6 +276,9 @@ export class PlayerFSM {
     if (this.formSwitchCooldownRemainingSec > 0) {
       this.formSwitchCooldownRemainingSec = Math.max(0, this.formSwitchCooldownRemainingSec - dt);
     }
+    if (this.riderKickCooldownRemainingSec > 0) {
+      this.riderKickCooldownRemainingSec = Math.max(0, this.riderKickCooldownRemainingSec - dt);
+    }
 
     this.stateElapsedSec += dt;
 
@@ -261,6 +295,12 @@ export class PlayerFSM {
     // 2. Dodge cancel (defensive priority)
     if (input.wantsDodge && this.canDodgeNow()) {
       this.enterState('DODGE', input.attackSpeed);
+      return this.currentState;
+    }
+
+    // 2.5. Active Flying Rider Kick ([SPACE] / [X]) — can cancel combos & dodge!
+    if (input.wantsRiderKick && this.canRiderKickNow()) {
+      this.enterState('RIDER_KICK', input.attackSpeed);
       return this.currentState;
     }
 
@@ -312,7 +352,8 @@ export class PlayerFSM {
     if (
       this.currentState === 'HENSHIN_SUPER' ||
       this.currentState === 'ULTIMATE_CINEMATIC' ||
-      this.currentState === 'DEAD'
+      this.currentState === 'DEAD' ||
+      (this.currentState === 'RIDER_KICK' && this.stateElapsedSec <= 0.85)
     ) {
       return 'IGNORED';
     }
@@ -343,8 +384,10 @@ export class PlayerFSM {
     this.currentAttackSpeed = 1.0;
     this.dodgeCooldownRemainingSec = 0;
     this.formSwitchCooldownRemainingSec = 0;
+    this.riderKickCooldownRemainingSec = 0;
     this.swingSequenceId = 0;
     this.skillSequenceId = 0;
+    this.kickSequenceId = 0;
     this.perfectDodgeTriggeredThisDodge = false;
   }
 
@@ -357,6 +400,9 @@ export class PlayerFSM {
       this.swingSequenceId++;
     } else if (next === 'ELEMENT_SKILL') {
       this.skillSequenceId++;
+    } else if (next === 'RIDER_KICK') {
+      this.kickSequenceId++;
+      this.riderKickCooldownRemainingSec = RIDER_KICK_COOLDOWN_SEC;
     } else if (next === 'FORM_SWITCH') {
       this.formSwitchCooldownRemainingSec = FORM_SWITCH_COOLDOWN_SEC;
     } else if (next === 'DODGE') {
@@ -375,6 +421,8 @@ export class PlayerFSM {
         return BASE_ATTACK_SPECS[3].durationSec / this.currentAttackSpeed;
       case 'ELEMENT_SKILL':
         return ELEMENT_SKILL_DURATION_SEC;
+      case 'RIDER_KICK':
+        return RIDER_KICK_DURATION_SEC;
       case 'FORM_SWITCH':
         return FORM_SWITCH_DURATION_SEC;
       case 'DODGE':

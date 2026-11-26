@@ -87,6 +87,7 @@ interface GameStoreState {
   overdriveGauge: number;
   superFormRemaining: number;
   finisherCooldown: number;
+  riderKickCooldown: number;
   activePetRemaining: number;
   activeElementPetRemaining: number;
   activePetCount: number;
@@ -156,6 +157,7 @@ interface GameStoreState {
     overdriveGauge: number;
     superFormRemaining: number;
     finisherCooldown: number;
+    riderKickCooldown: number;
     activePetRemaining: number;
     activeElementPetRemaining: number;
     activePetCount: number;
@@ -305,6 +307,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   overdriveGauge: 0,
   superFormRemaining: 0,
   finisherCooldown: 0,
+  riderKickCooldown: 0,
   activePetRemaining: 0,
   activeElementPetRemaining: 0,
   activePetCount: 0,
@@ -486,6 +489,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     const rOver = Math.round(snap.overdriveGauge);
     const rSuper = quantize(snap.superFormRemaining);
     const rFinCd = quantize(snap.finisherCooldown);
+    const rKickCd = quantize(snap.riderKickCooldown);
     const rPetRem = quantize(snap.activePetRemaining);
     const rElemPetRem = quantize(snap.activeElementPetRemaining);
     const rTime = Math.floor(snap.stageElapsedSec);
@@ -500,6 +504,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       state.overdriveGauge === rOver &&
       state.superFormRemaining === rSuper &&
       state.finisherCooldown === rFinCd &&
+      state.riderKickCooldown === rKickCd &&
       state.activePetRemaining === rPetRem &&
       state.activeElementPetRemaining === rElemPetRem &&
       state.activePetCount === snap.activePetCount &&
@@ -528,6 +533,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       overdriveGauge: rOver,
       superFormRemaining: rSuper,
       finisherCooldown: rFinCd,
+      riderKickCooldown: rKickCd,
       activePetRemaining: rPetRem,
       activeElementPetRemaining: rElemPetRem,
       activePetCount: snap.activePetCount,
@@ -721,6 +727,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       overdriveGauge: 0,
       superFormRemaining: 0,
       finisherCooldown: 0,
+      riderKickCooldown: 0,
       activePetRemaining: 0,
       activeElementPetRemaining: 0,
       activePetCount: 0,

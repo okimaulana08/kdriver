@@ -40,14 +40,29 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
     const parsedManifest = JSON.parse(fs.readFileSync(customManifestPath, 'utf8'));
     expect(parsedManifest).toHaveProperty('rider');
 
-    // Verify dedicated Sector 02 & 03 Boss GLBs exist and carry rigged humanoid skeletons (skins + JOINTS_0 + WEIGHTS_0)
-    for (const bossFile of ['boss_magma.glb', 'boss_sylvan.glb']) {
-      const bossPath = path.join(publicDir, 'assets', 'models', 'custom', bossFile);
-      expect(fs.existsSync(bossPath), `Missing rigged boss ${bossFile}`).toBe(true);
-      const bossBuf = fs.readFileSync(bossPath);
-      const gltfJson = JSON.parse(bossBuf.subarray(20, 20 + bossBuf.readUInt32LE(12)).toString('utf8'));
-      expect(gltfJson.skins?.length ?? 0, `${bossFile} must be rigged with a glTF skin`).toBeGreaterThanOrEqual(1);
-      expect(gltfJson.skins[0].joints.length, `${bossFile} must have >= 20 humanoid bones`).toBeGreaterThanOrEqual(20);
+    // Verify dedicated Sector 02 & 03 Boss GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons (skins + JOINTS_0 + WEIGHTS_0)
+    const riggedSpecs: readonly { file: string; minJoints: number }[] = [
+      { file: 'boss_magma.glb', minJoints: 20 },
+      { file: 'boss_sylvan.glb', minJoints: 20 },
+      { file: 'pet_phoenix.glb', minJoints: 8 },
+      { file: 'pet_raiju.glb', minJoints: 9 },
+      { file: 'pet_leviathan.glb', minJoints: 7 },
+    ];
+    for (const spec of riggedSpecs) {
+      const modelPath = path.join(publicDir, 'assets', 'models', 'custom', spec.file);
+      expect(fs.existsSync(modelPath), `Missing rigged model ${spec.file}`).toBe(true);
+      const modelBuf = fs.readFileSync(modelPath);
+      const gltfJson = JSON.parse(
+        modelBuf.subarray(20, 20 + modelBuf.readUInt32LE(12)).toString('utf8')
+      );
+      expect(
+        gltfJson.skins?.length ?? 0,
+        `${spec.file} must be rigged with a glTF skin`
+      ).toBeGreaterThanOrEqual(1);
+      expect(
+        gltfJson.skins[0].joints.length,
+        `${spec.file} must have >= ${spec.minJoints} joints`
+      ).toBeGreaterThanOrEqual(spec.minJoints);
       const attrs = gltfJson.meshes[0].primitives[0].attributes;
       expect(attrs).toHaveProperty('JOINTS_0');
       expect(attrs).toHaveProperty('WEIGHTS_0');

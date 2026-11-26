@@ -42,6 +42,7 @@ export function CombatHUD() {
   const overdriveGauge = useGameStore((s) => s.overdriveGauge);
   const superFormRemaining = useGameStore((s) => s.superFormRemaining);
   const finisherCooldown = useGameStore((s) => s.finisherCooldown);
+  const riderKickCooldown = useGameStore((s) => s.riderKickCooldown);
   const activePetRemaining = useGameStore((s) => s.activePetRemaining);
   const activeElementPetRemaining = useGameStore((s) => s.activeElementPetRemaining);
   const activePetCount = useGameStore((s) => s.activePetCount);
@@ -462,8 +463,27 @@ export function CombatHUD() {
           })}
         </div>
 
-        {/* Bottom-Right: Skill (Q), Pet Assist (E) & Instant Finisher (R) */}
+        {/* Bottom-Right: Rider Kick (SPACE), Skill (Q), Pet Assist (E) & Instant Finisher (R) */}
         <div className="flex items-center gap-2 font-mono">
+          <div
+            className={`flex w-32 flex-col rounded-xl border p-2.5 shadow-xl backdrop-blur-md ${
+              riderKickCooldown <= 0
+                ? 'border-orange-400/85 bg-slate-950/90 text-slate-100 shadow-[0_0_18px_rgba(251,146,60,0.35)]'
+                : 'border-slate-800 bg-slate-950/75 text-slate-500'
+            }`}
+          >
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="rounded bg-orange-500/25 px-1.5 py-0.5 font-bold text-orange-300">
+                SPACE • KICK
+              </span>
+              <span className="font-bold">
+                {riderKickCooldown <= 0 ? 'READY' : `${riderKickCooldown.toFixed(1)}s`}
+              </span>
+            </div>
+            <span className="mt-1.5 truncate text-xs font-bold">Rider Kick</span>
+            <span className="text-[10px] text-slate-400">Flying Dive • +75 Break</span>
+          </div>
+
           <div
             className={`flex w-32 flex-col rounded-xl border p-2.5 shadow-xl backdrop-blur-md ${
               activeSkillCd <= 0

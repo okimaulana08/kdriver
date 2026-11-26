@@ -46,7 +46,7 @@ const GAMEPAD_BUTTON_ACTIONS: readonly (readonly [number, InputAction])[] = [
   [2, 'ATTACK'], // X / Square
   [3, 'SKILL'], // Y / Triangle
   [4, 'PET'], // LB / L1
-  [5, 'ATTACK'], // RB / R1
+  [5, 'RIDER_KICK'], // RB / R1 (Signature Flying Rider Kick!)
   [6, 'LOCK_ON'], // LT / L2
   [7, 'HENSHIN'], // RT / R2
   [10, 'FINISHER'], // L3 (Instant Ultimate Finisher in Super/Ultimate Form)
@@ -64,6 +64,8 @@ const KEY_TO_ACTION: Readonly<Record<string, InputAction>> = {
   Digit2: 'SWITCH_2',
   Digit3: 'SWITCH_3',
   KeyQ: 'SKILL',
+  Space: 'RIDER_KICK',
+  KeyX: 'RIDER_KICK',
   KeyE: 'PET',
   KeyF: 'HENSHIN',
   KeyR: 'FINISHER',
@@ -96,6 +98,8 @@ const KEY_DISPLAY_LABELS: Readonly<Record<string, string>> = {
   Digit2: '2',
   Digit3: '3',
   KeyQ: 'Q',
+  Space: 'SPACE',
+  KeyX: 'X',
   KeyE: 'E',
   KeyF: 'F',
   KeyR: 'R',
@@ -464,7 +468,7 @@ export class InputManager {
       return;
     }
 
-    if (event.code === 'Tab' || event.code.startsWith('Arrow')) {
+    if (event.code === 'Tab' || event.code === 'Space' || event.code.startsWith('Arrow')) {
       event.preventDefault();
     }
 

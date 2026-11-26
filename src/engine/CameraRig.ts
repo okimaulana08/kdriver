@@ -6,6 +6,7 @@ export type CameraMode =
   | 'HUB_PEDESTAL'
   | 'ARENA_ENTRY'
   | 'COMBAT'
+  | 'RIDER_KICK'
   | 'ULTIMATE_CINEMATIC'
   | 'STAGE_OUTCOME';
 
@@ -159,6 +160,11 @@ export class CameraRig {
 
     if (this.mode === 'ARENA_ENTRY') {
       this.updateArenaEntry(safeDt, playerPos);
+      return;
+    }
+
+    if (this.mode === 'RIDER_KICK') {
+      this.updateRiderKick(safeDt, playerPos);
       return;
     }
 
@@ -326,40 +332,69 @@ export class CameraRig {
     this.applyShakeAndCommit(dt, this.currentPos, this.currentPivot);
   }
 
+  private updateRiderKick(dt: number, playerPos: THREE.Vector3): void {
+    // Dynamic low-to-side Tokusatsu hero swoop showcasing the soaring jump & diagonal Flying Rider Kick silhouette!
+    const t = this.modeElapsedSec;
+    const angle = this.cinematicYaw + THREE.MathUtils.lerp(0.88, 1.38, Math.min(1, t / 0.78));
+    const dist = THREE.MathUtils.lerp(5.8, 7.2, Math.min(1, t / 0.65));
+    const camHeight = t < 0.38 ? THREE.MathUtils.lerp(1.4, 2.8, t / 0.38) : THREE.MathUtils.lerp(2.8, 1.9, Math.min(1, (t - 0.38) / 0.65));
+    const pivotHeight = t < 0.38 ? 1.85 : t < 0.74 ? 1.25 : 0.85;
+
+    this.desiredPivot.set(
+      playerPos.x + Math.sin(this.cinematicYaw) * 1.05,
+      playerPos.y + pivotHeight,
+      playerPos.z + Math.cos(this.cinematicYaw) * 1.05
+    );
+    this.desiredPos.set(
+      playerPos.x + Math.sin(angle) * dist,
+      Math.max(MIN_CAMERA_Y, playerPos.y + camHeight),
+      playerPos.z + Math.cos(angle) * dist
+    );
+    const lerp = 1 - Math.exp(-13 * dt);
+    this.currentPos.lerp(this.desiredPos, lerp);
+    this.currentPivot.lerp(this.desiredPivot, lerp);
+    this.applyShakeAndCommit(dt, this.currentPos, this.currentPivot);
+  }
+
   private updateUltimateCinematic(dt: number, playerPos: THREE.Vector3): void {
     const t = this.modeElapsedSec;
     const baseAngle = this.cinematicYaw;
 
-    if (t < 1.25) {
-      // Beat 1 (0–1.25s): Heroic low-angle front sweep framing Rider crouch-charge + Giant 2.7x Pet rising behind
-      const p = t / 1.25;
-      const angle = baseAngle + THREE.MathUtils.lerp(-0.48, 0.45, p);
-      const dist = THREE.MathUtils.lerp(4.2, 6.2, p);
+    if (t < 1.05) {
+      // Beat 1 (0–1.05s): Heroic low-angle front sweep framing Rider crouch-charge under sleek 2D Cut-In
+      const p = t / 1.05;
+      const angle = baseAngle + THREE.MathUtils.lerp(-0.48, 0.42, p);
+      const dist = THREE.MathUtils.lerp(4.2, 6.0, p);
       this.desiredPos.set(
         playerPos.x + Math.sin(angle) * dist,
-        playerPos.y + THREE.MathUtils.lerp(0.65, 1.85, p),
+        playerPos.y + THREE.MathUtils.lerp(0.65, 1.65, p),
         playerPos.z + Math.cos(angle) * dist
       );
       this.desiredPivot.set(playerPos.x, playerPos.y + 1.25, playerPos.z);
-    } else if (t < 2.38) {
-      // Beat 2 (1.25–2.38s): Dramatic dynamic side-action tracking the Soaring Jump & Diagonal Flying Rider Kick Impact!
-      const p = (t - 1.25) / 1.13;
-      const angle = baseAngle + Math.PI * 0.56 + p * 0.42;
-      const dist = THREE.MathUtils.lerp(8.6, 9.8, p);
-      const diveHeight = t < 1.55 ? 2.45 : THREE.MathUtils.lerp(2.45, 1.25, (t - 1.55) / 0.83);
+    } else if (t < 2.42) {
+      // Beat 2 (1.05–2.42s, Cut-In OPEN!): Wide side-action tracking +3.65m Soaring Vault -> Diagonal Hyper Rider Kick Impact at 1.90s!
+      const p = (t - 1.05) / 1.37;
+      const angle = baseAngle + Math.PI * 0.56 + p * 0.44;
+      const dist = THREE.MathUtils.lerp(8.4, 9.8, p);
+      const diveHeight =
+        t < 1.48
+          ? THREE.MathUtils.lerp(1.4, 3.2, (t - 1.05) / 0.43)
+          : t < 1.96
+            ? THREE.MathUtils.lerp(3.2, 1.2, (t - 1.48) / 0.48)
+            : 1.25;
       this.desiredPos.set(
         playerPos.x + Math.sin(angle) * dist,
-        playerPos.y + THREE.MathUtils.lerp(3.1, 3.6, p),
+        playerPos.y + THREE.MathUtils.lerp(2.4, 3.6, p),
         playerPos.z + Math.cos(angle) * dist
       );
       this.desiredPivot.set(
-        playerPos.x + Math.sin(baseAngle) * THREE.MathUtils.lerp(0.6, 2.5, p),
+        playerPos.x + Math.sin(baseAngle) * THREE.MathUtils.lerp(0.2, 2.6, p),
         playerPos.y + diveHeight,
-        playerPos.z + Math.cos(baseAngle) * THREE.MathUtils.lerp(0.6, 2.5, p)
+        playerPos.z + Math.cos(baseAngle) * THREE.MathUtils.lerp(0.2, 2.6, p)
       );
     } else {
-      // Beat 3 (2.45–3.5s): Iconic Kamen Rider Back-Turned Explosion Pose!
-      const p = Math.min(1, (t - 2.45) / 1.05);
+      // Beat 3 (2.42–3.5s): Iconic Kamen Rider Back-Turned Explosion Pose!
+      const p = Math.min(1, (t - 2.42) / 1.08);
       const angle = baseAngle + Math.PI + THREE.MathUtils.lerp(-0.24, 0.2, p);
       const dist = THREE.MathUtils.lerp(4.1, 4.95, p);
       this.desiredPos.set(

@@ -92,15 +92,15 @@
     "targetHeightMeters": 2.65
   },
   "pet_phoenix": {
-    "modelUrl": "/assets/models/custom/pet_phoenix.glb",
+    "modelUrl": "/assets/models/custom/pet_phoenix.glb?v=rig2",
     "targetHeightMeters": 1.6
   },
   "pet_raiju": {
-    "modelUrl": "/assets/models/custom/pet_raiju.glb",
+    "modelUrl": "/assets/models/custom/pet_raiju.glb?v=rig2",
     "targetHeightMeters": 1.55
   },
   "pet_leviathan": {
-    "modelUrl": "/assets/models/custom/pet_leviathan.glb",
+    "modelUrl": "/assets/models/custom/pet_leviathan.glb?v=rig2",
     "targetHeightMeters": 1.85
   }
 }

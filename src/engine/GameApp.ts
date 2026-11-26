@@ -816,6 +816,7 @@ export class GameApp {
 
     // 3. Player FSM & Movement
     const prevInCinematic = this.player.fsm.isInCinematic;
+    const prevWasRiderKick = this.player.fsm.state === 'RIDER_KICK';
     const playerEvents = this.player.fixedUpdate(
       fixedDt,
       this.input,
@@ -831,6 +832,8 @@ export class GameApp {
       this.petEntity.deactivateUltimatePet();
       this.domainDimActive = false;
       useGameStore.getState().clearFinisherCinematic();
+    } else if (prevWasRiderKick && this.player.fsm.state !== 'RIDER_KICK' && this.cameraRig.currentMode === 'RIDER_KICK') {
+      this.cameraRig.setMode('COMBAT');
     }
 
     if (playerEvents.startedHenshinSuper) this.handleHenshinSuperEvent();
@@ -840,6 +843,8 @@ export class GameApp {
     if (playerEvents.ultimateExplosionPulseThisStep) this.triggerUltimateBackExplosionVfx();
     if (playerEvents.switchedToElement) this.handleFormSwitchEvent(playerEvents.switchedToElement);
     if (playerEvents.startedSkillElement) this.handleSkillStartEvent(playerEvents.startedSkillElement);
+    if (playerEvents.startedRiderKick) this.handleRiderKickStartEvent();
+    if (playerEvents.riderKickImpactThisStep) this.resolveRiderKickImpact();
     if (playerEvents.triggeredWarpCounter) this.handleWarpCounterEvent();
     if (playerEvents.startedSwingStep !== 0) {
       const elemId = this.player.currentElementId;
@@ -1656,6 +1661,83 @@ export class GameApp {
     }
   }
 
+  private handleRiderKickStartEvent(): void {
+    if (!this.player) return;
+    const elemId = this.player.currentElementId;
+    const aimTarget = this.lockedEnemy?.isAlive ? this.lockedEnemy : this.findPriorityTarget();
+    if (aimTarget && aimTarget.isAlive) {
+      aimTarget.getPosition(this.scratchTargetSnapshot);
+      const dist = Math.hypot(
+        this.scratchTargetSnapshot.x - this.scratchCurrPos.x,
+        this.scratchTargetSnapshot.z - this.scratchCurrPos.z
+      );
+      if (dist <= 12.0) {
+        this.player.faceToward(this.scratchTargetSnapshot.x, this.scratchTargetSnapshot.z);
+      }
+    }
+
+    this.audio.playRiderKickLaunch();
+    this.cameraRig.setMode('RIDER_KICK', this.player.facingYaw);
+    this.loop.setTimeScale(0.62, 0.28);
+    this.cameraRig.addShake(0.18, 0.16);
+    this.player.getPosition(this.scratchOriginSnapshot);
+    this.particlePool.emitElementBurst(
+      elemId,
+      this.scratchOriginSnapshot.x,
+      this.scratchOriginSnapshot.y + 0.35,
+      this.scratchOriginSnapshot.z,
+      28,
+      1.15
+    );
+  }
+
+  private resolveRiderKickImpact(): void {
+    if (!this.player) return;
+    const elemId = this.player.currentElementId;
+    const isSuper = this.player.currentFormTier !== 'BASIC';
+    this.player.getPosition(this.scratchOriginSnapshot);
+    this.player.getForwardXZ(this.scratchPlayerForwardXZ);
+    const impactX = this.scratchOriginSnapshot.x + this.scratchPlayerForwardXZ.x * 1.1;
+    const impactZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 1.1;
+    const kickRadius = isSuper ? 5.2 : 4.4;
+
+    this.audio.playRiderKickImpact();
+    this.loop.triggerHitStop(0.1);
+    this.cameraRig.addShake(0.48, 0.32);
+    this.elementSkillVfx.spawnSkillVfx(elemId, impactX, impactZ, this.player.facingYaw, kickRadius, isSuper);
+    this.elementSkillVfx.spawnExplosionPillar(elemId, impactX, impactZ, isSuper ? 3.2 : 2.6);
+    this.particlePool.emitReactionBurst('OVERLOAD', impactX, 0.9, impactZ);
+
+    let connected = false;
+    for (let i = 0; i < this.enemies.length; i++) {
+      const enemy = this.enemies[i]!;
+      if (!enemy.isAlive) continue;
+      enemy.getPosition(this.scratchTargetSnapshot);
+      const dist = Math.hypot(
+        this.scratchTargetSnapshot.x - impactX,
+        this.scratchTargetSnapshot.z - impactZ
+      );
+      if (dist <= kickRadius + enemy.radius) {
+        connected = true;
+        const mult = enemy.isStaggered ? (isSuper ? 4.2 : 3.5) : isSuper ? 3.3 : 2.6;
+        this.applyElementalStrikeOnEnemy(
+          enemy,
+          elemId,
+          mult,
+          75,
+          95,
+          true,
+          enemy.isStaggered ? 'CRITICAL RIDER KICK!' : 'RIDER KICK!',
+          false,
+          enemy.isStaggered
+        );
+      }
+    }
+    if (connected) {
+      this.player.addDriverGauge(22);
+    }
+  }
+
   private handleWarpCounterEvent(): void {
     if (!this.player) return;
     const target =
@@ -2105,6 +2187,7 @@ export class GameApp {
       overdriveGauge: this.player.currentOverdriveGauge,
       superFormRemaining: this.player.currentSuperFormRemaining,
       finisherCooldown: this.player.currentFinisherCooldown,
+      riderKickCooldown: this.player.currentRiderKickCooldown,
       activePetRemaining: this.petEntity.getActiveCompanionRemaining(),
       activeElementPetRemaining: this.petEntity.getActiveCompanionRemaining(
         this.player.currentElementId

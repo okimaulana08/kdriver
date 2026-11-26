@@ -18,6 +18,9 @@ import { findRigSocket, SkeletalAnimator } from '../../engine/SkeletalAnimator';
 import {
   DODGE_SPEED,
   PlayerFSM,
+  RIDER_KICK_DIVE_END_SEC,
+  RIDER_KICK_IMPACT_TIME_SEC,
+  RIDER_KICK_VAULT_END_SEC,
   type PlayerFSMInput,
   type PlayerIncomingHitOutcome,
 } from '../combat/PlayerFSM';
@@ -47,7 +50,7 @@ export const ULTIMATE_FORM_MAX_DURATION_SEC = 32.0;
 export const FINISHER_COOLDOWN_SEC = 7.0;
 export const FINISHER_SUPER_DURATION_COST_SEC = 7.0;
 export const ULTIMATE_UNLOCK_REMAINING_SEC = 10.0;
-export const ULTIMATE_IMPACT_TIME_SEC = 1.5;
+export const ULTIMATE_IMPACT_TIME_SEC = 1.9;
 export const WARP_COUNTER_WINDOW_SEC = 1.45;
 export const WARP_COUNTER_DAMAGE_MULTIPLIER = 1.65;
 const BASIC_GAUGE_ACCELERATION = 1.45;
@@ -64,6 +67,8 @@ export interface PlayerFrameEvents {
   triggeredWarpCounter: boolean;
   startedDodge: boolean;
   startedSkillElement: ElementId | null;
+  startedRiderKick: boolean;
+  riderKickImpactThisStep: boolean;
   switchedToElement: ElementId | null;
   startedHenshinSuper: boolean;
   startedHenshinUltimate: boolean;
@@ -106,6 +111,8 @@ export class PlayerRider implements HurtboxTarget {
 
   private ultimateImpactFired = false;
   private ultimatePostExplosionsFired = 0;
+  private riderKickImpactFired = false;
+  private riderKickDiveSpeed = 15.0;
 
   private readonly skillCooldowns: Record<ElementId, number> = {
     pyro: 0,
@@ -232,6 +239,7 @@ export class PlayerRider implements HurtboxTarget {
     wantsAttack: false,
     wantsDodge: false,
     wantsSkill: false,
+    wantsRiderKick: false,
     wantsFormSwitch: false,
     wantsHenshinSuper: false,
     wantsUltimateFinisher: false,
@@ -242,6 +250,8 @@ export class PlayerRider implements HurtboxTarget {
     triggeredWarpCounter: false,
     startedDodge: false,
     startedSkillElement: null,
+    startedRiderKick: false,
+    riderKickImpactThisStep: false,
     switchedToElement: null,
     startedHenshinSuper: false,
     startedHenshinUltimate: false,
@@ -778,6 +788,10 @@ export class PlayerRider implements HurtboxTarget {
     return this.finisherCooldownSec;
   }
 
+  public get currentRiderKickCooldown(): number {
+    return this.fsm.riderKickCooldown;
+  }
+
   public get currentCinematicElapsed(): number {
     return this.fsm.isInCinematic ? this.fsm.stateTime : 0;
   }
@@ -909,6 +923,7 @@ export class PlayerRider implements HurtboxTarget {
     this.prevHitboxActive = false;
     this.ultimateImpactFired = false;
     this.ultimatePostExplosionsFired = 0;
+    this.riderKickImpactFired = false;
     this.yaw = facingYaw;
     this.setElementTheme(this.loadoutOrder[0]);
     this.setModularSuperArmorVisible(false);
@@ -1103,6 +1118,7 @@ export class PlayerRider implements HurtboxTarget {
     let wantsUltimateFinisher = false;
     let wantsHenshinSuper = false;
     let wantsDodge = false;
+    let wantsRiderKick = false;
     let wantsSkill = false;
     let wantsAttack = false;
 
@@ -1119,7 +1135,11 @@ export class PlayerRider implements HurtboxTarget {
 
       if (!wantsUltimateFinisher && !wantsHenshinSuper) {
         wantsDodge = this.fsm.canDodgeNow() && input.consumeBufferedAction('DODGE');
-        if (!wantsDodge && this.fsm.canFormSwitchNow()) {
+        wantsRiderKick =
+          !wantsDodge &&
+          this.fsm.canRiderKickNow() &&
+          input.consumeBufferedAction('RIDER_KICK');
+        if (!wantsDodge && !wantsRiderKick && this.fsm.canFormSwitchNow()) {
           if (this.activeElementId !== this.loadoutOrder[0] && input.consumeBufferedAction('SWITCH_1')) {
             requestedElement = this.loadoutOrder[0];
           } else if (
@@ -1137,6 +1157,7 @@ export class PlayerRider implements HurtboxTarget {
 
         wantsSkill =
           !wantsDodge &&
+          !wantsRiderKick &&
           requestedElement === null &&
           this.skillCooldowns[this.activeElementId] <= 0 &&
           this.fsm.canCastSkillNow() &&
@@ -1144,6 +1165,7 @@ export class PlayerRider implements HurtboxTarget {
 
         wantsAttack =
           !wantsDodge &&
+          !wantsRiderKick &&
           requestedElement === null &&
           !wantsSkill &&
           this.fsm.canAcceptAttackNow() &&
@@ -1158,6 +1180,7 @@ export class PlayerRider implements HurtboxTarget {
     this.scratchFsmInput.isMoving = hasMoveInput;
     this.scratchFsmInput.wantsAttack = wantsAttack;
     this.scratchFsmInput.wantsDodge = wantsDodge;
+    this.scratchFsmInput.wantsRiderKick = wantsRiderKick;
     this.scratchFsmInput.wantsSkill = wantsSkill;
     this.scratchFsmInput.wantsFormSwitch = requestedElement !== null;
     this.scratchFsmInput.wantsHenshinSuper = wantsHenshinSuper;
@@ -1166,16 +1189,20 @@ export class PlayerRider implements HurtboxTarget {
 
     const prevSwingId = this.fsm.swingId;
     const prevSkillId = this.fsm.skillId;
+    const prevKickId = this.fsm.kickId;
     const nextState = this.fsm.update(dt, this.scratchFsmInput);
     const enteredNewState =
       nextState !== this.prevState ||
       this.fsm.swingId !== prevSwingId ||
-      this.fsm.skillId !== prevSkillId;
+      this.fsm.skillId !== prevSkillId ||
+      this.fsm.kickId !== prevKickId;
 
     this.frameEvents.startedSwingStep = 0;
     this.frameEvents.triggeredWarpCounter = false;
     this.frameEvents.startedDodge = false;
     this.frameEvents.startedSkillElement = null;
+    this.frameEvents.startedRiderKick = false;
+    this.frameEvents.riderKickImpactThisStep = false;
     this.frameEvents.switchedToElement = null;
     this.frameEvents.startedHenshinSuper = false;
     this.frameEvents.startedHenshinUltimate = false;
@@ -1264,6 +1291,26 @@ export class PlayerRider implements HurtboxTarget {
             this.yaw = Math.atan2(toX, toZ);
           }
         }
+      } else if (nextState === 'RIDER_KICK') {
+        this.riderKickImpactFired = false;
+        this.beltBurstTimer = 0.5;
+        this.slashTrail.endSwing();
+        this.frameEvents.startedRiderKick = true;
+        if (lockTargetPos) {
+          const toX = lockTargetPos.x - this.root.position.x;
+          const toZ = lockTargetPos.z - this.root.position.z;
+          const dist = Math.hypot(toX, toZ);
+          if (dist > 0.05) {
+            this.yaw = Math.atan2(toX, toZ);
+          }
+          const diveDur = Math.max(0.12, RIDER_KICK_DIVE_END_SEC - RIDER_KICK_VAULT_END_SEC);
+          this.riderKickDiveSpeed = THREE.MathUtils.clamp((dist - 0.65) / diveDur, 9.5, 28.0);
+        } else {
+          if (hasMoveInput) {
+            this.yaw = Math.atan2(this.scratchMoveDir.x, this.scratchMoveDir.z);
+          }
+          this.riderKickDiveSpeed = 15.5;
+        }
       } else if (nextState === 'ELEMENT_SKILL') {
         const cfg = getElementConfig(this.activeElementId);
         this.skillCooldowns[this.activeElementId] = cfg.skill.cooldown;
@@ -1314,6 +1361,14 @@ export class PlayerRider implements HurtboxTarget {
       }
     }
 
+    if (nextState === 'RIDER_KICK') {
+      const t = this.fsm.stateTime;
+      if (!this.riderKickImpactFired && t >= RIDER_KICK_IMPACT_TIME_SEC) {
+        this.riderKickImpactFired = true;
+        this.frameEvents.riderKickImpactThisStep = true;
+      }
+    }
+
     if (nextState === 'ULTIMATE_CINEMATIC') {
       const t = this.fsm.stateTime;
       if (!this.ultimateImpactFired && t >= ULTIMATE_IMPACT_TIME_SEC) {
@@ -1356,6 +1411,40 @@ export class PlayerRider implements HurtboxTarget {
         if (toX * toX + toZ * toZ > 0.04) {
           this.yaw = this.dampAngle(this.yaw, Math.atan2(toX, toZ), 14 * dt);
         }
+      }
+    } else if (nextState === 'RIDER_KICK') {
+      const t = this.fsm.stateTime;
+      if (t < RIDER_KICK_VAULT_END_SEC) {
+        // Vault upward-backward coil while locking onto target
+        vx = -Math.sin(this.yaw) * 2.4;
+        vz = -Math.cos(this.yaw) * 2.4;
+        if (lockTargetPos) {
+          const toX = lockTargetPos.x - this.root.position.x;
+          const toZ = lockTargetPos.z - this.root.position.z;
+          const dist = Math.hypot(toX, toZ);
+          if (dist > 0.1) {
+            this.yaw = this.dampAngle(this.yaw, Math.atan2(toX, toZ), 16 * dt);
+            const diveDur = Math.max(0.12, RIDER_KICK_DIVE_END_SEC - RIDER_KICK_VAULT_END_SEC);
+            this.riderKickDiveSpeed = THREE.MathUtils.clamp((dist - 0.55) / diveDur, 9.5, 29.0);
+          }
+        }
+      } else if (t < RIDER_KICK_DIVE_END_SEC) {
+        // Supersonic diagonal homing dive straight into enemy!
+        if (lockTargetPos && t < 0.56) {
+          const toX = lockTargetPos.x - this.root.position.x;
+          const toZ = lockTargetPos.z - this.root.position.z;
+          if (toX * toX + toZ * toZ > 0.16) {
+            this.yaw = this.dampAngle(this.yaw, Math.atan2(toX, toZ), 14 * dt);
+          }
+        }
+        vx = Math.sin(this.yaw) * this.riderKickDiveSpeed;
+        vz = Math.cos(this.yaw) * this.riderKickDiveSpeed;
+      } else {
+        // Acrobatic backflip rebound landing!
+        const u = Math.min(1, (t - RIDER_KICK_DIVE_END_SEC) / 0.42);
+        const backSpeed = 6.8 * (1 - u);
+        vx = -Math.sin(this.yaw) * backSpeed;
+        vz = -Math.cos(this.yaw) * backSpeed;
       }
     } else if (nextState === 'ELEMENT_SKILL') {
       const p = this.fsm.normalizedStateProgress;
@@ -1411,28 +1500,50 @@ export class PlayerRider implements HurtboxTarget {
     const swingId = this.fsm.swingId;
     const enteredNewVisualAction = state !== this.prevVisualState || swingId !== this.prevVisualSwingId;
 
-    // Physical soaring vault + diagonal Flying Rider Kick dive during Beat 2 of ULTIMATE_CINEMATIC!
-    if (state === 'ULTIMATE_CINEMATIC') {
+    // Physical soaring vault + diagonal Flying Rider Kick dive for BOTH [SPACE] RIDER_KICK & [R] ULTIMATE_CINEMATIC!
+    if (state === 'RIDER_KICK') {
+      const t = this.fsm.stateTime;
+      let kickOffsetY = 0;
+      if (t < 0.34) {
+        const u = t / 0.34;
+        kickOffsetY = 2.9 * Math.sin(u * Math.PI * 0.5);
+      } else if (t < 0.68) {
+        const u = (t - 0.34) / 0.34;
+        kickOffsetY = THREE.MathUtils.lerp(2.9, 0.42, u * u);
+      } else if (t < 1.06) {
+        const u = (t - 0.68) / 0.38;
+        kickOffsetY = 0.42 * (1 - u) + Math.sin(u * Math.PI) * 1.15;
+      }
+      this.root.position.set(interpolatedPos.x, interpolatedPos.y + kickOffsetY, interpolatedPos.z);
+
+      const showCone = t >= 0.28 && t <= 0.74;
+      this.riderKickConeMesh.visible = showCone;
+      if (showCone) {
+        const pulse = 0.94 + Math.sin(t * 48) * 0.14;
+        this.riderKickConeMesh.scale.set(pulse, 1.15, pulse);
+        this.riderKickConeMesh.rotation.z += renderDt * 22;
+        this.riderKickConeMat.opacity = t > 0.64 ? Math.max(0, (0.74 - t) / 0.1) * 0.88 : 0.86;
+      }
+    } else if (state === 'ULTIMATE_CINEMATIC') {
       const t = this.fsm.stateTime;
       let kickOffsetY = 0;
       let kickOffsetForward = 0;
-      if (t >= 1.0 && t < 1.32) {
-        const u = (t - 1.0) / 0.32;
+      if (t >= 1.04 && t < 1.46) {
+        // Cut-In is OPEN! Soaring +3.65m vault into the darkened sky beside Giant Animated Pet!
+        const u = (t - 1.04) / 0.42;
         const easeOut = 1 - (1 - u) * (1 - u);
-        kickOffsetY = 2.45 * easeOut;
-        kickOffsetForward = -1.25 * easeOut;
-      } else if (t >= 1.32 && t < 1.56) {
-        const u = (t - 1.32) / 0.24;
-        kickOffsetY = THREE.MathUtils.lerp(2.45, 0.55, u * u);
-        kickOffsetForward = THREE.MathUtils.lerp(-1.25, 1.85, u);
-      } else if (t >= 1.56 && t < 1.96) {
-        const u = (t - 1.56) / 0.4;
-        kickOffsetY = 0.55 + Math.sin(u * Math.PI) * 0.4;
-        kickOffsetForward = THREE.MathUtils.lerp(1.85, 0.45, u);
-      } else if (t >= 1.96 && t < 2.22) {
-        const u = (t - 1.96) / 0.26;
-        kickOffsetY = THREE.MathUtils.lerp(0.55, 0, u);
-        kickOffsetForward = THREE.MathUtils.lerp(0.45, 0, u);
+        kickOffsetY = 3.65 * easeOut;
+        kickOffsetForward = -1.65 * easeOut;
+      } else if (t >= 1.46 && t < 1.94) {
+        // Supersonic diagonal Hyper Rider Kick dive slamming target at 1.90s!
+        const u = (t - 1.46) / 0.48;
+        kickOffsetY = THREE.MathUtils.lerp(3.65, 0.55, u * u);
+        kickOffsetForward = THREE.MathUtils.lerp(-1.65, 2.25, u);
+      } else if (t >= 1.94 && t < 2.4) {
+        // Acrobatic rebound landing before Back-Turned Explosion Pose
+        const u = (t - 1.94) / 0.46;
+        kickOffsetY = THREE.MathUtils.lerp(0.55, 0, u) + Math.sin(u * Math.PI) * 0.75;
+        kickOffsetForward = THREE.MathUtils.lerp(2.25, 0, u);
       }
       this.root.position.set(
         interpolatedPos.x + Math.sin(this.yaw) * kickOffsetForward,
@@ -1440,13 +1551,13 @@ export class PlayerRider implements HurtboxTarget {
         interpolatedPos.z + Math.cos(this.yaw) * kickOffsetForward
       );
 
-      const showCone = t >= 1.24 && t <= 1.84;
+      const showCone = t >= 1.38 && t <= 2.12;
       this.riderKickConeMesh.visible = showCone;
       if (showCone) {
-        const pulse = 0.92 + Math.sin(t * 42) * 0.14;
-        this.riderKickConeMesh.scale.set(pulse, 1.0 + (t > 1.44 && t < 1.62 ? 0.35 : 0), pulse);
-        this.riderKickConeMesh.rotation.z += renderDt * 18;
-        this.riderKickConeMat.opacity = t > 1.68 ? Math.max(0, (1.84 - t) / 0.16) * 0.8 : 0.82;
+        const pulse = 1.05 + Math.sin(t * 46) * 0.16;
+        this.riderKickConeMesh.scale.set(pulse, 1.35 + (t > 1.82 && t < 1.98 ? 0.35 : 0), pulse);
+        this.riderKickConeMesh.rotation.z += renderDt * 24;
+        this.riderKickConeMat.opacity = t > 1.96 ? Math.max(0, (2.12 - t) / 0.16) * 0.9 : 0.9;
       }
     } else {
       this.root.position.copy(interpolatedPos);
@@ -1455,9 +1566,10 @@ export class PlayerRider implements HurtboxTarget {
     this.root.rotation.y = this.yaw;
     this.animTime += renderDt * (state === 'MOVE' ? 9.6 : 3.0);
 
-    // Route RANGED Bow/Dual-Gun attacks & Flying Rider Kick directly to HumanoidBoneDriver so bespoke poses play cleanly!
+    // Route RANGED Bow/Dual-Gun attacks, [SPACE] RIDER_KICK & [R] ULTIMATE_CINEMATIC directly to HumanoidBoneDriver!
     const forceBespokeProceduralPose =
       state === 'ULTIMATE_CINEMATIC' ||
+      state === 'RIDER_KICK' ||
       (this.elementConfig.weapon.archetype === 'RANGED' &&
         (state === 'ATTACK_1' || state === 'ATTACK_2' || state === 'ATTACK_3'));
 

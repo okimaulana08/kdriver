@@ -188,21 +188,21 @@ canvas {
   background: rgba(56, 189, 248, 0.75);
 }
 
-/* ===== Hybrid Tokusatsu Ultimate Finisher Cut-In (3.5s 3-Beat Timeline) ===== */
+/* ===== Hybrid Tokusatsu Ultimate Finisher Cut-In (3.5s 3-Beat Timeline: 0-1.08s Cut-In -> 1.08-2.42s FULL 3D Hyper Rider Kick -> 2.42-3.50s Back Explosion) ===== */
 @keyframes cutin-stage-timeline {
   0% {
     opacity: 0;
     clip-path: polygon(0 46%, 100% 42%, 100% 58%, 0 54%);
   }
-  6% {
+  5% {
     opacity: 1;
     clip-path: polygon(0 8%, 100% 0%, 100% 92%, 0 100%);
   }
-  39% {
+  28% {
     opacity: 1;
     clip-path: polygon(0 8%, 100% 0%, 100% 92%, 0 100%);
   }
-  44% {
+  32% {
     opacity: 0;
     clip-path: polygon(100% 0%, 100% 0%, 100% 100%, 100% 100%);
   }
@@ -217,11 +217,11 @@ canvas {
     transform: scale(1.26) translateX(-4%) skewX(-4deg);
     filter: brightness(1.6) contrast(1.25);
   }
-  12% {
+  10% {
     transform: scale(1.06) translateX(0%) skewX(-2deg);
     filter: brightness(1.12) contrast(1.18);
   }
-  40% {
+  30% {
     transform: scale(1.13) translateX(2.5%) skewX(-2deg);
     filter: brightness(1.25) contrast(1.22);
   }
@@ -236,17 +236,17 @@ canvas {
     transform: translateX(-5%) scale(1.24) skewX(-10deg);
     letter-spacing: 0.24em;
   }
-  10% {
+  8% {
     opacity: 1;
     transform: translateX(0%) scale(1) skewX(-8deg);
     letter-spacing: 0.12em;
   }
-  38% {
+  27% {
     opacity: 1;
     transform: translateX(1.5%) scale(1.02) skewX(-8deg);
     letter-spacing: 0.14em;
   }
-  44% {
+  32% {
     opacity: 0;
     transform: translateX(12%) scale(1.12) skewX(-10deg);
   }
@@ -257,19 +257,19 @@ canvas {
 
 @keyframes cutin-slash-wipe {
   0%,
-  37% {
+  26% {
     opacity: 0;
     transform: translateX(-120%) rotate(-18deg) scaleY(0.15);
   }
-  40% {
+  29% {
     opacity: 1;
     transform: translateX(-10%) rotate(-18deg) scaleY(1.35);
   }
-  44% {
+  32% {
     opacity: 1;
     transform: translateX(25%) rotate(-18deg) scaleY(2.6);
   }
-  49% {
+  37% {
     opacity: 0;
     transform: translateX(120%) rotate(-18deg) scaleY(0.4);
   }
@@ -280,19 +280,19 @@ canvas {
 
 @keyframes cutin-impact-flash {
   0%,
-  40.5% {
+  52% {
     opacity: 0;
   }
-  42% {
+  54% {
     opacity: 0.92;
   }
-  44.5% {
-    opacity: 0.12;
+  56.5% {
+    opacity: 0.14;
   }
-  46% {
+  58.5% {
     opacity: 0.72;
   }
-  53% {
+  65% {
     opacity: 0;
   }
   100% {

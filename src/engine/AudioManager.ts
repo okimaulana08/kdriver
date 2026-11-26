@@ -800,6 +800,46 @@ export class AudioManager {
     this.announceDriverVoice('MAXIMUM DRIVE! RIDER KICK!', 0.78, 1.16);
   }
 
+  public playRiderKickLaunch(): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    // Explosive upward jet-vault whoosh + belt charge chirp + iconic "RIDER KICK!" voice
+    const riser = ctx.createOscillator();
+    riser.type = 'sawtooth';
+    riser.frequency.setValueAtTime(210, now);
+    riser.frequency.exponentialRampToValueAtTime(1180, now + 0.34);
+    const rGain = ctx.createGain();
+    rGain.gain.setValueAtTime(0.01, now);
+    rGain.gain.linearRampToValueAtTime(0.28, now + 0.28);
+    rGain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+    riser.connect(rGain);
+    rGain.connect(out);
+    riser.start(now);
+    riser.stop(now + 0.46);
+
+    if (this.noiseBuffer) {
+      const jet = ctx.createBufferSource();
+      jet.buffer = this.noiseBuffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.setValueAtTime(750, now);
+      bp.frequency.exponentialRampToValueAtTime(2800, now + 0.32);
+      const jGain = ctx.createGain();
+      jGain.gain.setValueAtTime(0.38, now);
+      jGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+      jet.connect(bp);
+      bp.connect(jGain);
+      jGain.connect(out);
+      jet.start(now);
+      jet.stop(now + 0.38);
+    }
+
+    this.announceDriverVoice('RIDER KICK!', 0.84, 1.24);
+  }
+
   public playRiderKickImpact(): void {
     const ready = this.ensureReady();
     if (!ready) return;

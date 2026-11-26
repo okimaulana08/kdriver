@@ -64,6 +64,28 @@ export interface PetUpdateEvents {
   shots: readonly PetShotEvent[];
 }
 
+interface PetSkeletonBones {
+  body?: THREE.Object3D;
+  chest?: THREE.Object3D;
+  head?: THREE.Object3D;
+  tail?: THREE.Object3D;
+  tailBase?: THREE.Object3D;
+  tailTip?: THREE.Object3D;
+  talons?: THREE.Object3D;
+  wingLIn?: THREE.Object3D;
+  wingLOut?: THREE.Object3D;
+  wingRIn?: THREE.Object3D;
+  wingROut?: THREE.Object3D;
+  frontLegL?: THREE.Object3D;
+  frontLegR?: THREE.Object3D;
+  backLegL?: THREE.Object3D;
+  backLegR?: THREE.Object3D;
+  dragonNeck?: THREE.Object3D;
+  dragonLowerCoil?: THREE.Object3D;
+  dragonTailMid?: THREE.Object3D;
+  dragonClaws?: THREE.Object3D;
+}
+
 interface PooledPetRig {
   archetype: PetRigArchetype;
   group: THREE.Group;
@@ -71,6 +93,7 @@ interface PooledPetRig {
   glowMat: THREE.MeshPhysicalMaterial;
   armorHueUniforms: ArmorHueShiftUniforms[];
   isCustomExternal: boolean;
+  bones: PetSkeletonBones;
   wingLeft?: THREE.Object3D;
   wingRight?: THREE.Object3D;
   tailPivot?: THREE.Object3D;
@@ -186,6 +209,28 @@ export class PetEntity {
       group.visible = false;
       this.root.add(group);
 
+      const bones: PetSkeletonBones = {
+        body: assetLoader.findSocket(group, 'PetBody') ?? undefined,
+        chest: assetLoader.findSocket(group, 'PetChest') ?? undefined,
+        head: assetLoader.findSocket(group, 'PetHead') ?? undefined,
+        tail: assetLoader.findSocket(group, 'PetTail') ?? undefined,
+        tailBase: assetLoader.findSocket(group, 'PetTailBase') ?? undefined,
+        tailTip: assetLoader.findSocket(group, 'PetTailTip') ?? undefined,
+        talons: assetLoader.findSocket(group, 'PetTalons') ?? undefined,
+        wingLIn: assetLoader.findSocket(group, 'WingL_Inner') ?? undefined,
+        wingLOut: assetLoader.findSocket(group, 'WingL_Outer') ?? undefined,
+        wingRIn: assetLoader.findSocket(group, 'WingR_Inner') ?? undefined,
+        wingROut: assetLoader.findSocket(group, 'WingR_Outer') ?? undefined,
+        frontLegL: assetLoader.findSocket(group, 'FrontLegL') ?? undefined,
+        frontLegR: assetLoader.findSocket(group, 'FrontLegR') ?? undefined,
+        backLegL: assetLoader.findSocket(group, 'BackLegL') ?? undefined,
+        backLegR: assetLoader.findSocket(group, 'BackLegR') ?? undefined,
+        dragonNeck: assetLoader.findSocket(group, 'DragonNeck') ?? undefined,
+        dragonLowerCoil: assetLoader.findSocket(group, 'DragonLowerCoil') ?? undefined,
+        dragonTailMid: assetLoader.findSocket(group, 'DragonTailMid') ?? undefined,
+        dragonClaws: assetLoader.findSocket(group, 'DragonClaws') ?? undefined,
+      };
+
       return {
         archetype,
         group,
@@ -193,6 +238,7 @@ export class PetEntity {
         glowMat,
         armorHueUniforms,
         isCustomExternal: cloned.isCustomExternal,
+        bones,
         wingLeft: assetLoader.findSocket(group, 'WingLeft') ?? undefined,
         wingRight: assetLoader.findSocket(group, 'WingRight') ?? undefined,
         tailPivot: assetLoader.findSocket(group, 'TailPivot') ?? undefined,
@@ -588,6 +634,7 @@ export class PetEntity {
       );
       const bankRoll = rig.isCustomExternal ? Math.sin(t * 10) * 0.1 : 0;
       rig.group.rotation.set(t > 1.38 ? 0.25 : -0.1, this.ultimateYaw, bankRoll);
+      this.animateRiggedPetBones(rig, t, 'STRIKE', 9.0, t > 1.38 ? 0.85 : 0.25, true);
       if (rig.wingLeft && rig.wingRight) {
         const flap = Math.sin(t * 16) * 0.55;
         rig.wingLeft.rotation.z = flap;
@@ -618,6 +665,9 @@ export class PetEntity {
 
       const recoilLungeX = Math.sin(rig.yaw) * recoilT * 0.42;
       const recoilLungeZ = Math.cos(rig.yaw) * recoilT * 0.42;
+
+      // Drive real 3D skeletal wingbeats, galloping quadruped limbs, or Asian-dragon undulating coils!
+      this.animateRiggedPetBones(rig, rig.elapsed, rig.phase, rig.moveSpeed, recoilT, false);
 
       if (rig.phase === 'STRIKE') {
         rig.group.position.set(rig.posX, rig.posY, rig.posZ);
@@ -693,6 +743,82 @@ export class PetEntity {
       this.ownedMaterials[i]!.dispose();
     }
     this.ownedMaterials.length = 0;
+  }
+
+  private animateRiggedPetBones(
+    rig: PooledPetRig,
+    t: number,
+    phase: PetPhase,
+    moveSpeed: number,
+    recoilT: number,
+    isUltimate: boolean
+  ): void {
+    const b = rig.bones;
+    if (rig.archetype === 'winged') {
+      // 8-Bone Avian Rig: 2-joint aerodynamic flapping wings (outer wingtips trail inner wing by 0.72 rad!)
+      const isFast = phase === 'STRIKE' || isUltimate || recoilT > 0.1;
+      const freq = isFast ? 15.5 : 8.8;
+      const amp = isFast ? 0.56 : 0.44;
+      const innerFlap = Math.sin(t * freq) * amp;
+      const outerWhip = Math.sin(t * freq - 0.72) * (amp * 0.72);
+      const diveSweep = phase === 'STRIKE' ? -0.32 : -0.08;
+
+      if (b.wingLIn) b.wingLIn.rotation.set(0.06, diveSweep, innerFlap);
+      if (b.wingLOut) b.wingLOut.rotation.set(0, -0.08, outerWhip);
+      if (b.wingRIn) b.wingRIn.rotation.set(0.06, -diveSweep, -innerFlap);
+      if (b.wingROut) b.wingROut.rotation.set(0, 0.08, -outerWhip);
+      if (b.body) b.body.rotation.set(Math.sin(t * freq) * 0.08, 0, Math.sin(t * 3.8) * 0.06);
+      if (b.head) b.head.rotation.set(recoilT * 0.42 - Math.sin(t * freq) * 0.12, Math.sin(t * 2.7) * 0.16, 0);
+      if (b.tail) b.tail.rotation.set(-Math.sin(t * freq) * 0.32, Math.sin(t * 4.2) * 0.18, 0);
+      if (b.talons) b.talons.rotation.set(phase === 'STRIKE' ? -0.58 : 0.25 + Math.sin(t * freq) * 0.14, 0, 0);
+      return;
+    }
+
+    if (rig.archetype === 'beast') {
+      // 9-Bone Quadruped Beast Rig: bounding 4-leg gallop synced to movement speed + snapping jaw & whip tail!
+      const runIntensity =
+        phase === 'STRIKE' || isUltimate ? 1.0 : Math.min(1, 0.28 + (moveSpeed / 5.5) * 0.72);
+      const strideFreq = phase === 'STRIKE' || isUltimate ? 16.0 : 8.0 + runIntensity * 6.5;
+      const frontSwing = Math.sin(t * strideFreq) * 0.62 * runIntensity;
+      const frontAlt = Math.sin(t * strideFreq + 0.55) * 0.62 * runIntensity;
+      const backSwing = Math.sin(t * strideFreq + Math.PI) * 0.65 * runIntensity;
+      const backAlt = Math.sin(t * strideFreq + Math.PI + 0.55) * 0.65 * runIntensity;
+
+      if (b.body) b.body.rotation.set(Math.sin(t * strideFreq) * 0.12 * runIntensity, 0, 0);
+      if (b.chest) b.chest.rotation.set(-Math.sin(t * strideFreq) * 0.14 * runIntensity + recoilT * 0.22, 0, 0);
+      if (b.head) b.head.rotation.set(-0.08 - recoilT * 0.36 + Math.sin(t * 5.0) * 0.08, Math.sin(t * 3.2) * 0.14, 0);
+      if (b.frontLegL) b.frontLegL.rotation.set(frontSwing - recoilT * 0.32, 0, 0);
+      if (b.frontLegR) b.frontLegR.rotation.set(frontAlt - recoilT * 0.32, 0, 0);
+      if (b.backLegL) b.backLegL.rotation.set(backSwing, 0, 0);
+      if (b.backLegR) b.backLegR.rotation.set(backAlt, 0, 0);
+      if (b.tailBase) b.tailBase.rotation.set(0.18 + Math.sin(t * 9) * 0.18, Math.sin(t * 11) * 0.42, 0);
+      if (b.tailTip) b.tailTip.rotation.set(Math.sin(t * 9 - 0.8) * 0.24, Math.sin(t * 11 - 0.8) * 0.55, 0);
+      return;
+    }
+
+    // 7-Bone Coiled Asian Dragon Rig: fluid sinusoidal slither wave rippling from Head -> Neck -> Coil -> Tail!
+    const waveFreq = phase === 'STRIKE' || isUltimate ? 9.5 : 5.4;
+    if (b.body) {
+      b.body.rotation.set(Math.sin(t * waveFreq * 0.8) * 0.1, Math.sin(t * waveFreq) * 0.24, Math.cos(t * waveFreq) * 0.12);
+    }
+    if (b.dragonNeck) {
+      b.dragonNeck.rotation.set(recoilT * 0.36 + Math.sin(t * waveFreq - 0.7) * 0.18, Math.sin(t * waveFreq - 0.8) * 0.3, 0);
+    }
+    if (b.head) {
+      b.head.rotation.set(recoilT * 0.45 - Math.sin(t * waveFreq - 1.2) * 0.15, -Math.sin(t * waveFreq - 0.9) * 0.22, 0);
+    }
+    if (b.dragonLowerCoil) {
+      b.dragonLowerCoil.rotation.set(Math.sin(t * waveFreq + 0.8) * 0.18, Math.sin(t * waveFreq + 0.9) * 0.34, Math.cos(t * waveFreq + 0.8) * 0.16);
+    }
+    if (b.dragonTailMid) {
+      b.dragonTailMid.rotation.set(Math.sin(t * waveFreq + 1.6) * 0.22, Math.sin(t * waveFreq + 1.7) * 0.44, 0);
+    }
+    if (b.tailTip) {
+      b.tailTip.rotation.set(Math.sin(t * waveFreq + 2.4) * 0.28, Math.sin(t * waveFreq + 2.5) * 0.58, 0);
+    }
+    if (b.dragonClaws) {
+      b.dragonClaws.rotation.set(-0.15 + Math.sin(t * waveFreq * 1.2) * 0.34 - recoilT * 0.55, 0, Math.sin(t * waveFreq) * 0.18);
+    }
   }
 
   private findNearestTarget(

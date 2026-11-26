@@ -298,7 +298,8 @@ export class HumanoidBoneDriver {
       state === 'ATTACK_3' ||
       state === 'DODGE' ||
       state === 'HITSTUN' ||
-      state === 'ELEMENT_SKILL';
+      state === 'ELEMENT_SKILL' ||
+      state === 'RIDER_KICK';
     const blendRate = isFastCombatState ? 24 : 13;
 
     // Coordinate reference:
@@ -337,61 +338,142 @@ export class HumanoidBoneDriver {
       return;
     }
 
+    if (state === 'RIDER_KICK') {
+      if (stateTime < 0.14) {
+        // Phase 1a: Deep explosive crouch coil before skyward jump
+        const c = stateTime / 0.14;
+        this.offsetHips(0, -0.26 * c, -0.06 * c);
+        this.rotateBone('Hips', 0.34 * c, -0.18 * c, 0);
+        this.rotateBone('SpineUpper', 0.24 * c, 0, 0);
+        this.rotateBone('Head', -0.35 * c, 0, 0);
+        this.rotateBone('LeftArm', 0.55 * c, 0.25, -0.45);
+        this.rotateBone('RightArm', 0.55 * c, -0.25, 0.45);
+        this.rotateBone('LeftUpLeg', -0.85 * c, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.45 * c, 0, 0);
+        this.rotateBone('RightUpLeg', -0.78 * c, 0, -0.08);
+        this.rotateBone('RightLeg', 1.38 * c, 0, 0);
+      } else if (stateTime < 0.34) {
+        // Phase 1b: Soaring aerial front-somersault tuck!
+        const v = (stateTime - 0.14) / 0.2;
+        const flipPitch = v * Math.PI * 2;
+        this.offsetHips(0, 0.12, 0);
+        this.rotateBone('Hips', flipPitch - 0.2, 0, 0);
+        this.rotateBone('SpineUpper', 0.35, 0, 0);
+        this.rotateBone('LeftArm', -1.35, 0.32, -0.45);
+        this.rotateBone('LeftForeArm', -1.25, 0, 0);
+        this.rotateBone('RightArm', -1.35, -0.32, 0.45);
+        this.rotateBone('RightForeArm', -1.25, 0, 0);
+        this.rotateBone('LeftUpLeg', -1.25, 0, 0.06);
+        this.rotateBone('LeftLeg', 1.95, 0, 0);
+        this.rotateBone('RightUpLeg', -1.25, 0, -0.06);
+        this.rotateBone('RightLeg', 1.95, 0, 0);
+      } else if (stateTime < 0.72) {
+        // Phase 2: ICONIC KAMEN RIDER FLYING KICK! Right leg ramrod-straight forward-downward, left knee tucked!
+        this.offsetHips(0, 0, 0.08);
+        this.rotateBone('Hips', -0.62, -0.18, 0.08);
+        this.rotateBone('SpineLower', -0.16, 0.08, 0);
+        this.rotateBone('SpineUpper', -0.2, 0.14, 0);
+        this.rotateBone('Head', 0.54, 0.1, 0);
+        // Swept-back aerodynamic Tokusatsu arms
+        this.rotateBone('RightArm', 0.62, -0.38, 0.62);
+        this.rotateBone('RightForeArm', -0.52, 0, 0);
+        this.rotateBone('LeftArm', 0.68, 0.38, -0.62);
+        this.rotateBone('LeftForeArm', -0.58, 0, 0);
+        // Right leg: FULLY EXTENDED BLAZING RIDER KICK BOOT!
+        this.rotateBone('RightUpLeg', -1.26, 0.04, -0.04);
+        this.rotateBone('RightLeg', 0.04, 0, 0);
+        this.rotateBone('RightFoot', 0.46, 0, 0);
+        // Left leg: Tightly tucked aerial counterbalance
+        this.rotateBone('LeftUpLeg', -1.12, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.92, 0, 0);
+        this.rotateBone('LeftFoot', 0.25, 0, 0);
+      } else if (stateTime < 0.96) {
+        // Phase 3a: Acrobatic backward backflip off target!
+        const b = (stateTime - 0.72) / 0.24;
+        this.offsetHips(0, 0.1, 0);
+        this.rotateBone('Hips', -0.62 - b * (Math.PI * 2 - 0.62), 0, 0);
+        this.rotateBone('SpineUpper', -0.18, 0, 0);
+        this.rotateBone('LeftArm', -0.95, 0.3, -0.55);
+        this.rotateBone('LeftForeArm', -0.85, 0, 0);
+        this.rotateBone('RightArm', -0.95, -0.3, 0.55);
+        this.rotateBone('RightForeArm', -0.85, 0, 0);
+        this.rotateBone('LeftUpLeg', -1.05, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.72, 0, 0);
+        this.rotateBone('RightUpLeg', -0.95, 0, -0.08);
+        this.rotateBone('RightLeg', 1.62, 0, 0);
+      } else {
+        // Phase 3b: Heroic crouched superhero landing!
+        const l = Math.min(1, (stateTime - 0.96) / 0.19);
+        const cushion = Math.sin((1 - l) * Math.PI * 0.5);
+        this.offsetHips(0, -0.24 * cushion, 0);
+        this.rotateBone('Hips', 0.28 * cushion, 0, 0);
+        this.rotateBone('SpineUpper', 0.22 * cushion, 0, 0);
+        this.rotateBone('Head', -0.24 * cushion, 0, 0);
+        this.rotateBone('LeftArm', -0.35, 0.26, -0.45);
+        this.rotateBone('LeftForeArm', -0.72, 0, 0);
+        this.rotateBone('RightArm', -0.38, -0.22, 0.48);
+        this.rotateBone('RightForeArm', -0.68, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.68 * cushion - 0.18, 0, 0.1);
+        this.rotateBone('LeftLeg', 1.15 * cushion + 0.28, 0, 0);
+        this.rotateBone('RightUpLeg', 0.22 * cushion, 0, -0.1);
+        this.rotateBone('RightLeg', 0.72 * cushion + 0.22, 0, 0);
+      }
+      this.commitPose(dt, 28);
+      return;
+    }
+
     if (state === 'ULTIMATE_CINEMATIC') {
       if (stateTime < 1.02) {
-        // Beat 1: Deep Rider Kick crouch-charge over glowing K-Driver belt
+        // Beat 1 (0.00-1.02s): Deep K-Driver crouch-charge under sleek 2D Visor Cut-In
         const charge = Math.min(1, stateTime / 0.85);
-        this.offsetHips(0, -0.22 * charge + Math.sin(stateTime * 16) * 0.02, -0.05 * charge);
-        this.rotateBone('Hips', 0.24 * charge, -0.28 * charge, 0);
-        this.rotateBone('SpineUpper', 0.16 * charge, -0.32 * charge, 0);
+        this.offsetHips(0, -0.24 * charge + Math.sin(stateTime * 16) * 0.02, -0.05 * charge);
+        this.rotateBone('Hips', 0.26 * charge, -0.28 * charge, 0);
+        this.rotateBone('SpineUpper', 0.18 * charge, -0.32 * charge, 0);
         this.rotateBone('Head', -0.26 * charge, 0.45 * charge, 0);
         this.rotateBone('RightArm', 0.35 * charge - 0.3, -0.35, 0.48);
         this.rotateBone('RightForeArm', -0.75, 0, 0);
         this.rotateBone('LeftArm', -0.82, 0.24, -0.36);
         this.rotateBone('LeftForeArm', -0.95, 0, 0);
-        this.rotateBone('LeftUpLeg', -0.68 * charge, 0, 0.1);
-        this.rotateBone('LeftLeg', 1.12 * charge, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.72 * charge, 0, 0.1);
+        this.rotateBone('LeftLeg', 1.18 * charge, 0, 0);
         this.rotateBone('RightUpLeg', 0.35 * charge, 0, -0.1);
         this.rotateBone('RightLeg', 0.65 * charge, 0, 0);
-      } else if (stateTime < 1.3) {
-        // Beat 2a: Explosive skyward vault tuck before the Flying Rider Kick!
-        const vaultT = (stateTime - 1.02) / 0.28;
-        this.offsetHips(0, 0.18 * Math.sin(vaultT * Math.PI), 0);
-        this.rotateBone('Hips', THREE.MathUtils.lerp(0.25, -0.45, vaultT), 0, 0);
-        this.rotateBone('SpineUpper', 0.32 * (1 - vaultT), 0, 0);
+      } else if (stateTime < 1.44) {
+        // Beat 2a (1.02-1.44s, Cut-In OPEN!): Skyward somersault vault into darkened sky beside Giant Pet!
+        const vaultT = (stateTime - 1.02) / 0.42;
+        this.offsetHips(0, 0.16 * Math.sin(vaultT * Math.PI), 0);
+        this.rotateBone('Hips', vaultT * Math.PI * 2 - 0.3, 0, 0);
+        this.rotateBone('SpineUpper', 0.32, 0, 0);
         this.rotateBone('Head', 0.22, 0, 0);
         this.rotateBone('LeftArm', -1.25, 0.3, -0.5);
-        this.rotateBone('LeftForeArm', -1.1, 0, 0);
+        this.rotateBone('LeftForeArm', -1.15, 0, 0);
         this.rotateBone('RightArm', -1.25, -0.3, 0.5);
-        this.rotateBone('RightForeArm', -1.1, 0, 0);
-        this.rotateBone('LeftUpLeg', -1.12, 0, 0.08);
-        this.rotateBone('LeftLeg', 1.78, 0, 0);
-        this.rotateBone('RightUpLeg', -1.08, 0, -0.08);
-        this.rotateBone('RightLeg', 1.72, 0, 0);
-      } else if (stateTime < 2.22) {
-        // Beat 2b: ICONIC FLYING RIDER KICK! Right leg locked ramrod-straight forward, left knee tucked!
-        const landT = stateTime > 1.96 ? Math.min(1, (stateTime - 1.96) / 0.26) : 0;
+        this.rotateBone('RightForeArm', -1.15, 0, 0);
+        this.rotateBone('LeftUpLeg', -1.16, 0, 0.08);
+        this.rotateBone('LeftLeg', 1.84, 0, 0);
+        this.rotateBone('RightUpLeg', -1.14, 0, -0.08);
+        this.rotateBone('RightLeg', 1.8, 0, 0);
+      } else if (stateTime < 2.42) {
+        // Beat 2b (1.44-2.42s): FULL UNOBSTRUCTED 3D HYPER RIDER KICK impacting Boss at 1.90s!
+        const landT = stateTime > 2.12 ? Math.min(1, (stateTime - 2.12) / 0.3) : 0;
         const kickHold = 1 - landT;
-        this.offsetHips(0, -0.16 * landT, 0.06 * kickHold);
-        this.rotateBone('Hips', THREE.MathUtils.lerp(-0.56, 0.18, landT), -0.18 * kickHold, 0.08 * kickHold);
-        this.rotateBone('SpineLower', -0.14 * kickHold, 0.08 * kickHold, 0);
-        this.rotateBone('SpineUpper', -0.18 * kickHold + 0.12 * landT, 0.14 * kickHold, 0);
-        this.rotateBone('Head', 0.46 * kickHold - 0.12 * landT, 0.08 * kickHold, 0);
-        // Aerodynamic swept-back Kamen Rider arms
-        this.rotateBone('RightArm', THREE.MathUtils.lerp(0.54, -0.35, landT), -0.36, 0.58);
+        this.offsetHips(0, -0.16 * landT, 0.08 * kickHold);
+        this.rotateBone('Hips', THREE.MathUtils.lerp(-0.62, 0.18, landT), -0.18 * kickHold, 0.08 * kickHold);
+        this.rotateBone('SpineLower', -0.16 * kickHold, 0.08 * kickHold, 0);
+        this.rotateBone('SpineUpper', -0.2 * kickHold + 0.12 * landT, 0.14 * kickHold, 0);
+        this.rotateBone('Head', 0.52 * kickHold - 0.12 * landT, 0.08 * kickHold, 0);
+        this.rotateBone('RightArm', THREE.MathUtils.lerp(0.6, -0.35, landT), -0.38, 0.62);
         this.rotateBone('RightForeArm', -0.52, 0, 0);
-        this.rotateBone('LeftArm', THREE.MathUtils.lerp(0.62, -0.45, landT), 0.38, -0.58);
+        this.rotateBone('LeftArm', THREE.MathUtils.lerp(0.66, -0.45, landT), 0.38, -0.62);
         this.rotateBone('LeftForeArm', -0.58, 0, 0);
-        // Right leg: BLAZING EXTENDED RIDER KICK!
-        this.rotateBone('RightUpLeg', THREE.MathUtils.lerp(-1.22, -0.28, landT), 0.04, -0.05);
-        this.rotateBone('RightLeg', THREE.MathUtils.lerp(0.05, 0.52, landT), 0, 0);
-        this.rotateBone('RightFoot', THREE.MathUtils.lerp(0.42, -0.15, landT), 0, 0);
-        // Left leg: Classic tucked aerial kick counterbalance
-        this.rotateBone('LeftUpLeg', THREE.MathUtils.lerp(-1.08, -0.42, landT), 0, 0.08);
-        this.rotateBone('LeftLeg', THREE.MathUtils.lerp(1.88, 0.72, landT), 0, 0);
+        this.rotateBone('RightUpLeg', THREE.MathUtils.lerp(-1.26, -0.28, landT), 0.04, -0.05);
+        this.rotateBone('RightLeg', THREE.MathUtils.lerp(0.04, 0.52, landT), 0, 0);
+        this.rotateBone('RightFoot', THREE.MathUtils.lerp(0.46, -0.15, landT), 0, 0);
+        this.rotateBone('LeftUpLeg', THREE.MathUtils.lerp(-1.12, -0.42, landT), 0, 0.08);
+        this.rotateBone('LeftLeg', THREE.MathUtils.lerp(1.92, 0.72, landT), 0, 0);
         this.rotateBone('LeftFoot', 0.24 * kickHold, 0, 0);
       } else {
-        // Beat 3: Iconic Kamen Rider Back-Turned Explosion Pose!
+        // Beat 3 (2.42-3.50s): Iconic Kamen Rider Back-Turned Explosion Pose!
         this.rotateBone('Hips', 0, Math.PI, 0);
         this.rotateBone('SpineUpper', 0, 0.24, 0);
         this.rotateBone('Head', 0, -0.35, 0);
@@ -400,7 +482,7 @@ export class HumanoidBoneDriver {
         this.rotateBone('LeftArm', -0.42, 0.22, -0.44);
         this.rotateBone('LeftForeArm', -0.82, 0, 0);
       }
-      this.commitPose(dt, 22);
+      this.commitPose(dt, 24);
       return;
     }
 

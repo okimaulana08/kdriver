@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { InputManager } from '../engine/InputManager';
 import { calculateDamage } from '../game/combat/DamageCalculator';
+import {
+  PlayerFSM,
+  RIDER_KICK_COOLDOWN_SEC,
+  RIDER_KICK_DURATION_SEC,
+} from '../game/combat/PlayerFSM';
 import { evaluateElementalReaction } from '../game/combat/ReactionSystem';
 import {
   ALL_ELEMENT_IDS,
@@ -251,5 +256,34 @@ describe('Phase 5 Expansion: 10 Elements, RANGED, Lazy Arenas, Progression & Gam
     for (const cfg of Object.values(ENEMY_CONFIGS)) {
       expect(cfg.telegraphDurationSec).toBeGreaterThanOrEqual(0.45);
     }
+  });
+
+  it('supports playable Flying RIDER_KICK ([SPACE]/[X]) with combo-cancel, aerial i-frames, and cooldown', () => {
+    const fsm = new PlayerFSM();
+    // Start ATTACK_1 then cancel cleanly into RIDER_KICK
+    fsm.update(0.016, { isMoving: false, wantsAttack: true, wantsDodge: false, attackSpeed: 1 });
+    expect(fsm.state).toBe('ATTACK_1');
+
+    fsm.update(0.05, {
+      isMoving: false,
+      wantsAttack: false,
+      wantsDodge: false,
+      wantsRiderKick: true,
+      attackSpeed: 1,
+    });
+    expect(fsm.state).toBe('RIDER_KICK');
+    expect(fsm.isInvulnerable).toBe(true);
+    expect(fsm.receiveIncomingHit(false, true)).toBe('IGNORED');
+    expect(fsm.riderKickCooldown).toBeCloseTo(RIDER_KICK_COOLDOWN_SEC, 2);
+
+    // Complete the 1.15s Flying Rider Kick sequence -> returns cleanly to IDLE with remaining cooldown
+    fsm.update(RIDER_KICK_DURATION_SEC + 0.05, {
+      isMoving: false,
+      wantsAttack: false,
+      wantsDodge: false,
+      attackSpeed: 1,
+    });
+    expect(fsm.state).toBe('IDLE');
+    expect(fsm.canRiderKickNow()).toBe(false);
   });
 });
