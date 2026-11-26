@@ -121,6 +121,7 @@ export class HumanoidBoneDriver {
   private readonly bones = new Map<HumanoidBoneKey, CapturedBone>();
   private readonly targetQuats = new Map<HumanoidBoneKey, THREE.Quaternion>();
   private readonly hipsUnitsPerMeter: number;
+  private readonly kaijinArmLowerBias: number;
 
   // Zero-Allocation Hot-Path Scratch Objects
   private readonly scratchEuler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -143,6 +144,7 @@ export class HumanoidBoneDriver {
     this.isActive = hasCoreSkeleton;
     if (!hasCoreSkeleton) {
       this.hipsUnitsPerMeter = 1;
+      this.kaijinArmLowerBias = 0.44;
       return;
     }
 
@@ -177,6 +179,24 @@ export class HumanoidBoneDriver {
     }
     const worldScaleY = Math.max(0.0005, Math.abs(hipsParentScale.y));
     this.hipsUnitsPerMeter = 1 / worldScaleY;
+
+    // Auto-calibrate rest-pose arm abduction so BOTH wide T/A-pose rigs (~55 deg) and
+    // relaxed A-pose sculpted Boss rigs (~20 deg) keep clean ribcage clearance in applyKaijinPose!
+    const lArmBone = boneMap.get('LeftArm');
+    const lForeBone = boneMap.get('LeftForeArm');
+    if (lArmBone && lForeBone) {
+      const pArm = new THREE.Vector3();
+      const pFore = new THREE.Vector3();
+      lArmBone.getWorldPosition(pArm);
+      lForeBone.getWorldPosition(pFore);
+      pFore.sub(pArm).applyQuaternion(rootWorldQuatInv);
+      const downLen = Math.max(0.0001, -pFore.y);
+      const restAbductionRad = Math.atan2(Math.abs(pFore.x), downLen);
+      // Wide A-pose (~0.92 rad) gets ~0.44 lowering bias; relaxed A-pose (~0.28 rad) stays naturally clear (-0.08 outward!)
+      this.kaijinArmLowerBias = THREE.MathUtils.clamp(restAbductionRad - 0.44, -0.1, 0.44);
+    } else {
+      this.kaijinArmLowerBias = 0.44;
+    }
   }
 
   /**
@@ -758,6 +778,7 @@ export class HumanoidBoneDriver {
     if (!this.isActive) return;
     if (dt !== undefined && dt <= 0) return;
     this.resetPose();
+    const armBias = this.kaijinArmLowerBias;
 
     if (aiState === 'DEAD') {
       const t = Math.min(1, stateTimer / 0.65);
@@ -777,9 +798,9 @@ export class HumanoidBoneDriver {
       this.rotateBone('SpineLower', 0.28, sway * 0.22, sway * 0.12);
       this.rotateBone('SpineUpper', 0.26, -sway * 0.15, 0);
       this.rotateBone('Head', 0.38, sway * 0.32, 0);
-      this.rotateBone('LeftArm', 0.18, 0.22, -0.38);
+      this.rotateBone('LeftArm', 0.18, 0.22, -armBias * 0.85);
       this.rotateBone('LeftForeArm', -0.45, 0, 0);
-      this.rotateBone('RightArm', 0.18, -0.22, 0.38);
+      this.rotateBone('RightArm', 0.18, -0.22, armBias * 0.85);
       this.rotateBone('RightForeArm', -0.45, 0, 0);
       this.rotateBone('LeftUpLeg', -0.32, 0, 0.12);
       this.rotateBone('LeftLeg', 0.58, 0, 0);
@@ -794,8 +815,8 @@ export class HumanoidBoneDriver {
       this.offsetHips(0, -0.06 * recoil, -0.12 * recoil);
       this.rotateBone('SpineUpper', -0.35 * recoil, 0.25 * recoil, 0);
       this.rotateBone('Head', -0.42 * recoil, 0, 0);
-      this.rotateBone('LeftArm', -0.4 * recoil, 0.2, -0.25);
-      this.rotateBone('RightArm', -0.4 * recoil, -0.2, 0.25);
+      this.rotateBone('LeftArm', -0.4 * recoil, 0.2, -armBias * 0.6);
+      this.rotateBone('RightArm', -0.4 * recoil, -0.2, armBias * 0.6);
       this.commitPose(dt, 22);
       return;
     }
@@ -803,18 +824,18 @@ export class HumanoidBoneDriver {
     if (aiState === 'TELEGRAPH') {
       const t = Math.min(1, stateTimer / Math.max(0.1, telegraphDur));
       const tremor = Math.sin(stateTimer * 36) * 0.04;
-      this.offsetHips(0, -0.12 * t, 0);
+      this.offsetHips(0, -0.14 * t, 0);
       this.rotateBone('SpineLower', -0.2 * t, tremor, 0);
-      this.rotateBone('SpineUpper', -0.25 * t, -tremor, 0);
-      this.rotateBone('Head', -0.35 * t, 0, 0);
-      this.rotateBone('LeftArm', -2.15 * t - 0.25, 0.22, -0.4 + 0.5 * t);
+      this.rotateBone('SpineUpper', -0.28 * t, -tremor, 0);
+      this.rotateBone('Head', -0.38 * t, 0, 0);
+      this.rotateBone('LeftArm', -2.15 * t - 0.25, 0.22, -armBias + 0.45 * t);
       this.rotateBone('LeftForeArm', -0.85 * t - 0.3, 0, 0);
-      this.rotateBone('RightArm', -2.15 * t - 0.25, -0.22, 0.4 - 0.5 * t);
+      this.rotateBone('RightArm', -2.15 * t - 0.25, -0.22, armBias - 0.45 * t);
       this.rotateBone('RightForeArm', -0.85 * t - 0.3, 0, 0);
-      this.rotateBone('LeftUpLeg', -0.32 * t, 0, 0.12);
-      this.rotateBone('LeftLeg', 0.55 * t, 0, 0);
-      this.rotateBone('RightUpLeg', -0.22 * t, 0, -0.12);
-      this.rotateBone('RightLeg', 0.45 * t, 0, 0);
+      this.rotateBone('LeftUpLeg', -0.34 * t, 0, 0.12);
+      this.rotateBone('LeftLeg', 0.58 * t, 0, 0);
+      this.rotateBone('RightUpLeg', -0.24 * t, 0, -0.12);
+      this.rotateBone('RightLeg', 0.48 * t, 0, 0);
       this.commitPose(dt, 16);
       return;
     }
@@ -823,17 +844,17 @@ export class HumanoidBoneDriver {
       const slamT = aiState === 'ATTACK_ACTIVE' ? Math.min(1, stateTimer / 0.14) : 1;
       const recoverT = aiState === 'RECOVERY' ? Math.min(1, stateTimer / 0.85) : 0;
       const slam = slamT * (1 - recoverT * 0.65);
-      this.offsetHips(0, -0.24 * slam, 0.14 * slam);
-      this.rotateBone('SpineLower', 0.42 * slam, 0, 0);
-      this.rotateBone('SpineUpper', 0.35 * slam, 0, 0);
-      this.rotateBone('LeftArm', THREE.MathUtils.lerp(-2.2, 0.35, slamT) * (1 - recoverT * 0.4), 0.22, -0.45);
+      this.offsetHips(0, -0.26 * slam, 0.16 * slam);
+      this.rotateBone('SpineLower', 0.44 * slam, 0, 0);
+      this.rotateBone('SpineUpper', 0.36 * slam, 0, 0);
+      this.rotateBone('LeftArm', THREE.MathUtils.lerp(-2.2, 0.35, slamT) * (1 - recoverT * 0.4), 0.22, -armBias);
       this.rotateBone('LeftForeArm', -0.45, 0, 0);
-      this.rotateBone('RightArm', THREE.MathUtils.lerp(-2.2, 0.35, slamT) * (1 - recoverT * 0.4), -0.22, 0.45);
+      this.rotateBone('RightArm', THREE.MathUtils.lerp(-2.2, 0.35, slamT) * (1 - recoverT * 0.4), -0.22, armBias);
       this.rotateBone('RightForeArm', -0.45, 0, 0);
-      this.rotateBone('LeftUpLeg', -0.52 * slam, 0, 0.12);
-      this.rotateBone('LeftLeg', 0.78 * slam, 0, 0);
-      this.rotateBone('RightUpLeg', 0.25 * slam, 0, -0.12);
-      this.rotateBone('RightLeg', 0.45 * slam, 0, 0);
+      this.rotateBone('LeftUpLeg', -0.54 * slam, 0, 0.12);
+      this.rotateBone('LeftLeg', 0.8 * slam, 0, 0);
+      this.rotateBone('RightUpLeg', 0.26 * slam, 0, -0.12);
+      this.rotateBone('RightLeg', 0.48 * slam, 0, 0);
       this.commitPose(dt, 22);
       return;
     }
@@ -846,11 +867,11 @@ export class HumanoidBoneDriver {
     this.rotateBone('SpineLower', 0.14, s * 0.12, 0);
     this.rotateBone('SpineUpper', 0.14, s * 0.16, 0);
     this.rotateBone('Head', -0.24, -s * 0.1, 0);
-    // Contralateral monster arm swing (+s LeftArm opposite -s LeftUpLeg, outward yaw clearance)
-    this.rotateBone('LeftArm', s * 0.58 - 0.35, 0.24, -0.44);
-    this.rotateBone('LeftForeArm', -0.78, 0, 0);
-    this.rotateBone('RightArm', -s * 0.58 - 0.35, -0.24, 0.44);
-    this.rotateBone('RightForeArm', -0.78, 0, 0);
+    // Contralateral monster arm swing (+s LeftArm opposite -s LeftUpLeg, auto-calibrated outward clearance!)
+    this.rotateBone('LeftArm', s * 0.62 - 0.35, 0.24, -armBias);
+    this.rotateBone('LeftForeArm', -0.82, 0, 0);
+    this.rotateBone('RightArm', -s * 0.62 - 0.35, -0.24, armBias);
+    this.rotateBone('RightForeArm', -0.82, 0, 0);
     this.rotateBone('LeftUpLeg', -s * 0.62 - 0.15, 0, 0.08);
     this.rotateBone('LeftLeg', 0.28 + Math.max(0, c) * 0.85, 0, 0);
     this.rotateBone('RightUpLeg', s * 0.62 - 0.15, 0, -0.08);

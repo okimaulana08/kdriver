@@ -42,12 +42,12 @@
     "animationUrls": {}
   },
   "boss_magma": {
-    "modelUrl": "/assets/models/custom/boss_magma.glb",
+    "modelUrl": "/assets/models/custom/boss_magma.glb?v=rig2",
     "targetHeightMeters": 2.85,
     "animationUrls": {}
   },
   "boss_sylvan": {
-    "modelUrl": "/assets/models/custom/boss_sylvan.glb",
+    "modelUrl": "/assets/models/custom/boss_sylvan.glb?v=rig2",
     "targetHeightMeters": 2.85,
     "animationUrls": {}
   },

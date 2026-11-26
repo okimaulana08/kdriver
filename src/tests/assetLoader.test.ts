@@ -40,6 +40,19 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
     const parsedManifest = JSON.parse(fs.readFileSync(customManifestPath, 'utf8'));
     expect(parsedManifest).toHaveProperty('rider');
 
+    // Verify dedicated Sector 02 & 03 Boss GLBs exist and carry rigged humanoid skeletons (skins + JOINTS_0 + WEIGHTS_0)
+    for (const bossFile of ['boss_magma.glb', 'boss_sylvan.glb']) {
+      const bossPath = path.join(publicDir, 'assets', 'models', 'custom', bossFile);
+      expect(fs.existsSync(bossPath), `Missing rigged boss ${bossFile}`).toBe(true);
+      const bossBuf = fs.readFileSync(bossPath);
+      const gltfJson = JSON.parse(bossBuf.subarray(20, 20 + bossBuf.readUInt32LE(12)).toString('utf8'));
+      expect(gltfJson.skins?.length ?? 0, `${bossFile} must be rigged with a glTF skin`).toBeGreaterThanOrEqual(1);
+      expect(gltfJson.skins[0].joints.length, `${bossFile} must have >= 20 humanoid bones`).toBeGreaterThanOrEqual(20);
+      const attrs = gltfJson.meshes[0].primitives[0].attributes;
+      expect(attrs).toHaveProperty('JOINTS_0');
+      expect(attrs).toHaveProperty('WEIGHTS_0');
+    }
+
     // Total models + 360 skybox + PBR texture pack must remain well below 25 MB budget (leaving headroom for custom Mixamo rigs!)
     expect(totalBytes).toBeLessThan(8 * 1024 * 1024);
   });
