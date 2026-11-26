@@ -35,10 +35,13 @@ import type {
   ElementId,
   FormTier,
   HurtboxTarget,
+  PetConfig,
   PlayerStateId,
   RiderConfig,
   RiderId,
+  StatusEffectId,
   Vec3Snapshot,
+  WeaponConfig,
 } from '../types/schema';
 import { SlashTrail } from '../vfx/SlashTrail';
 
@@ -138,6 +141,8 @@ export class PlayerRider implements HurtboxTarget {
   private activeElementId: ElementId;
   private elementConfig: ElementConfig;
   private gemLevels: Partial<Record<ElementId, number>> = { pyro: 1, volt: 1, aqua: 1 };
+  private phantomCoreLevel = 1;
+  private phantomSkillCooldown = 0;
   private formTier: FormTier = 'BASIC';
   private hp = PLAYER_MAX_HP;
   private maxHp = PLAYER_MAX_HP;
@@ -212,6 +217,7 @@ export class PlayerRider implements HurtboxTarget {
   private readonly rangedBowGroup: THREE.Group;
   private readonly rangedGunRightGroup: THREE.Group;
   private readonly rangedGunLeftGroup: THREE.Group;
+  private readonly phantomKatanaGroup: THREE.Group;
   private readonly customRightWeapons = new Map<ElementId, THREE.Group>();
   private readonly customLeftWeapons = new Map<ElementId, THREE.Group>();
   private readonly ownedGeometries: THREE.BufferGeometry[] = [];
@@ -244,6 +250,14 @@ export class PlayerRider implements HurtboxTarget {
   private readonly unit2BasicBoneDriver: HumanoidBoneDriver | null;
   private readonly unit2BasicRightHandSocket: THREE.Object3D | null;
   private readonly unit2BasicLeftHandSocket: THREE.Object3D | null;
+  private readonly unit2HubHeadBone: THREE.Object3D | null;
+  // Solved directly against retargeted rider_unit2.glb Idle_5 so chest/neck stay undeformed while Head gazes straight at Hub camera
+  private readonly unit2HubHeadLiftQuat = new THREE.Quaternion(
+    -0.2753,
+    -0.1824,
+    0.0369,
+    0.9432
+  ).normalize();
   private readonly unit2UpgradedRigHost: THREE.Group | null;
   private readonly unit2UpgradedSkeletalAnimator: SkeletalAnimator | null;
   private readonly unit2UpgradedBoneDriver: HumanoidBoneDriver | null;
@@ -620,6 +634,10 @@ export class PlayerRider implements HurtboxTarget {
     this.unit2BasicBoneDriver = unit2BasicSetup?.driver ?? null;
     this.unit2BasicRightHandSocket = unit2BasicSetup?.rightSock ?? null;
     this.unit2BasicLeftHandSocket = unit2BasicSetup?.leftSock ?? null;
+    this.unit2HubHeadBone =
+      this.unit2BasicRigHost?.getObjectByName('Head') ??
+      this.unit2BasicRigHost?.getObjectByName('head') ??
+      null;
 
     const unit2UpgradedSetup = setupOptionalFormRig(
       'rider_unit2_upgraded',
@@ -690,6 +708,29 @@ export class PlayerRider implements HurtboxTarget {
     this.rangedBowGroup = this.buildProceduralLongbow();
     this.rangedGunRightGroup = this.buildProceduralEnergyPistol();
     this.rangedGunLeftGroup = this.buildProceduralEnergyPistol();
+
+    // Load UNIT-02 PHANTOM dedicated signature weapon: Kurokage Cyber Katana (preserved obsidian-silver-cyan PBR!)
+    const clonedKatana = assetLoader.cloneOptionalRig('weapon_phantom_katana');
+    if (clonedKatana) {
+      this.ownedMaterials.push(
+        ...bindPbrMaterials(clonedKatana.scene, roleMaterials, {
+          preserveExternalPbr: true,
+          envMapIntensity: 1.65,
+          enableArmorHueShift: false,
+        })
+      );
+      // Grip centered cleanly on upper tsuka below diamond crimson tsuba (2.28m Katana -> pommel at 0, tsuba ~0.50m)
+      clonedKatana.scene.position.set(0, -0.34, 0.02);
+      const katanaPivot = new THREE.Group();
+      katanaPivot.name = 'WeaponPivot_phantom_katana';
+      // Align cyan plasma cutting edge forward (+Z) with slight samurai outward angle
+      katanaPivot.rotation.set(0, -Math.PI * 0.5, 0);
+      katanaPivot.add(clonedKatana.scene);
+      katanaPivot.visible = false;
+      this.phantomKatanaGroup = katanaPivot;
+    } else {
+      this.phantomKatanaGroup = this.buildProceduralKatana();
+    }
 
     // Load any optional dedicated Phase 5 sculpted custom weapon `.glb`s from manifest.json!
     // Each weapon uses an explicit grip-pivot calibrated against the animated RightHand/LeftHand mount basis
@@ -792,6 +833,7 @@ export class PlayerRider implements HurtboxTarget {
       this.voltRightDagger,
       this.aquaTrident,
       this.rangedGunRightGroup,
+      this.phantomKatanaGroup,
       this.weaponBaseMarker,
       this.weaponTipMarker
     );
@@ -852,6 +894,38 @@ export class PlayerRider implements HurtboxTarget {
     return this.riderConfig.signatureFinisherName ?? this.elementConfig.finisherName;
   }
 
+  public getActiveWeaponConfig(): WeaponConfig {
+    return this.riderConfig.signatureWeapon ?? this.elementConfig.weapon;
+  }
+
+  public getActivePetConfig(): PetConfig {
+    return this.riderConfig.signaturePet ?? this.elementConfig.pet;
+  }
+
+  public getActiveStatusId(): StatusEffectId {
+    return this.riderConfig.signatureStatus ?? this.elementConfig.statusApplied;
+  }
+
+  public getActiveSkillCooldown(): number {
+    return this.riderConfig.locksElementSelection
+      ? this.phantomSkillCooldown
+      : this.skillCooldowns[this.activeElementId];
+  }
+
+  public getActiveSlashColorHex(): number {
+    return this.riderId === 'phantom' ? 0x22d3ee : this.emissiveMat.emissive.getHex();
+  }
+
+  public setPhantomCoreLevel(level: number): void {
+    this.phantomCoreLevel = Math.max(1, Math.min(5, Math.floor(level)));
+  }
+
+  public getActiveCoreLevel(): number {
+    return this.riderConfig.locksElementSelection
+      ? this.phantomCoreLevel
+      : this.getActiveGemLevel();
+  }
+
   public setRiderProfile(riderId: RiderId): void {
     this.riderId = riderId;
     this.riderConfig = getRiderConfig(riderId);
@@ -862,6 +936,7 @@ export class PlayerRider implements HurtboxTarget {
     }
     this.fsm.setRiderKickCooldownDuration(this.riderConfig.riderKickCooldownSec);
     this.setModularSuperArmorVisible(this.formTier !== 'BASIC', this.formTier);
+    this.applyActiveWeaponMesh(this.activeElementId);
   }
 
   public get isAlive(): boolean {
@@ -942,7 +1017,7 @@ export class PlayerRider implements HurtboxTarget {
       return out;
     }
 
-    if (state === 'ULTIMATE_CINEMATIC' && t >= 1.24 && t <= 2.14) {
+    if (state === 'ULTIMATE_CINEMATIC' && this.riderId !== 'phantom' && t >= 1.24 && t <= 2.14) {
       const fadeIn = Math.min(1, (t - 1.24) / 0.18);
       const fadeOut = t > 1.94 ? Math.max(0, (2.14 - t) / 0.2) : 1;
       out.active = true;
@@ -1085,6 +1160,7 @@ export class PlayerRider implements HurtboxTarget {
     for (let i = 0; i < ALL_ELEMENT_IDS.length; i++) {
       this.skillCooldowns[ALL_ELEMENT_IDS[i]!] = 0;
     }
+    this.phantomSkillCooldown = 0;
     this.recentSwitchTimer = 0;
     this.warpCounterTimer = 0;
     this.activeSwingIsWarpCounter = false;
@@ -1104,16 +1180,16 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   public getEffectiveBaseAttack(): number {
-    const base = this.elementConfig.weapon.baseDamage;
-    const levelMult = getElementLevelDamageMultiplier(this.getActiveGemLevel());
-    const passive = this.elementConfig.pet.passiveBonus;
+    const base = this.getActiveWeaponConfig().baseDamage;
+    const levelMult = getElementLevelDamageMultiplier(this.getActiveCoreLevel());
+    const passive = this.getActivePetConfig().passiveBonus;
     const passiveMult = passive.stat === 'atk' ? 1 + passive.value : 1.0;
     return base * levelMult * passiveMult;
   }
 
   public addDriverGauge(amount: number): void {
     if (amount <= 0 || this.formTier === 'ULTIMATE') return;
-    const passive = this.elementConfig.pet.passiveBonus;
+    const passive = this.getActivePetConfig().passiveBonus;
     const scaled = passive.stat === 'gaugeGain' ? amount * (1 + passive.value) : amount;
 
     if (this.formTier === 'SUPER') {
@@ -1226,6 +1302,9 @@ export class PlayerRider implements HurtboxTarget {
         this.skillCooldowns[id] = Math.max(0, this.skillCooldowns[id] - dt);
       }
     }
+    if (this.phantomSkillCooldown > 0) {
+      this.phantomSkillCooldown = Math.max(0, this.phantomSkillCooldown - dt);
+    }
 
     if (this.recentSwitchTimer > 0) {
       this.recentSwitchTimer = Math.max(0, this.recentSwitchTimer - dt);
@@ -1256,7 +1335,7 @@ export class PlayerRider implements HurtboxTarget {
       }
     }
 
-    const passive = this.elementConfig.pet.passiveBonus;
+    const passive = this.getActivePetConfig().passiveBonus;
     if (passive.stat === 'regen' && this.isAlive && this.hp < this.maxHp) {
       this.passiveRegenAccumulator += passive.value * dt;
       if (this.passiveRegenAccumulator >= 1.0) {
@@ -1312,7 +1391,12 @@ export class PlayerRider implements HurtboxTarget {
           !wantsDodge &&
           this.fsm.canRiderKickNow() &&
           input.consumeBufferedAction('RIDER_KICK');
-        if (!wantsDodge && !wantsRiderKick && this.fsm.canFormSwitchNow()) {
+        if (
+          !this.riderConfig.locksElementSelection &&
+          !wantsDodge &&
+          !wantsRiderKick &&
+          this.fsm.canFormSwitchNow()
+        ) {
           if (this.activeElementId !== this.loadoutOrder[0] && input.consumeBufferedAction('SWITCH_1')) {
             requestedElement = this.loadoutOrder[0];
           } else if (
@@ -1332,7 +1416,7 @@ export class PlayerRider implements HurtboxTarget {
           !wantsDodge &&
           !wantsRiderKick &&
           requestedElement === null &&
-          this.skillCooldowns[this.activeElementId] <= 0 &&
+          this.getActiveSkillCooldown() <= 0 &&
           this.fsm.canCastSkillNow() &&
           input.consumeBufferedAction('SKILL');
 
@@ -1347,7 +1431,7 @@ export class PlayerRider implements HurtboxTarget {
     }
 
     const effectiveAttackSpeed =
-      this.elementConfig.weapon.attackSpeed *
+      this.getActiveWeaponConfig().attackSpeed *
       this.riderConfig.attackSpeedMult *
       (this.formTier === 'ULTIMATE' ? 1.22 : this.formTier === 'SUPER' ? 1.15 : 1.0);
 
@@ -1487,8 +1571,12 @@ export class PlayerRider implements HurtboxTarget {
           this.riderKickDiveSpeed = 15.5;
         }
       } else if (nextState === 'ELEMENT_SKILL') {
-        const cfg = getElementConfig(this.activeElementId);
-        this.skillCooldowns[this.activeElementId] = cfg.skill.cooldown;
+        if (this.riderConfig.locksElementSelection && this.riderConfig.signatureSkill) {
+          this.phantomSkillCooldown = this.riderConfig.signatureSkill.cooldown;
+        } else {
+          const cfg = getElementConfig(this.activeElementId);
+          this.skillCooldowns[this.activeElementId] = cfg.skill.cooldown;
+        }
         this.beltBurstTimer = 0.45;
         this.slashTrail.endSwing();
         this.frameEvents.startedSkillElement = this.activeElementId;
@@ -1579,7 +1667,7 @@ export class PlayerRider implements HurtboxTarget {
     } else if (this.fsm.isAttacking) {
       const spec = this.fsm.getCurrentAttackSpec();
       const progress = this.fsm.normalizedStateProgress;
-      const isRanged = this.elementConfig.weapon.archetype === 'RANGED';
+      const isRanged = this.getActiveWeaponConfig().archetype === 'RANGED';
       if (spec && progress < 0.45) {
         const lungeDecay = (1 - progress / 0.45) * (isRanged ? 0.22 : 1.0);
         vx = Math.sin(this.yaw) * spec.lungeSpeed * lungeDecay;
@@ -1628,7 +1716,11 @@ export class PlayerRider implements HurtboxTarget {
       }
     } else if (nextState === 'ELEMENT_SKILL') {
       const p = this.fsm.normalizedStateProgress;
-      if (this.activeElementId === 'volt' && p < 0.42) {
+      if (this.riderId === 'phantom' && p < 0.42) {
+        // High-speed Phantom Iaido Cross forward dash-slash!
+        vx = Math.sin(this.yaw) * 15.8 * (1 - p / 0.42);
+        vz = Math.cos(this.yaw) * 15.8 * (1 - p / 0.42);
+      } else if (this.activeElementId === 'volt' && p < 0.42) {
         vx = Math.sin(this.yaw) * 14.5 * (1 - p / 0.42);
         vz = Math.cos(this.yaw) * 14.5 * (1 - p / 0.42);
       } else if (p < 0.3) {
@@ -1657,7 +1749,7 @@ export class PlayerRider implements HurtboxTarget {
     this.frameEvents.skillHitboxActive = skillHitboxActive;
 
     if (hitboxActive && !this.prevHitboxActive) {
-      this.slashTrail.beginSwing(this.emissiveMat.emissive.getHex());
+      this.slashTrail.beginSwing(this.getActiveSlashColorHex());
     } else if (!hitboxActive && this.prevHitboxActive) {
       this.slashTrail.endSwing();
     }
@@ -1697,41 +1789,69 @@ export class PlayerRider implements HurtboxTarget {
       this.root.position.set(interpolatedPos.x, interpolatedPos.y + kickOffsetY, interpolatedPos.z);
     } else if (state === 'ULTIMATE_CINEMATIC') {
       const t = this.fsm.stateTime;
-      let kickOffsetY = 0;
-      let kickOffsetForward = 0;
-      if (t >= 1.04 && t < 1.46) {
-        // Cut-In is OPEN! Soaring +3.65m vault into the darkened sky beside Giant Animated Pet!
-        const u = (t - 1.04) / 0.42;
-        const easeOut = 1 - (1 - u) * (1 - u);
-        kickOffsetY = 3.65 * easeOut;
-        kickOffsetForward = -1.65 * easeOut;
-      } else if (t >= 1.46 && t < 1.94) {
-        // Supersonic diagonal Hyper Rider Kick dive slamming target at 1.90s!
-        const u = (t - 1.46) / 0.48;
-        kickOffsetY = THREE.MathUtils.lerp(3.65, 0.55, u * u);
-        kickOffsetForward = THREE.MathUtils.lerp(-1.65, 2.25, u);
-      } else if (t >= 1.94 && t < 2.4) {
-        // Acrobatic rebound landing before Back-Turned Explosion Pose
-        const u = (t - 1.94) / 0.46;
-        kickOffsetY = THREE.MathUtils.lerp(0.55, 0, u) + Math.sin(u * Math.PI) * 0.75;
-        kickOffsetForward = THREE.MathUtils.lerp(2.25, 0, u);
+      if (this.riderId === 'phantom') {
+        // UNIT-02 PHANTOM OMNISLASH: Low-altitude lightning shadow-blitz dash through target -> calm back-turned noto stop!
+        let dashFwd = 0;
+        let dashSide = 0;
+        let dashY = 0;
+        if (t >= 1.04 && t < 1.94) {
+          const u = (t - 1.04) / 0.9;
+          dashFwd = THREE.MathUtils.lerp(-0.3, 2.35, Math.min(1, u * 1.15));
+          dashSide = Math.sin(u * Math.PI * 4.0) * 1.15 * (1 - u * 0.65);
+          dashY = Math.abs(Math.sin(u * Math.PI * 2.0)) * 0.28;
+        } else if (t >= 1.94 && t < 2.3) {
+          const u = (t - 1.94) / 0.36;
+          dashFwd = THREE.MathUtils.lerp(2.35, 0.35, u);
+        } else if (t >= 2.3) {
+          dashFwd = 0.35;
+        }
+        const fx = Math.sin(this.yaw);
+        const fz = Math.cos(this.yaw);
+        const rx = Math.cos(this.yaw);
+        const rz = -Math.sin(this.yaw);
+        this.root.position.set(
+          interpolatedPos.x + fx * dashFwd + rx * dashSide,
+          interpolatedPos.y + dashY,
+          interpolatedPos.z + fz * dashFwd + rz * dashSide
+        );
+      } else {
+        let kickOffsetY = 0;
+        let kickOffsetForward = 0;
+        if (t >= 1.04 && t < 1.46) {
+          // Cut-In is OPEN! Soaring +3.65m vault into the darkened sky beside Giant Animated Pet!
+          const u = (t - 1.04) / 0.42;
+          const easeOut = 1 - (1 - u) * (1 - u);
+          kickOffsetY = 3.65 * easeOut;
+          kickOffsetForward = -1.65 * easeOut;
+        } else if (t >= 1.46 && t < 1.94) {
+          // Supersonic diagonal Hyper Rider Kick dive slamming target at 1.90s!
+          const u = (t - 1.46) / 0.48;
+          kickOffsetY = THREE.MathUtils.lerp(3.65, 0.55, u * u);
+          kickOffsetForward = THREE.MathUtils.lerp(-1.65, 2.25, u);
+        } else if (t >= 1.94 && t < 2.4) {
+          // Acrobatic rebound landing before Back-Turned Explosion Pose
+          const u = (t - 1.94) / 0.46;
+          kickOffsetY = THREE.MathUtils.lerp(0.55, 0, u) + Math.sin(u * Math.PI) * 0.75;
+          kickOffsetForward = THREE.MathUtils.lerp(2.25, 0, u);
+        }
+        this.root.position.set(
+          interpolatedPos.x + Math.sin(this.yaw) * kickOffsetForward,
+          interpolatedPos.y + kickOffsetY,
+          interpolatedPos.z + Math.cos(this.yaw) * kickOffsetForward
+        );
       }
-      this.root.position.set(
-        interpolatedPos.x + Math.sin(this.yaw) * kickOffsetForward,
-        interpolatedPos.y + kickOffsetY,
-        interpolatedPos.z + Math.cos(this.yaw) * kickOffsetForward
-      );
     } else {
       this.root.position.copy(interpolatedPos);
     }
     this.root.rotation.y = this.yaw;
     this.animTime += renderDt * (state === 'MOVE' ? 9.6 : 3.0);
 
-    // Route RANGED Bow/Dual-Gun attacks, [SPACE] RIDER_KICK & [R] ULTIMATE_CINEMATIC directly to HumanoidBoneDriver!
+    // Route RANGED Bow/Dual-Gun attacks, [SPACE] RIDER_KICK, Phantom [Q] Iaido & [R] ULTIMATE_CINEMATIC directly to HumanoidBoneDriver!
     const forceBespokeProceduralPose =
       state === 'ULTIMATE_CINEMATIC' ||
       state === 'RIDER_KICK' ||
-      (this.elementConfig.weapon.archetype === 'RANGED' &&
+      (this.riderId === 'phantom' && state === 'ELEMENT_SKILL') ||
+      (this.getActiveWeaponConfig().archetype === 'RANGED' &&
         (state === 'ATTACK_1' || state === 'ATTACK_2' || state === 'ATTACK_3'));
 
     if (this.riderId === 'phantom' && this.unit2BasicRigHost) {
@@ -1747,7 +1867,8 @@ export class PlayerRider implements HurtboxTarget {
             this.activeElementId,
             this.formTier,
             this.fsm.stateTime,
-            renderDt
+            renderDt,
+            this.riderId
           );
         } else {
           this.applyUnriggedFormBodyMotion(this.unit2UpgradedRigHost, state, progress);
@@ -1763,7 +1884,8 @@ export class PlayerRider implements HurtboxTarget {
           this.activeElementId,
           this.formTier,
           this.fsm.stateTime,
-          renderDt
+          renderDt,
+          this.riderId
         );
       } else {
         this.applyUnriggedFormBodyMotion(this.unit2BasicRigHost, state, progress);
@@ -1840,10 +1962,26 @@ export class PlayerRider implements HurtboxTarget {
     this.root.position.set(0, PLAYER_SPAWN_Y, 0);
 
     if (this.riderId === 'phantom' && this.unit2BasicRigHost) {
-      this.yaw = 0;
-      this.root.rotation.y = 0;
-      if (this.unit2BasicBoneDriver?.isActive) {
-        this.unit2BasicBoneDriver.applyRiderPose('IDLE', 0, this.animTime, this.activeElementId, 'BASIC', 0, renderDt);
+      const hasUnit2IdleClip = Boolean(this.unit2BasicSkeletalAnimator?.hasClipForState('IDLE'));
+      this.yaw = hasUnit2IdleClip ? 0.58 : 0;
+      this.root.rotation.y = this.yaw;
+      if (hasUnit2IdleClip && this.unit2BasicSkeletalAnimator) {
+        this.unit2BasicSkeletalAnimator.playState('IDLE', { loop: true, timeScale: 1.0, fadeSec: 0.14 });
+        this.unit2BasicSkeletalAnimator.update(renderDt);
+        if (this.unit2HubHeadBone) {
+          this.unit2HubHeadBone.quaternion.multiply(this.unit2HubHeadLiftQuat);
+        }
+      } else if (this.unit2BasicBoneDriver?.isActive) {
+        this.unit2BasicBoneDriver.applyRiderPose(
+          'IDLE',
+          0,
+          this.animTime,
+          this.activeElementId,
+          'BASIC',
+          0,
+          renderDt,
+          'phantom'
+        );
       }
       this.updateMaterialFeedback();
       return;
@@ -1888,8 +2026,9 @@ export class PlayerRider implements HurtboxTarget {
       fadeSec = 0.05;
     } else if (state === 'ATTACK_1' || state === 'ATTACK_2' || state === 'ATTACK_3') {
       const spec = this.fsm.getCurrentAttackSpec();
-      const targetDur = spec ? spec.durationSec / this.elementConfig.weapon.attackSpeed : 0.45;
-      timeScale = clipDur > 0.1 ? Math.min(3.4, Math.max(1.0, clipDur / targetDur)) : this.elementConfig.weapon.attackSpeed;
+      const atkSpd = this.getActiveWeaponConfig().attackSpeed * this.riderConfig.attackSpeedMult;
+      const targetDur = spec ? spec.durationSec / atkSpd : 0.45;
+      timeScale = clipDur > 0.1 ? Math.min(3.8, Math.max(1.0, clipDur / targetDur)) : atkSpd;
       fadeSec = 0.06;
     } else if (state === 'DEAD') {
       timeScale = 1.0;
@@ -1957,6 +2096,7 @@ export class PlayerRider implements HurtboxTarget {
         this.voltRightDagger,
         this.aquaTrident,
         this.rangedGunRightGroup,
+        this.phantomKatanaGroup,
         this.weaponBaseMarker,
         this.weaponTipMarker
       );
@@ -2014,6 +2154,7 @@ export class PlayerRider implements HurtboxTarget {
         this.voltRightDagger,
         this.aquaTrident,
         this.rangedGunRightGroup,
+        this.phantomKatanaGroup,
         this.weaponBaseMarker,
         this.weaponTipMarker
       );
@@ -2083,6 +2224,24 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   private applyActiveWeaponMesh(elementId: ElementId): void {
+    const isPhantom = this.riderId === 'phantom';
+    if (isPhantom) {
+      for (const mesh of this.customRightWeapons.values()) mesh.visible = false;
+      for (const mesh of this.customLeftWeapons.values()) mesh.visible = false;
+      this.pyroGreatsword.visible = false;
+      this.voltRightDagger.visible = false;
+      this.voltLeftDagger.visible = false;
+      this.aquaTrident.visible = false;
+      this.rangedBowGroup.visible = false;
+      this.rangedGunRightGroup.visible = false;
+      this.rangedGunLeftGroup.visible = false;
+      this.phantomKatanaGroup.visible = true;
+      this.weaponBaseMarker.position.set(0, 0.25, 0);
+      this.weaponTipMarker.position.set(0, 1.98, 0);
+      return;
+    }
+
+    this.phantomKatanaGroup.visible = false;
     const cfg = getElementConfig(elementId);
     const arch = cfg.weapon.archetype;
     const customRight = this.customRightWeapons.get(elementId);
@@ -2120,6 +2279,27 @@ export class PlayerRider implements HurtboxTarget {
       this.weaponBaseMarker.position.set(0, 0.2, 0);
       this.weaponTipMarker.position.set(0, 0.9, 0.4);
     }
+  }
+
+  private buildProceduralKatana(): THREE.Group {
+    const katana = new THREE.Group();
+    katana.name = 'ProceduralPhantomKatana';
+    const hiltGeo = new THREE.CylinderGeometry(0.024, 0.026, 0.42, 8);
+    const guardGeo = new THREE.BoxGeometry(0.14, 0.03, 0.14);
+    const bladeGeo = new THREE.BoxGeometry(0.022, 1.82, 0.055);
+    this.ownedGeometries.push(hiltGeo, guardGeo, bladeGeo);
+
+    const hilt = new THREE.Mesh(hiltGeo, this.undersuitMat);
+    hilt.position.set(0, -0.1, 0);
+    const guard = new THREE.Mesh(guardGeo, this.metallicMat);
+    guard.position.set(0, 0.14, 0);
+    const blade = new THREE.Mesh(bladeGeo, this.bladeEdgeMat);
+    blade.position.set(0, 1.06, 0);
+    blade.castShadow = true;
+
+    katana.add(hilt, guard, blade);
+    katana.visible = false;
+    return katana;
   }
 
   private buildProceduralLongbow(): THREE.Group {
@@ -2368,7 +2548,11 @@ export class PlayerRider implements HurtboxTarget {
       this.superAuraUniforms.uOpacity.value = isUlt ? 0.92 : 0.72;
       const pulse = 1 + Math.sin(this.animTime * 4.5) * 0.06;
       this.superAuraRingMesh.scale.setScalar(isUlt ? pulse * 1.24 : pulse);
-      this.superAuraUniforms.uColor.value.set(this.elementConfig.emissiveColor);
+      if (this.riderId === 'phantom') {
+        this.superAuraUniforms.uColor.value.setHex(0x22d3ee);
+      } else {
+        this.superAuraUniforms.uColor.value.set(this.elementConfig.emissiveColor);
+      }
     }
 
     if (this.beltBurstTimer > 0) {
@@ -2376,6 +2560,9 @@ export class PlayerRider implements HurtboxTarget {
       this.beltBurstRingMesh.visible = true;
       this.beltBurstUniforms.uTime.value = this.animTime;
       this.beltBurstUniforms.uIsUltimate.value = this.formTier === 'ULTIMATE' ? 1.0 : 0.0;
+      if (this.riderId === 'phantom') {
+        this.beltBurstUniforms.uColor.value.setHex(0x22d3ee);
+      }
       this.beltBurstRingMesh.scale.setScalar(0.7 + t * 4.6);
       this.beltBurstUniforms.uOpacity.value = Math.max(0, (1 - t) * 0.95);
     } else {

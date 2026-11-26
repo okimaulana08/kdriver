@@ -55,6 +55,7 @@ function createDefaultSaveRecord(): SaveRecord {
     selectedStageId: 'stage_01_nexus_arena',
     selectedDifficulty: 'medium',
     selectedRiderId: 'nexus',
+    phantomCoreLevel: 1,
     stageDifficultyBestRanks: {},
     unlockedElements: unlocked,
     gemLevels,
@@ -162,6 +163,11 @@ export function loadSaveRecord(): SaveRecord {
       ? parsed.selectedRiderId
       : 'nexus';
 
+    const phantomCoreLevel =
+      typeof parsed.phantomCoreLevel === 'number' && Number.isFinite(parsed.phantomCoreLevel)
+        ? Math.max(1, Math.min(5, Math.floor(parsed.phantomCoreLevel)))
+        : 1;
+
     const stageDifficultyBestRanks: Partial<Record<string, RankGrade>> = {};
     if (parsed.stageDifficultyBestRanks && typeof parsed.stageDifficultyBestRanks === 'object') {
       for (const [k, v] of Object.entries(parsed.stageDifficultyBestRanks)) {
@@ -180,6 +186,7 @@ export function loadSaveRecord(): SaveRecord {
       selectedStageId,
       selectedDifficulty,
       selectedRiderId,
+      phantomCoreLevel,
       stageDifficultyBestRanks,
       unlockedElements,
       gemLevels,

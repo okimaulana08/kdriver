@@ -23,6 +23,7 @@ import {
   PhysicsWorld,
 } from './PhysicsWorld';
 import { StageManager } from '../game/StageManager';
+import { getPhantomCoreLevel } from '../game/ProgressionSystem';
 import {
   PERFECT_DODGE_GAUGE_BONUS,
   calculateDamage,
@@ -308,6 +309,7 @@ export class GameApp {
       this.player.setLoadoutOrder(initialOrder);
       this.player.setRiderProfile(initialStore.selectedRiderId);
       this.player.setGemLevels(initialStore.saveRecord.gemLevels);
+      this.player.setPhantomCoreLevel(getPhantomCoreLevel(initialStore.saveRecord));
       this.scene.add(this.player.root);
       this.scene.add(this.player.slashTrail.mesh);
       useGameStore
@@ -401,6 +403,7 @@ export class GameApp {
   public syncGemProgression(): void {
     const record = useGameStore.getState().saveRecord;
     this.player?.setGemLevels(record.gemLevels);
+    this.player?.setPhantomCoreLevel(getPhantomCoreLevel(record));
   }
 
   public previewHubElement(elementId: ElementId): void {
@@ -468,6 +471,7 @@ export class GameApp {
     this.scratchPrevPos.copy(this.scratchCurrPos);
 
     this.player.setGemLevels(store.saveRecord.gemLevels);
+    this.player.setPhantomCoreLevel(getPhantomCoreLevel(store.saveRecord));
     this.player.resetForNewStage(store.loadoutOrder, Math.PI);
     this.player.root.position.copy(this.scratchCurrPos);
     this.player.triggerEntryHenshinVisual();
@@ -484,8 +488,9 @@ export class GameApp {
     this.audio.playHenshinSuper(
       riderCfg.id === 'phantom' ? 'PHANTOM! HENSHIN!' : 'HENSHIN!'
     );
-    this.elementSkillVfx.spawnHenshinSuper(store.loadoutOrder[0], 0, 3.5, Math.PI);
-    this.particlePool.emitHenshinAscension(store.loadoutOrder[0], 0, 1.1, 3.5, false);
+    const entryColorElem: ElementId = riderCfg.id === 'phantom' ? 'aqua' : store.loadoutOrder[0];
+    this.elementSkillVfx.spawnHenshinSuper(entryColorElem, 0, 3.5, Math.PI);
+    this.particlePool.emitHenshinAscension(entryColorElem, 0, 1.1, 3.5, false);
   }
 
   public retryStage(): void {
@@ -520,6 +525,7 @@ export class GameApp {
 
     const store = useGameStore.getState();
     this.player.setGemLevels(store.saveRecord.gemLevels);
+    this.player.setPhantomCoreLevel(getPhantomCoreLevel(store.saveRecord));
     this.player.resetForNewStage(store.loadoutOrder, 0);
     this.player.root.position.copy(this.scratchCurrPos);
 
@@ -948,8 +954,9 @@ export class GameApp {
     if (playerEvents.triggeredWarpCounter) this.handleWarpCounterEvent();
     if (playerEvents.startedSwingStep !== 0) {
       const elemId = this.player.currentElementId;
-      this.audio.playSlash(playerEvents.startedSwingStep, elemId);
-      if (this.player.activeElement.weapon.archetype === 'RANGED') {
+      const isPhantom = this.player.currentRiderId === 'phantom';
+      this.audio.playSlash(playerEvents.startedSwingStep, isPhantom ? 'volt' : elemId);
+      if (this.player.getActiveWeaponConfig().archetype === 'RANGED') {
         this.player.getPosition(this.scratchOriginSnapshot);
         const cfg = getElementConfig(elemId);
         this.scratchColorHelper.set(cfg.emissiveColor);
@@ -976,25 +983,32 @@ export class GameApp {
     }
     if (playerEvents.startedDodge) {
       this.audio.playDodge();
-      this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+      const dodgeHex =
+        this.player.currentRiderId === 'phantom'
+          ? 0x22d3ee
+          : this.scratchColorHelper.set(this.player.activeElement.emissiveColor).getHex();
       this.afterimageTrail.spawnGhost(
         this.scratchCurrPos.x,
         this.scratchCurrPos.y,
         this.scratchCurrPos.z,
         this.player.facingYaw,
-        this.scratchColorHelper.getHex(),
+        dodgeHex,
         0.34,
         0.34,
         1.02
       );
     }
 
-    // 4. Async Pet Assist (`E`)
+    // 4. Async Pet Assist (`E`) — UNIT-02 PHANTOM summons Kitsune-02 Cyber Fox; UNIT-01 summons active Element Contract Beast!
     const activeElemId = this.player.currentElementId;
+    const isPhantomRider = this.player.currentRiderId === 'phantom';
+    const canSummonActivePet = isPhantomRider
+      ? this.petEntity.canSummonPhantomFox()
+      : this.petEntity.canSummon(activeElemId);
     if (
       !controlsLocked &&
       !this.player.fsm.isInCinematic &&
-      this.petEntity.canSummon(activeElemId) &&
+      canSummonActivePet &&
       this.input.consumeBufferedAction('PET')
     ) {
       this.player.getPosition(this.scratchOriginSnapshot);
@@ -1005,25 +1019,31 @@ export class GameApp {
         petTargetEntity.getPosition(this.scratchTargetSnapshot);
         petTarget = this.scratchTargetSnapshot;
       }
-      if (
-        this.petEntity.summon(
-          activeElemId,
-          this.scratchOriginSnapshot,
-          this.scratchPlayerForwardXZ.x,
-          this.scratchPlayerForwardXZ.z,
-          petTarget
-        )
-      ) {
+      const summoned = isPhantomRider
+        ? this.petEntity.summonPhantomFox(
+            this.scratchOriginSnapshot,
+            this.scratchPlayerForwardXZ.x,
+            this.scratchPlayerForwardXZ.z,
+            petTarget
+          )
+        : this.petEntity.summon(
+            activeElemId,
+            this.scratchOriginSnapshot,
+            this.scratchPlayerForwardXZ.x,
+            this.scratchPlayerForwardXZ.z,
+            petTarget
+          );
+      if (summoned) {
         this.player.triggerBeltGesture();
         this.player.addDriverGauge(10);
-        this.audio.playPetSummon(activeElemId);
+        this.audio.playPetSummon(isPhantomRider ? 'aqua' : activeElemId);
         this.particlePool.emitElementBurst(
-          activeElemId,
+          isPhantomRider ? 'aqua' : activeElemId,
           this.scratchOriginSnapshot.x,
           this.scratchOriginSnapshot.y + 0.2,
           this.scratchOriginSnapshot.z,
-          8,
-          0.42
+          10,
+          0.46
         );
       }
     }
@@ -1052,7 +1072,7 @@ export class GameApp {
     this.player.root.position.copy(this.scratchCurrPos);
 
     // 6. Melee, Ranged Projectile & Skill Hitboxes
-    if (playerEvents.hitboxActive && this.player.activeElement.weapon.archetype !== 'RANGED') {
+    if (playerEvents.hitboxActive && this.player.getActiveWeaponConfig().archetype !== 'RANGED') {
       this.playerHitbox.beginSwing(playerEvents.swingId);
       this.resolvePlayerMeleeHits();
     } else if (this.playerHitbox.currentSwingId !== null) {
@@ -1065,14 +1085,18 @@ export class GameApp {
       const target = hit.target as EnemyBase;
       const cfg = getElementConfig(hit.element);
       if (hit.source === 'PET') {
+        const petLabel =
+          this.player.currentRiderId === 'phantom'
+            ? 'KITSUNE-02 BOLT'
+            : `${cfg.pet.name.toUpperCase()} SHOT`;
         this.applyElementalStrikeOnEnemy(
           target,
           hit.element,
-          0.55,
-          10,
+          this.player.currentRiderId === 'phantom' ? 0.65 : 0.55,
+          12,
           0,
           false,
-          `${cfg.pet.name.toUpperCase()} SHOT`,
+          petLabel,
           false
         );
       } else {
@@ -1115,14 +1139,16 @@ export class GameApp {
         petEvents.impact.z,
         petEvents.impact.radius,
         petEvents.impact.damageMultiplier,
-        petEvents.impact.healRiderAmount
+        petEvents.impact.healRiderAmount,
+        petEvents.impact.isPhantomFox
       );
     }
     for (let i = 0; i < petEvents.shots.length; i++) {
       const shot = petEvents.shots[i]!;
       const shotCfg = getElementConfig(shot.element);
-      this.scratchColorHelper.set(shotCfg.emissiveColor);
-      const hex = this.scratchColorHelper.getHex();
+      const hex = shot.isPhantomFox
+        ? 0x22d3ee
+        : this.scratchColorHelper.set(shotCfg.emissiveColor).getHex();
       this.playerProjectilePool.firePetShot(
         shot.element,
         shot.x,
@@ -1706,12 +1732,16 @@ export class GameApp {
       this.audio.playUltimateFinisher(isGrand);
     }
     this.player.getPosition(this.scratchOriginSnapshot);
-    this.petEntity.activateUltimatePet(
-      elemId,
-      this.scratchOriginSnapshot,
-      this.player.facingYaw,
-      isGrand
-    );
+    if (isPhantom) {
+      this.petEntity.activateUltimatePhantomFox(this.scratchOriginSnapshot, this.player.facingYaw);
+    } else {
+      this.petEntity.activateUltimatePet(
+        elemId,
+        this.scratchOriginSnapshot,
+        this.player.facingYaw,
+        isGrand
+      );
+    }
     this.cameraRig.setMode('ULTIMATE_CINEMATIC', this.player.facingYaw, isGrand);
     this.cameraRig.addShake(isGrand ? 0.42 : 0.3, isGrand ? 0.42 : 0.32);
     this.particlePool.emitHenshinAscension(
@@ -1738,29 +1768,29 @@ export class GameApp {
     const impactZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 2.6;
 
     if (isPhantom) {
-      // UNIT-02 PHANTOM OMNISLASH BLITZ: 4 cardinal holographic Phantom clones slicing inward + Cryo-Cyan X-Slash Cataclysm!
-      const cloneAngles = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
-      for (let c = 0; c < cloneAngles.length; c++) {
-        const ang = this.player.facingYaw + cloneAngles[c]!;
-        const cx = impactX + Math.sin(ang) * 2.85;
-        const cz = impactZ + Math.cos(ang) * 2.85;
+      // UNIT-02 PHANTOM OMNISLASH // CYBER ECLIPSE:
+      // 6 radial holographic Phantom clones slicing inward + Dedicated Cyber-Samurai Dimension Cage + 3D X-Slash Pillars (Zero fireballs!)
+      for (let c = 0; c < 6; c++) {
+        const ang = this.player.facingYaw + (c / 6) * Math.PI * 2;
+        const cx = impactX + Math.sin(ang) * 3.15;
+        const cz = impactZ + Math.cos(ang) * 3.15;
         this.afterimageTrail.spawnGhost(
           cx,
           this.scratchOriginSnapshot.y,
           cz,
           ang + Math.PI,
           c % 2 === 0 ? 0x22d3ee : 0xf43f5e,
-          0.55,
-          0.52,
+          0.62,
+          0.56,
           1.08
         );
       }
-      this.elementSkillVfx.spawnFinisherClimax('aqua', impactX, impactZ, 13.8);
-      this.elementSkillVfx.spawnSkillVfx(elemId, impactX, impactZ, this.player.facingYaw, 7.5, true);
-      this.riderKickVfx.spawnImpactCrater('aqua', impactX, impactZ, 7.2, true);
-      this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.6, impactZ, 1.55);
+      this.elementSkillVfx.spawnPhantomOmnislash(impactX, impactZ, this.player.facingYaw, 15.0);
+      this.riderKickVfx.spawnImpactCrater('aqua', impactX, impactZ, 7.6, true);
+      this.particlePool.emitElementBurst('aqua', impactX, 1.2, impactZ, 64, 1.85);
+      this.particlePool.emitElementBurst('umbra', impactX, 1.8, impactZ, 44, 1.65);
       this.loop.triggerHitStop(0.16);
-      this.cameraRig.addShake(0.66, 0.5);
+      this.cameraRig.addShake(0.68, 0.52);
     } else if (isGrand) {
       // GRAND SOVEREIGN SUPERNOVA CLIMAX (Ultimate Form [R]!)
       this.elementSkillVfx.spawnGrandUltimateClimax(
@@ -1824,16 +1854,27 @@ export class GameApp {
 
   private triggerUltimateBackExplosionVfx(): void {
     if (!this.player) return;
-    const isGrand = this.player.wasFinisherCastFromUltimate;
+    const isPhantom = this.player.currentRiderId === 'phantom';
+    const isGrand = !isPhantom && this.player.wasFinisherCastFromUltimate;
     this.player.getPosition(this.scratchOriginSnapshot);
     const fx = Math.sin(this.player.facingYaw);
     const fz = Math.cos(this.player.facingYaw);
     const rx = Math.cos(this.player.facingYaw);
     const rz = -Math.sin(this.player.facingYaw);
-    const lateral = (Math.random() - 0.5) * (isGrand ? 7.4 : 3.2);
+    const lateral = (Math.random() - 0.5) * (isGrand ? 7.4 : isPhantom ? 5.6 : 3.2);
     const forwardDist = (isGrand ? 4.2 : 3.5) + Math.random() * (isGrand ? 4.2 : 2.5);
     const bx = this.scratchOriginSnapshot.x + fx * forwardDist + rx * lateral;
     const bz = this.scratchOriginSnapshot.z + fz * forwardDist + rz * lateral;
+
+    if (isPhantom) {
+      // Dedicated Cyan-Crimson Dimensional Katana Cross-Burst behind Unit-02's back-turned Katana sheathe pose!
+      this.elementSkillVfx.spawnPhantomSlashBurst(bx, bz, 4.35);
+      this.particlePool.emitElementBurst('aqua', bx, 1.2, bz, 30, 1.35);
+      this.particlePool.emitHitSparks(bx, 1.5, bz, 0xf43f5e, true);
+      this.cameraRig.addShake(0.38, 0.22);
+      this.audio.playReaction('ELECTRO_SURGE');
+      return;
+    }
 
     this.elementSkillVfx.spawnExplosionPillar(
       this.player.currentElementId,
@@ -1899,14 +1940,45 @@ export class GameApp {
 
   private handleSkillStartEvent(element: ElementId): void {
     if (!this.player) return;
+    const isPhantom = this.player.currentRiderId === 'phantom';
     const cfg = getElementConfig(element);
-    this.audio.playElementSkill(element);
+    this.audio.playElementSkill(isPhantom ? 'volt' : element);
     this.player.addDriverGauge(10);
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
     const isSuper = this.player.currentFormTier !== 'BASIC';
-    const vfxX = this.scratchOriginSnapshot.x + this.scratchPlayerForwardXZ.x * 1.6;
-    const vfxZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 1.6;
+    const vfxX = this.scratchOriginSnapshot.x + this.scratchPlayerForwardXZ.x * 1.8;
+    const vfxZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 1.8;
+    if (isPhantom) {
+      const skillRadius = this.player.activeRiderConfig.signatureSkill?.radius ?? 4.8;
+      this.elementSkillVfx.spawnPhantomIaidoSlash(
+        vfxX,
+        vfxZ,
+        this.player.facingYaw,
+        skillRadius * (isSuper ? 1.32 : 1.0),
+        isSuper
+      );
+      this.afterimageTrail.spawnGhost(
+        this.scratchOriginSnapshot.x,
+        this.scratchOriginSnapshot.y,
+        this.scratchOriginSnapshot.z,
+        this.player.facingYaw,
+        0x22d3ee,
+        0.42,
+        0.38,
+        1.04
+      );
+      this.particlePool.emitElementBurst(
+        'aqua',
+        vfxX,
+        this.scratchOriginSnapshot.y + 0.35,
+        vfxZ,
+        isSuper ? 48 : 34,
+        isSuper ? 1.55 : 1.2
+      );
+      this.cameraRig.addShake(isSuper ? 0.34 : 0.25, 0.18);
+      return;
+    }
     this.elementSkillVfx.spawnSkillVfx(
       element,
       vfxX,
@@ -1932,7 +2004,7 @@ export class GameApp {
     const comboStep = this.player.fsm.comboStep;
     if (!spec || comboStep === 0) return;
 
-    const weapon = this.player.activeElement.weapon;
+    const weapon = this.player.getActiveWeaponConfig();
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
 
@@ -1970,18 +2042,27 @@ export class GameApp {
 
   private resolveElementSkillHits(): void {
     if (!this.player) return;
+    const isPhantom = this.player.currentRiderId === 'phantom';
     const elementId = this.player.currentElementId;
     const cfg = getElementConfig(elementId);
+    const sigSkill = isPhantom ? this.player.activeRiderConfig.signatureSkill : undefined;
     const isSuper = this.player.currentFormTier !== 'BASIC';
 
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
-    this.scratchOriginSnapshot.x += this.scratchPlayerForwardXZ.x * 1.6;
-    this.scratchOriginSnapshot.z += this.scratchPlayerForwardXZ.z * 1.6;
+    this.scratchOriginSnapshot.x += this.scratchPlayerForwardXZ.x * 1.8;
+    this.scratchOriginSnapshot.z += this.scratchPlayerForwardXZ.z * 1.8;
 
-    const radius = cfg.skill.radius * (isSuper ? 1.35 : 1.0);
-    const mult = cfg.skill.damageMultiplier * (isSuper ? 1.35 : 1.0);
-    const label = isSuper ? `SUPER ${cfg.skill.name.toUpperCase()}` : cfg.skill.name.toUpperCase();
+    const baseRad = sigSkill?.radius ?? cfg.skill.radius;
+    const baseMult = sigSkill?.damageMultiplier ?? cfg.skill.damageMultiplier;
+    const skillName = sigSkill?.name ?? cfg.skill.name;
+    const radius = baseRad * (isSuper ? 1.32 : 1.0);
+    const mult = baseMult * (isSuper ? 1.35 : 1.0);
+    const label = isSuper
+      ? isPhantom
+        ? `OVERCLOCK ${skillName.toUpperCase()}`
+        : `SUPER ${skillName.toUpperCase()}`
+      : skillName.toUpperCase();
 
     this.skillHitbox.checkSphere(
       this.scratchOriginSnapshot,
@@ -1994,20 +2075,20 @@ export class GameApp {
       const target = this.scratchHitResults[i] as EnemyBase;
       target.getPosition(this.scratchTargetSnapshot);
       this.particlePool.emitElementBurst(
-        elementId,
+        isPhantom ? 'aqua' : elementId,
         this.scratchTargetSnapshot.x,
         this.scratchTargetSnapshot.y,
         this.scratchTargetSnapshot.z,
         28,
         1.1
       );
-      // Element-specific bonus mechanics (Aero Vortex Pull, Lunar Lifesteal, Terra Guard Break)
-      if (elementId === 'aero') {
+      // Element-specific bonus mechanics (UNIT-01 only: Aero Vortex Pull, Lunar Lifesteal, Terra Guard Break)
+      if (!isPhantom && elementId === 'aero') {
         const px = this.scratchOriginSnapshot.x - this.scratchTargetSnapshot.x;
         const pz = this.scratchOriginSnapshot.z - this.scratchTargetSnapshot.z;
         const pLen = Math.hypot(px, pz) || 1;
         target.applyKnockback(px / pLen, pz / pLen, 7.2);
-      } else if (elementId === 'lunar') {
+      } else if (!isPhantom && elementId === 'lunar') {
         const healed = this.player.heal(10);
         if (healed > 0) {
           this.emitFloatingTextAtWorld(
@@ -2020,7 +2101,7 @@ export class GameApp {
           );
         }
       }
-      const guardBreakPower = elementId === 'terra' ? 75 : 46;
+      const guardBreakPower = isPhantom ? 58 : elementId === 'terra' ? 75 : 46;
       this.applyElementalStrikeOnEnemy(
         target,
         elementId,
@@ -2041,14 +2122,17 @@ export class GameApp {
     z: number,
     radius: number,
     damageMultiplier: number,
-    healRiderAmount: number
+    healRiderAmount: number,
+    isPhantomFox = false
   ): void {
     if (!this.player) return;
-    this.particlePool.emitElementBurst(element, x, y, z, 38, 1.3);
+    this.particlePool.emitElementBurst(isPhantomFox ? 'aqua' : element, x, y, z, 38, 1.3);
     this.cameraRig.addShake(0.22, 0.16);
-    this.audio.playElementSkill(element);
+    this.audio.playElementSkill(isPhantomFox ? 'aqua' : element);
 
-    const petName = getElementConfig(element).pet.name.toUpperCase();
+    const petName = isPhantomFox
+      ? 'KITSUNE-02 CYBER FOX'
+      : getElementConfig(element).pet.name.toUpperCase();
     if (healRiderAmount > 0) {
       const healed = this.player.heal(healRiderAmount);
       if (healed > 0) {
@@ -2085,7 +2169,9 @@ export class GameApp {
 
   private handleRiderKickStartEvent(): void {
     if (!this.player) return;
+    const isPhantom = this.player.currentRiderId === 'phantom';
     const elemId = this.player.currentElementId;
+    const vfxElem: ElementId = isPhantom ? 'aqua' : elemId;
     const aimTarget = this.lockedEnemy?.isAlive ? this.lockedEnemy : this.findPriorityTarget();
     if (aimTarget && aimTarget.isAlive) {
       aimTarget.getPosition(this.scratchTargetSnapshot);
@@ -2104,7 +2190,7 @@ export class GameApp {
     this.cameraRig.addShake(0.18, 0.16);
     this.player.getPosition(this.scratchOriginSnapshot);
     this.riderKickVfx.spawnAirSeal(
-      elemId,
+      vfxElem,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.y,
       this.scratchOriginSnapshot.z,
@@ -2112,7 +2198,7 @@ export class GameApp {
       this.player.currentFormTier !== 'BASIC'
     );
     this.particlePool.emitElementBurst(
-      elemId,
+      vfxElem,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.y + 0.35,
       this.scratchOriginSnapshot.z,
@@ -2123,7 +2209,9 @@ export class GameApp {
 
   private resolveRiderKickImpact(): void {
     if (!this.player) return;
+    const isPhantom = this.player.currentRiderId === 'phantom';
     const elemId = this.player.currentElementId;
+    const vfxElem: ElementId = isPhantom ? 'aqua' : elemId;
     const isSuper = this.player.currentFormTier !== 'BASIC';
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
@@ -2134,9 +2222,13 @@ export class GameApp {
     this.audio.playRiderKickImpact();
     this.loop.triggerHitStop(0.1);
     this.cameraRig.addShake(0.48, 0.32);
-    this.elementSkillVfx.spawnExplosionPillar(elemId, impactX, impactZ, isSuper ? 3.5 : 2.85);
-    this.riderKickVfx.spawnImpactCrater(elemId, impactX, impactZ, kickRadius * 0.94, isSuper);
-    this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.45, impactZ, isSuper ? 1.2 : 0.96);
+    if (isPhantom) {
+      this.elementSkillVfx.spawnPhantomSlashBurst(impactX, impactZ, isSuper ? 3.8 : 3.1);
+    } else {
+      this.elementSkillVfx.spawnExplosionPillar(vfxElem, impactX, impactZ, isSuper ? 3.5 : 2.85);
+    }
+    this.riderKickVfx.spawnImpactCrater(vfxElem, impactX, impactZ, kickRadius * 0.94, isSuper);
+    this.particlePool.emitTokusatsuExplosion(vfxElem, impactX, 0.45, impactZ, isSuper ? 1.2 : 0.96);
 
     let connected = false;
     let hitStaggeredTarget = false;
@@ -2220,7 +2312,10 @@ export class GameApp {
     this.player.faceToward(this.scratchTargetSnapshot.x, this.scratchTargetSnapshot.z);
 
     // 3 staggered neon holographic afterimage silhouettes bridging origin -> warp behind attacker!
-    this.scratchColorHelper.set(this.player.activeElement.emissiveColor);
+    const warpTrailHex =
+      this.player.currentRiderId === 'phantom'
+        ? 0x22d3ee
+        : this.scratchColorHelper.set(this.player.activeElement.emissiveColor).getHex();
     this.afterimageTrail.spawnWarpTrail(
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.y,
@@ -2229,13 +2324,13 @@ export class GameApp {
       this.scratchCurrPos.y,
       this.scratchCurrPos.z,
       this.player.facingYaw,
-      this.scratchColorHelper.getHex()
+      warpTrailHex
     );
 
     this.audio.playWarpCounter();
     this.cameraRig.addShake(0.32, 0.2);
     this.particlePool.emitElementBurst(
-      elemId,
+      this.player.currentRiderId === 'phantom' ? 'aqua' : elemId,
       this.scratchCurrPos.x,
       this.scratchCurrPos.y + 0.6,
       this.scratchCurrPos.z,
@@ -2270,10 +2365,15 @@ export class GameApp {
     forceGuaranteedCrit = false
   ): void {
     if (!this.player || !enemy.isAlive) return;
+    const isPhantom = this.player.currentRiderId === 'phantom';
     const cfg = getElementConfig(elementId);
+    const activeWeapon = this.player.getActiveWeaponConfig();
     const currentStatuses = enemy.getActiveStatusIds();
 
-    const reactionEval = evaluateElementalReaction(currentStatuses, elementId, cfg.statusApplied);
+    const appliedStatusOverride = isPhantom ? this.player.getActiveStatusId() : cfg.statusApplied;
+    const reactionEval = isPhantom
+      ? { triggered: false as const, reaction: null, consumedStatus: null, appliedStatus: appliedStatusOverride }
+      : evaluateElementalReaction(currentStatuses, elementId, cfg.statusApplied);
     const reactionSpec = reactionEval.reaction;
     const reactionMult = reactionSpec ? reactionSpec.damageMultiplier : 1.0;
 
@@ -2332,7 +2432,7 @@ export class GameApp {
 
     if (!isUltimateFinisher) {
       const triggeredSwitchBonus = reactionEval.triggered && this.player.isInRecentSwitchWindow;
-      let gaugeGain = calculateHitGaugeGain(cfg.weapon.gaugePerHit, triggeredSwitchBonus);
+      let gaugeGain = calculateHitGaugeGain(activeWeapon.gaugePerHit, triggeredSwitchBonus);
       if (reactionSpec && reactionSpec.gaugeMultiplier > 1) {
         gaugeGain *= reactionSpec.gaugeMultiplier;
       }
@@ -2344,7 +2444,11 @@ export class GameApp {
     this.stageManager.recordCombo(this.comboCount);
 
     enemy.getPosition(this.scratchTargetSnapshot);
-    this.scratchColorHelper.set(cfg.emissiveColor);
+    if (isPhantom) {
+      this.scratchColorHelper.setHex(0x22d3ee);
+    } else {
+      this.scratchColorHelper.set(cfg.emissiveColor);
+    }
 
     if (hitOutcome.guardBroken) {
       this.audio.playGuardBreak();
@@ -2631,6 +2735,11 @@ export class GameApp {
     const focused = this.lockedEnemy?.isAlive ? this.lockedEnemy : this.findPriorityTarget();
     const ultimateTitle = this.player.fsm.isInCinematic ? this.player.effectiveFinisherName : null;
 
+    const isPhantom = this.player.currentRiderId === 'phantom';
+    const activePetRem = isPhantom
+      ? this.petEntity.getPhantomFoxActiveRemaining()
+      : this.petEntity.getActiveCompanionRemaining(this.player.currentElementId);
+
     store.setCombatSnapshot({
       playerState: this.player.fsm.state,
       formTier: this.player.currentFormTier,
@@ -2642,9 +2751,7 @@ export class GameApp {
       finisherCooldown: this.player.currentFinisherCooldown,
       riderKickCooldown: this.player.currentRiderKickCooldown,
       activePetRemaining: this.petEntity.getActiveCompanionRemaining(),
-      activeElementPetRemaining: this.petEntity.getActiveCompanionRemaining(
-        this.player.currentElementId
-      ),
+      activeElementPetRemaining: activePetRem,
       activePetCount: this.petEntity.getActiveCompanionCount(),
       canActivateSuper: this.player.canActivateSuperForm(),
       canActivateUltimateForm: this.player.canActivateUltimateForm(bossStaggered),
@@ -2662,12 +2769,23 @@ export class GameApp {
     });
 
     const loadout = store.loadoutOrder;
-    this.scratchSkillCds[0] = this.player.getSkillCooldown(loadout[0]);
-    this.scratchSkillCds[1] = this.player.getSkillCooldown(loadout[1]);
-    this.scratchSkillCds[2] = this.player.getSkillCooldown(loadout[2]);
-    this.scratchPetCds[0] = this.petEntity.getCooldown(loadout[0]);
-    this.scratchPetCds[1] = this.petEntity.getCooldown(loadout[1]);
-    this.scratchPetCds[2] = this.petEntity.getCooldown(loadout[2]);
+    if (isPhantom) {
+      const pSkillCd = this.player.getActiveSkillCooldown();
+      const pFoxCd = this.petEntity.getPhantomFoxCooldown();
+      this.scratchSkillCds[0] = pSkillCd;
+      this.scratchSkillCds[1] = pSkillCd;
+      this.scratchSkillCds[2] = pSkillCd;
+      this.scratchPetCds[0] = pFoxCd;
+      this.scratchPetCds[1] = pFoxCd;
+      this.scratchPetCds[2] = pFoxCd;
+    } else {
+      this.scratchSkillCds[0] = this.player.getSkillCooldown(loadout[0]);
+      this.scratchSkillCds[1] = this.player.getSkillCooldown(loadout[1]);
+      this.scratchSkillCds[2] = this.player.getSkillCooldown(loadout[2]);
+      this.scratchPetCds[0] = this.petEntity.getCooldown(loadout[0]);
+      this.scratchPetCds[1] = this.petEntity.getCooldown(loadout[1]);
+      this.scratchPetCds[2] = this.petEntity.getCooldown(loadout[2]);
+    }
     store.setAbilityCooldowns(
       this.player.fsm.formSwitchCooldown,
       loadout,
@@ -2813,7 +2931,36 @@ export class GameApp {
       this.player.currentCinematicElapsed >= 1.06
     ) {
       this.ultimateSealSpawned = true;
-      if (isGrandCinematic) {
+      if (this.player.currentRiderId === 'phantom') {
+        // UNIT-02 PHANTOM OMNISLASH OPENING: Instant Clock-Up Cyber Slash Ring + twin shadow clones!
+        this.elementSkillVfx.spawnPhantomIaidoSlash(
+          this.scratchRenderPos.x,
+          this.scratchRenderPos.z,
+          this.player.facingYaw,
+          6.8,
+          true
+        );
+        this.afterimageTrail.spawnGhost(
+          this.scratchRenderPos.x - 1.6,
+          this.scratchRenderPos.y,
+          this.scratchRenderPos.z,
+          this.player.facingYaw + 0.35,
+          0x22d3ee,
+          0.55,
+          0.5,
+          1.06
+        );
+        this.afterimageTrail.spawnGhost(
+          this.scratchRenderPos.x + 1.6,
+          this.scratchRenderPos.y,
+          this.scratchRenderPos.z,
+          this.player.facingYaw - 0.35,
+          0xf43f5e,
+          0.55,
+          0.5,
+          1.06
+        );
+      } else if (isGrandCinematic) {
         // GRAND ULTIMATE FORM: 3 Stacked Golden Orbital Seals + Roaring Plasma Wings burst!
         this.riderKickVfx.spawnTripleOrbitalSeals(
           this.player.currentElementId,

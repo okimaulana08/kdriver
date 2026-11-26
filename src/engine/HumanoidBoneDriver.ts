@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { ElementId, FormTier, PlayerStateId } from '../game/types/schema';
+import type { ElementId, FormTier, PlayerStateId, RiderId } from '../game/types/schema';
 import type { EnemyAIState } from '../game/entities/EnemyBase';
 import { normalizeBoneName } from './SkeletalAnimator';
 
@@ -294,7 +294,8 @@ export class HumanoidBoneDriver {
     activeElementId: ElementId,
     formTier: FormTier,
     stateTime: number,
-    dt?: number
+    dt?: number,
+    riderId: RiderId = 'nexus'
   ): void {
     if (!this.isActive) return;
     if (dt !== undefined && dt <= 0) return; // Freeze cleanly on Hit-Stop frame!
@@ -431,6 +432,73 @@ export class HumanoidBoneDriver {
     }
 
     if (state === 'ULTIMATE_CINEMATIC') {
+      if (riderId === 'phantom') {
+        // UNIT-02 PHANTOM DEDICATED SAMURAI KATANA OMNISLASH CHOREOGRAPHY (Not Unit-01 Flying Kick!)
+        if (stateTime < 1.04) {
+          // Beat 1: Deep Iaido Battoujutsu crouch-draw stance under Obsidian-Cyan Visor Cut-In
+          const charge = Math.min(1, stateTime / 0.78);
+          this.offsetHips(0, -0.3 * charge, -0.06 * charge);
+          this.rotateBone('Hips', 0.34 * charge, -0.44 * charge, 0);
+          this.rotateBone('SpineUpper', 0.22 * charge, -0.48 * charge, 0);
+          this.rotateBone('Head', -0.34 * charge, 0.78 * charge, 0);
+          // Right hand coiled low across left hip gripping Katana hilt; left hand bracing phantom sheath!
+          this.rotateBone('RightArm', -0.52 * charge, 0.48 * charge, 0.24);
+          this.rotateBone('RightForeArm', -1.22 * charge, 0, 0);
+          this.rotateBone('LeftArm', -0.68 * charge, 0.32 * charge, -0.22);
+          this.rotateBone('LeftForeArm', -1.1 * charge, 0, 0);
+          this.rotateBone('LeftUpLeg', -0.82 * charge, 0.14, 0.12);
+          this.rotateBone('LeftLeg', 1.32 * charge, 0, 0);
+          this.rotateBone('RightUpLeg', 0.38 * charge, -0.14, -0.12);
+          this.rotateBone('RightLeg', 0.76 * charge, 0, 0);
+        } else if (stateTime < 2.24) {
+          // Beat 2: High-Velocity Multi-Angle Katana Omnislash Blitz climaxing at 1.90s!
+          const blitzT = stateTime - 1.04;
+          const phaseIdx = Math.floor(blitzT / 0.22);
+          const localP = (blitzT % 0.22) / 0.22;
+          const dir = phaseIdx % 2 === 0 ? 1 : -1;
+          const isClimaxSlash = stateTime >= 1.78;
+          const s = isClimaxSlash
+            ? this.smoothSwingCurve(Math.min(1, (stateTime - 1.78) / 0.34), 0.12, 0.72)
+            : this.smoothSwingCurve(localP, 0.08, 0.78);
+
+          this.offsetHips(0, isClimaxSlash ? -0.18 * s : -0.14, 0.14);
+          this.rotateBone('Hips', 0.24, THREE.MathUtils.lerp(-0.65 * dir, 0.68 * dir, s), 0);
+          this.rotateBone('SpineUpper', 0.18, THREE.MathUtils.lerp(-0.85 * dir, 0.92 * dir, s), 0);
+          this.rotateBone('Head', -0.16, THREE.MathUtils.lerp(0.62 * dir, -0.55 * dir, s), 0);
+          this.rotateBone(
+            'RightArm',
+            isClimaxSlash ? THREE.MathUtils.lerp(-2.35, 0.45, s) : THREE.MathUtils.lerp(-1.35, -0.45, s),
+            THREE.MathUtils.lerp(-0.95 * dir, 0.92 * dir, s),
+            0.18
+          );
+          this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.92, -0.18, s), 0, 0);
+          this.rotateBone('LeftArm', 0.38, 0.42, -0.32);
+          this.rotateBone('LeftForeArm', -0.75, 0, 0);
+          this.rotateBone('LeftUpLeg', -0.58, 0, 0.1);
+          this.rotateBone('LeftLeg', 0.88, 0, 0);
+          this.rotateBone('RightUpLeg', 0.42, 0, -0.1);
+          this.rotateBone('RightLeg', 0.62, 0, 0);
+        } else {
+          // Beat 3: Iconic Samurai Back-Turned Katana Sheathe (Noto) Pose as 5 Cyan-Crimson Slashes Detonate!
+          const noto = Math.min(1, (stateTime - 2.24) / 0.35);
+          this.offsetHips(0, -0.04, 0);
+          this.rotateBone('Hips', 0.02, Math.PI, 0);
+          this.rotateBone('SpineUpper', 0, 0.22, 0);
+          this.rotateBone('Head', -0.04, -0.42, 0);
+          // Cool samurai blade-lowered right arm + left hand resting at waist sheath
+          this.rotateBone('RightArm', THREE.MathUtils.lerp(-0.55, 0.16, noto), -0.24, 0.18);
+          this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-0.8, -0.32, noto), 0, 0);
+          this.rotateBone('LeftArm', -0.35, 0.25, -0.22);
+          this.rotateBone('LeftForeArm', -0.85, 0, 0);
+          this.rotateBone('LeftUpLeg', -0.12, 0, 0.07);
+          this.rotateBone('LeftLeg', 0.18, 0, 0);
+          this.rotateBone('RightUpLeg', 0.1, 0, -0.07);
+          this.rotateBone('RightLeg', 0.16, 0, 0);
+        }
+        this.commitPose(dt, 28);
+        return;
+      }
+
       if (stateTime < 1.02) {
         // Beat 1 (0.00-1.02s): Deep K-Driver crouch-charge under sleek 2D Visor Cut-In
         const charge = Math.min(1, stateTime / 0.85);
@@ -512,6 +580,29 @@ export class HumanoidBoneDriver {
     }
 
     if (state === 'ELEMENT_SKILL') {
+      if (riderId === 'phantom') {
+        // UNIT-02 PHANTOM IAIDO CROSS: Low coiled dash-draw -> razor horizontal Katana cross-slash!
+        const surge = this.smoothSwingCurve(p, 0.16, 0.56);
+        this.offsetHips(0, -0.18 + Math.sin(Math.min(1, p * 1.4) * Math.PI) * 0.08, 0.14 * surge);
+        this.rotateBone('Hips', 0.22, THREE.MathUtils.lerp(-0.72, 0.78, surge), 0);
+        this.rotateBone('SpineUpper', 0.18, THREE.MathUtils.lerp(-0.88, 0.96, surge), 0);
+        this.rotateBone('Head', -0.16, THREE.MathUtils.lerp(0.68, -0.58, surge), 0);
+        this.rotateBone(
+          'RightArm',
+          THREE.MathUtils.lerp(-0.85, -0.95, surge),
+          THREE.MathUtils.lerp(-0.98, 0.92, surge),
+          0.18
+        );
+        this.rotateBone('RightForeArm', THREE.MathUtils.lerp(-1.12, -0.14, surge), 0, 0);
+        this.rotateBone('LeftArm', 0.42, 0.35, -0.28);
+        this.rotateBone('LeftForeArm', -0.78, 0, 0);
+        this.rotateBone('LeftUpLeg', -0.62, 0, 0.1);
+        this.rotateBone('LeftLeg', 0.92, 0, 0);
+        this.rotateBone('RightUpLeg', 0.44, 0, -0.1);
+        this.rotateBone('RightLeg', 0.56, 0, 0);
+        this.commitPose(dt, 28);
+        return;
+      }
       const surge = this.smoothSwingCurve(p, 0.22, 0.58);
       this.offsetHips(0, Math.sin(Math.min(1, p * 1.2) * Math.PI) * 0.24 - 0.06, 0);
       this.rotateBone('Hips', THREE.MathUtils.lerp(-0.14, 0.26, surge), 0, 0);

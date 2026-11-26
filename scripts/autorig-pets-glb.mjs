@@ -103,8 +103,8 @@ const norm = prim.attributes.NORMAL !== undefined ? readVec3Attribute(prim.attri
 const indices = prim.indices !== undefined ? readIndices(prim.indices) : null;
 const vertCount = pos.length / 3;
 
-// For Quadruped Beast (Raiju), align its principal horizontal tail->head axis cleanly to +Z forward!
-if (PET_TYPE === 'beast') {
+// For Quadruped Beast (Raiju) or Fox (Kitsune-02), align principal horizontal tail->head axis cleanly to +Z forward!
+if (PET_TYPE === 'beast' || PET_TYPE === 'fox') {
   let frontX = 0,
     frontZ = 0,
     frontN = 0;
@@ -142,9 +142,23 @@ if (PET_TYPE === 'beast') {
       norm[i * 3 + 2] = -nx * s + nz * c;
     }
   }
+  // Re-center X horizontally after yaw alignment so left/right legs stay strictly symmetric around X=0
+  if (PET_TYPE === 'fox') {
+    let minX = Infinity,
+      maxX = -Infinity;
+    for (let i = 0; i < vertCount; i++) {
+      const x = pos[i * 3];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+    }
+    const midX = 0.5 * (minX + maxX);
+    for (let i = 0; i < vertCount; i++) {
+      pos[i * 3] -= midX;
+    }
+  }
   writeVec3Attribute(prim.attributes.POSITION, pos);
   if (norm) writeVec3Attribute(prim.attributes.NORMAL, norm);
-  console.log(`[AUTORIG-PET] beast: aligned principal axis by ${(fixYaw * 180 / Math.PI).toFixed(1)} deg to +Z forward.`);
+  console.log(`[AUTORIG-PET] ${PET_TYPE}: aligned principal axis by ${(fixYaw * 180 / Math.PI).toFixed(1)} deg to +Z forward.`);
 }
 
 function smoothstep(edge0, edge1, x) {
@@ -215,21 +229,60 @@ if (PET_TYPE === 'winged') {
 
     wMatrix[base + J.PetBody] = 1.0;
   }
-} else if (PET_TYPE === 'beast') {
-  // 9-Bone Quadruped Beast Skeleton (Raiju / Terra / Solar / Lux)
-  JOINTS = [
-    { name: 'PetBody', parent: -1, pos: [0, 0.05, 0.0] },
-    { name: 'PetChest', parent: 0, pos: [0, 0.07, 0.15] },
-    { name: 'PetHead', parent: 1, pos: [0, 0.1, 0.28] },
-    { name: 'PetTailBase', parent: 0, pos: [0, 0.06, -0.18] },
-    { name: 'PetTailTip', parent: 3, pos: [0, 0.15, -0.35] },
-    { name: 'FrontLegL', parent: 1, pos: [0.1, 0.0, 0.2] },
-    { name: 'FrontLegR', parent: 1, pos: [-0.1, 0.0, 0.2] },
-    { name: 'BackLegL', parent: 0, pos: [0.1, -0.01, -0.14] },
-    { name: 'BackLegR', parent: 0, pos: [-0.1, -0.01, -0.14] },
-  ];
+} else if (PET_TYPE === 'beast' || PET_TYPE === 'fox') {
+  // 9-Bone Quadruped Beast / Cyber Fox Skeleton (Raiju / Kitsune-02)
+  let minY = Infinity,
+    maxY = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+  for (let i = 0; i < vertCount; i++) {
+    const y = pos[i * 3 + 1];
+    const z = pos[i * 3 + 2];
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z;
+    if (z > maxZ) maxZ = z;
+  }
+  const isFox = PET_TYPE === 'fox';
+  const yH = maxY - minY;
+  const zL = maxZ - minZ;
+  const yAt = (ny) => minY + ny * yH;
+  const zAt = (nz) => minZ + nz * zL;
+
+  JOINTS = isFox
+    ? [
+        { name: 'PetBody', parent: -1, pos: [0, yAt(0.56), zAt(0.5)] },
+        { name: 'PetChest', parent: 0, pos: [0, yAt(0.59), zAt(0.68)] },
+        { name: 'PetHead', parent: 1, pos: [0, yAt(0.75), zAt(0.8)] },
+        { name: 'PetTailBase', parent: 0, pos: [0, yAt(0.58), zAt(0.35)] },
+        { name: 'PetTailTip', parent: 3, pos: [0, yAt(0.7), zAt(0.14)] },
+        { name: 'FrontLegL', parent: 1, pos: [0.09, yAt(0.45), zAt(0.73)] },
+        { name: 'FrontLegR', parent: 1, pos: [-0.09, yAt(0.45), zAt(0.73)] },
+        { name: 'BackLegL', parent: 0, pos: [0.09, yAt(0.44), zAt(0.42)] },
+        { name: 'BackLegR', parent: 0, pos: [-0.09, yAt(0.44), zAt(0.42)] },
+      ]
+    : [
+        { name: 'PetBody', parent: -1, pos: [0, 0.05, 0.0] },
+        { name: 'PetChest', parent: 0, pos: [0, 0.07, 0.15] },
+        { name: 'PetHead', parent: 1, pos: [0, 0.1, 0.28] },
+        { name: 'PetTailBase', parent: 0, pos: [0, 0.06, -0.18] },
+        { name: 'PetTailTip', parent: 3, pos: [0, 0.15, -0.35] },
+        { name: 'FrontLegL', parent: 1, pos: [0.1, 0.0, 0.2] },
+        { name: 'FrontLegR', parent: 1, pos: [-0.1, 0.0, 0.2] },
+        { name: 'BackLegL', parent: 0, pos: [0.1, -0.01, -0.14] },
+        { name: 'BackLegR', parent: 0, pos: [-0.1, -0.01, -0.14] },
+      ];
   const J = Object.fromEntries(JOINTS.map((j, idx) => [j.name, idx]));
   wMatrix = new Float32Array(vertCount * JOINTS.length);
+
+  const tailCutZ = isFox ? zAt(0.36) : -0.22;
+  const tailTipZ0 = isFox ? zAt(0.28) : -0.31;
+  const tailTipZ1 = isFox ? zAt(0.12) : -0.42;
+  const tailMinY = isFox ? yAt(0.48) : -0.03;
+  const legCutY = isFox ? yAt(0.47) : 0.01;
+  const legMidZ = isFox ? zAt(0.57) : 0.02;
+  const headCutZ = isFox ? zAt(0.76) : 0.22;
+  const headCutY = isFox ? yAt(0.67) : -99;
 
   for (let i = 0; i < vertCount; i++) {
     const x = pos[i * 3];
@@ -237,10 +290,10 @@ if (PET_TYPE === 'winged') {
     const z = pos[i * 3 + 2];
     const base = i * JOINTS.length;
 
-    // 2-bone Whip Tail behind rear hips
-    if (z < -0.22 && y > -0.03) {
-      const tBase = smoothstep(-0.2, -0.28, z);
-      const tTip = smoothstep(-0.31, -0.42, z);
+    // 2-bone Whip/Bushy Tail behind rear hips
+    if (z < tailCutZ && y > tailMinY) {
+      const tBase = smoothstep(tailCutZ + 0.03, tailCutZ - 0.06, z);
+      const tTip = smoothstep(tailTipZ0, tailTipZ1, z);
       wMatrix[base + J.PetBody] = 1 - tBase;
       wMatrix[base + J.PetTailBase] = tBase * (1 - tTip);
       wMatrix[base + J.PetTailTip] = tBase * tTip;
@@ -248,9 +301,9 @@ if (PET_TYPE === 'winged') {
     }
 
     // 4 Articulated Legs (strictly partitioned Front/Back and Left/Right!)
-    if (y < 0.01) {
-      const legDepth = smoothstep(0.02, -0.07, y);
-      const isFront = z >= 0.02;
+    if (y < legCutY) {
+      const legDepth = smoothstep(legCutY + 0.02, legCutY - 0.08, y);
+      const isFront = z >= legMidZ;
       const isLeft = x >= 0;
       const jParent = isFront ? J.PetChest : J.PetBody;
       const jLeg = isFront
@@ -265,9 +318,11 @@ if (PET_TYPE === 'winged') {
       continue;
     }
 
-    // Head + Golden Mane (rigid at snout/mane tips!)
-    if (z > 0.22) {
-      const h = smoothstep(0.2, 0.29, z);
+    // Head + Pointed Fox Ears / Mane (rigid at snout/ears!)
+    if (z > headCutZ || (isFox && z > zAt(0.66) && y > headCutY)) {
+      const hZ = smoothstep(headCutZ - 0.04, headCutZ + 0.06, z);
+      const hY = isFox ? smoothstep(headCutY - 0.04, headCutY + 0.08, y) : 0;
+      const h = Math.max(hZ, hY);
       wMatrix[base + J.PetChest] = 1 - h;
       wMatrix[base + J.PetHead] = h;
       if (h >= 0.98) lockedRigidMask[i] = 1;
@@ -275,7 +330,7 @@ if (PET_TYPE === 'winged') {
     }
 
     // Spine -> Chest blend
-    const chestT = smoothstep(-0.02, 0.14, z);
+    const chestT = isFox ? smoothstep(zAt(0.48), zAt(0.68), z) : smoothstep(-0.02, 0.14, z);
     wMatrix[base + J.PetBody] = 1 - chestT;
     wMatrix[base + J.PetChest] = chestT;
   }

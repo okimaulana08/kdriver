@@ -23,6 +23,14 @@ export type DifficultyId = 'easy' | 'medium' | 'hard' | 'hell';
 export type RankGrade = 'S+' | 'S' | 'A' | 'B' | 'C';
 export type RiderId = 'nexus' | 'phantom';
 
+export interface RiderSignatureSkillConfig {
+  readonly name: string;
+  readonly cooldown: number;
+  readonly damageMultiplier: number;
+  readonly radius: number;
+  readonly appliesStatus: StatusEffectId;
+}
+
 export interface RiderConfig {
   readonly id: RiderId;
   readonly codeName: string;
@@ -33,6 +41,7 @@ export interface RiderConfig {
   readonly glowColor: string;
   readonly maxForms: 2 | 3;
   readonly hasUltimateForm: boolean;
+  readonly locksElementSelection: boolean;
   readonly basicFormLabel: string;
   readonly upgradedFormLabel: string;
   readonly ultimateFormLabel: string | null;
@@ -53,6 +62,11 @@ export interface RiderConfig {
   readonly ultimateFormMaxDurationSec: number;
   readonly upgradedAfterimageAlwaysOn: boolean;
   readonly signatureFinisherName: string | null;
+  readonly signatureThemeName?: string;
+  readonly signatureStatus?: StatusEffectId;
+  readonly signatureWeapon?: WeaponConfig;
+  readonly signaturePet?: PetConfig;
+  readonly signatureSkill?: RiderSignatureSkillConfig;
   readonly passiveLabel: string;
   readonly passiveSummary: string;
 }
@@ -235,6 +249,7 @@ export interface SaveRecord {
   selectedStageId: StageId;
   selectedDifficulty: DifficultyId;
   selectedRiderId: RiderId;
+  phantomCoreLevel?: number;
   stageDifficultyBestRanks: Partial<Record<string, RankGrade>>;
   unlockedElements: ElementId[];
   gemLevels: Partial<Record<ElementId, number>>;

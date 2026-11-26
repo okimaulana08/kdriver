@@ -11,6 +11,9 @@ type SkillVfxKind =
   | 'VOID_SINGULARITY'
   | 'FINISHER_CLIMAX'
   | 'GRAND_ULTIMATE_CLIMAX'
+  | 'PHANTOM_OMNISLASH'
+  | 'PHANTOM_IAIDO_SLASH'
+  | 'PHANTOM_SLASH_BURST'
   | 'PYRO_EXPLOSION'
   | 'HENSHIN_SUPER'
   | 'HENSHIN_ULTIMATE';
@@ -1180,6 +1183,40 @@ export class ElementSkillVfx {
   }
 
   /**
+   * UNIT-02 PHANTOM DEDICATED ULTIMATE VFX ([R] — PHANTOM OMNISLASH // CYBER ECLIPSE):
+   * Zero fiery fireball clouds — pure futuristic Cyber-Samurai Dimension Cage!
+   * Stage 1: Dark Obsidian-Cyan Clock-Up Singularity + Gyroscopic Lock-On Rings
+   * Stage 2: Colossal Cyan-Crimson Judgment Katana Vortex + Twin Diagonal 3D X-Slash Blades + Plasma Blade-Wings + Voronoi Cyber Rupture!
+   */
+  public spawnPhantomOmnislash(x: number, z: number, yaw: number, radius = 14.5): void {
+    this.activateSlot('aqua', 'PHANTOM_OMNISLASH', x, z, yaw, radius, 1.85);
+    this.triggerFlashLight(x, 2.9, z, 0x22d3ee, 22.0, 1.05);
+  }
+
+  /**
+   * UNIT-02 PHANTOM SIGNATURE SKILL [Q] VFX (Phantom Iaido Cross):
+   * High-velocity crossed cyan-crimson Katana arcs + Clock-Up gyro ring + cyber scorch.
+   */
+  public spawnPhantomIaidoSlash(
+    x: number,
+    z: number,
+    yaw: number,
+    radius: number,
+    isUpgraded: boolean
+  ): void {
+    this.activateSlot('aqua', 'PHANTOM_IAIDO_SLASH', x, z, yaw, radius, isUpgraded ? 0.92 : 0.76);
+    this.triggerFlashLight(x, 1.35, z, 0x22d3ee, isUpgraded ? 10.5 : 7.0, 0.36);
+  }
+
+  /**
+   * UNIT-02 PHANTOM Beat-3 Back-Turned Dimensional Slash Detonation (cyan-crimson cross-blade burst).
+   */
+  public spawnPhantomSlashBurst(x: number, z: number, scale = 3.8): void {
+    this.activateSlot('aqua', 'PHANTOM_SLASH_BURST', x, z, Math.random() * Math.PI * 2, scale, 0.95);
+    this.triggerFlashLight(x, 1.9, z, Math.random() > 0.45 ? 0x22d3ee : 0xf43f5e, 14.0, 0.42);
+  }
+
+  /**
    * Organic emerald healing vortex aura for Sylvan Sovereign's interruptible Sanctuary Mend.
    */
   public spawnSanctuaryMendPulse(x: number, z: number): void {
@@ -1488,6 +1525,132 @@ export class ElementSkillVfx {
 
           // Arena-Wide Glowing Voronoi Tectonic Rupture!
           slot.scorchMesh.scale.set(r * 1.02, 1, r * 1.02);
+          break;
+        }
+
+        case 'PHANTOM_OMNISLASH': {
+          // UNIT-02 PHANTOM DEDICATED CYBER-SAMURAI OMNISLASH DIMENSION CAGE!
+          if (p < 0.16) {
+            // Beat A: Clock-Up Cyber Singularity Cage locking enemies inside cyan-indigo dimension dome
+            const lockT = p / 0.16;
+            slot.voidCoreMesh.visible = true;
+            slot.voidCoreMesh.position.set(0, 1.9, 0);
+            slot.voidCoreMesh.scale.setScalar(r * 0.46 * (1.15 - lockT * 0.72));
+            slot.voidCoreMesh.rotation.y = slot.elapsed * 18.0;
+
+            slot.ringGyroAMesh.position.set(0, 2.0, 0);
+            slot.ringGyroAMesh.scale.setScalar(r * 0.56 * (1.3 - lockT * 0.45));
+            slot.ringGyroAMesh.rotation.set(0.95, slot.elapsed * 11.0, 0.35);
+            slot.ringGyroBMesh.position.set(0, 2.0, 0);
+            slot.ringGyroBMesh.scale.setScalar(r * 0.48 * (1.25 - lockT * 0.4));
+            slot.ringGyroBMesh.rotation.set(-0.92, -slot.elapsed * 12.5, -0.42);
+
+            slot.flashCoreMesh.position.set(0, 2.0, 0);
+            slot.flashCoreMesh.scale.setScalar(r * (0.14 + lockT * 0.32));
+            slot.flashUniforms.uOpacity.value = 0.5 + lockT * 1.0;
+
+            slot.vortexColumnMesh.scale.set(0.01, 0.01, 0.01);
+            slot.crescentMeshA.scale.setScalar(0.01);
+            slot.crescentMeshB.scale.setScalar(0.01);
+            slot.wingLeftMesh.scale.setScalar(0.01);
+            slot.wingRightMesh.scale.setScalar(0.01);
+            break;
+          }
+
+          // Beat B: Dimensional Katana Shatter — Giant Cyan-Crimson X-Slash Cage + Judgment Katana Pillar + Blade-Wings!
+          slot.voidCoreMesh.visible = false;
+          const postP = (p - 0.16) / 0.84;
+          const cutEase = 1 - Math.pow(1 - Math.min(1, postP * 2.1), 3);
+
+          const flashT = Math.min(1, postP * 4.5);
+          slot.flashCoreMesh.position.set(0, 2.1, 0);
+          slot.flashCoreMesh.scale.setScalar(r * (0.24 + flashT * 0.58));
+          slot.flashUniforms.uOpacity.value = Math.max(0, 1 - flashT) * 1.55;
+
+          // Razor-slender towering Cyan Judgment Katana Pillar
+          const beamW = r * 0.24 * (1.25 - postP * 0.55);
+          slot.vortexColumnMesh.scale.set(beamW, 1.55 + postP * 0.35, beamW);
+          slot.vortexColumnMesh.rotation.y = -slot.elapsed * 10.5;
+
+          // High-speed helical cyber-slash ribbons spiraling skyward
+          const helW = r * (0.22 + cutEase * 0.28);
+          slot.helixMeshA.scale.set(helW, 1.42, helW);
+          slot.helixMeshA.rotation.y = slot.elapsed * 14.5;
+          slot.helixMeshB.scale.set(helW * 1.28, 1.48, helW * 1.28);
+          slot.helixMeshB.rotation.y = -slot.elapsed * 13.0;
+
+          // Giant Crossed 3D Katana X-Slashes slicing outward across the entire arena!
+          const slashR = r * (0.48 + cutEase * 1.05);
+          slot.crescentMeshA.position.set(0, 2.15, 0);
+          slot.crescentMeshA.scale.set(slashR, 2.6, slashR);
+          slot.crescentMeshA.rotation.set(0.78, slot.baseYaw + postP * 5.2, 0.72);
+          slot.crescentMeshB.position.set(0, 2.15, 0);
+          slot.crescentMeshB.scale.set(slashR * 0.98, 2.6, slashR * 0.98);
+          slot.crescentMeshB.rotation.set(-0.78, slot.baseYaw - postP * 5.2 + 1.57, -0.72);
+
+          // Holographic Phantom Blade-Wings fanning behind impact point
+          const wingS = 0.65 + cutEase * 1.45;
+          slot.wingLeftMesh.position.set(0, 0.4, 0);
+          slot.wingRightMesh.position.set(0, 0.4, 0);
+          slot.wingLeftMesh.rotation.set(-0.08, slot.baseYaw + 0.14 - cutEase * 0.22, -0.06);
+          slot.wingRightMesh.rotation.set(-0.08, slot.baseYaw - 0.14 + cutEase * 0.22, 0.06);
+          slot.wingLeftMesh.scale.setScalar(wingS);
+          slot.wingRightMesh.scale.setScalar(wingS);
+
+          // Expanding Clock-Up holographic rings + Cyber Voronoi ground cracks
+          slot.ringGroundMesh.scale.set(r * (0.5 + cutEase * 1.05), 1, r * (0.5 + cutEase * 1.05));
+          slot.ringUpperMesh.position.y = 0.35 + postP * 5.6;
+          slot.ringUpperMesh.scale.set(r * (0.55 + cutEase * 0.72), 1, r * (0.55 + cutEase * 0.72));
+          slot.ringUpperMesh.rotation.y = -slot.elapsed * 8.5;
+
+          const gyroR = r * (0.36 + cutEase * 0.58);
+          slot.ringGyroAMesh.position.set(0, 2.8 + postP * 1.4, 0);
+          slot.ringGyroAMesh.scale.setScalar(gyroR);
+          slot.ringGyroAMesh.rotation.set(1.05, slot.elapsed * 6.5, 0.4);
+          slot.ringGyroBMesh.position.set(0, 2.8 + postP * 1.4, 0);
+          slot.ringGyroBMesh.scale.setScalar(gyroR * 0.86);
+          slot.ringGyroBMesh.rotation.set(-1.05, -slot.elapsed * 7.2, -0.4);
+
+          slot.scorchMesh.scale.set(r * 0.98, 1, r * 0.98);
+          break;
+        }
+
+        case 'PHANTOM_IAIDO_SLASH': {
+          // Razor-fast Crossed Cyber Katana Iaido Arc + Gyro Clock Ring!
+          const arcScale = r * (0.52 + easeOut * 0.78);
+          slot.crescentMeshA.position.set(0, 1.18, 0);
+          slot.crescentMeshA.scale.set(arcScale, 1.75, arcScale);
+          slot.crescentMeshA.rotation.set(0.32, slot.baseYaw + slot.elapsed * 14.5, 0.36);
+          slot.crescentMeshB.position.set(0, 1.42, 0);
+          slot.crescentMeshB.scale.set(arcScale * 0.94, 1.65, arcScale * 0.94);
+          slot.crescentMeshB.rotation.set(-0.42, slot.baseYaw - slot.elapsed * 13.5 + 1.57, -0.36);
+
+          slot.ringGyroAMesh.position.set(0, 1.25, 0);
+          slot.ringGyroAMesh.scale.setScalar(r * (0.45 + easeOut * 0.45));
+          slot.ringGyroAMesh.rotation.set(1.1, slot.baseYaw + slot.elapsed * 9.5, 0.3);
+          slot.scorchMesh.scale.set(r * 0.82, 1, r * 0.82);
+          break;
+        }
+
+        case 'PHANTOM_SLASH_BURST': {
+          // Dimensional Katana X-Slash Detonation (no orange fireball — sharp cyan-crimson slash burst!)
+          const flashT = Math.min(1, p * 5.0);
+          slot.flashCoreMesh.position.set(0, 1.4, 0);
+          slot.flashCoreMesh.scale.setScalar(r * (0.32 + flashT * 0.72));
+          slot.flashUniforms.uOpacity.value = Math.max(0, 1 - flashT) * 1.45;
+
+          const cutR = r * (0.45 + easeOut * 1.15);
+          slot.crescentMeshA.position.set(0, 1.45, 0);
+          slot.crescentMeshA.scale.set(cutR, 2.1, cutR);
+          slot.crescentMeshA.rotation.set(0.82, slot.baseYaw + p * 3.8, 0.65);
+          slot.crescentMeshB.position.set(0, 1.45, 0);
+          slot.crescentMeshB.scale.set(cutR * 0.92, 2.1, cutR * 0.92);
+          slot.crescentMeshB.rotation.set(-0.82, slot.baseYaw - p * 3.8 + 1.57, -0.65);
+
+          slot.ringGroundMesh.scale.set(r * (0.5 + easeOut * 1.35), 1, r * (0.5 + easeOut * 1.35));
+          slot.ringUpperMesh.position.y = 0.25 + p * 3.4;
+          slot.ringUpperMesh.scale.set(r * (0.45 + easeOut * 0.85), 1, r * (0.45 + easeOut * 0.85));
+          slot.scorchMesh.scale.set(r * 0.88, 1, r * 0.88);
           break;
         }
 
@@ -1811,6 +1974,67 @@ export class ElementSkillVfx {
         chosen.ringUpperMesh.visible = true;
         chosen.ringGyroAMesh.visible = true;
         chosen.ringGyroBMesh.visible = true;
+        chosen.scorchMesh.visible = true;
+        chosen.flashCoreMesh.visible = true;
+        break;
+
+      case 'PHANTOM_OMNISLASH':
+        // High-contrast Cyber Obsidian-Cyan & Crimson Dimension Slash palette (Zero orange fireballs!)
+        chosen.energyUniforms.uColorA.value.setHex(0x06b6d4);
+        chosen.energyUniforms.uColorB.value.setHex(0x67e8f9);
+        chosen.ringUniforms.uColorA.value.setHex(0xf43f5e);
+        chosen.ringUniforms.uColorB.value.setHex(0x22d3ee);
+        chosen.scorchUniforms.uColorA.value.setHex(0x0891b2);
+        chosen.scorchUniforms.uColorB.value.setHex(0x67e8f9);
+        chosen.flashUniforms.uColor.value.setHex(0x67e8f9);
+        chosen.energyUniforms.uMode.value = 2;
+        chosen.energyUniforms.uDisplaceAmp.value = 0.26;
+        chosen.ringUniforms.uRingStyle.value = 1;
+        chosen.voidCoreMesh.visible = true;
+        chosen.vortexColumnMesh.visible = true;
+        chosen.helixMeshA.visible = true;
+        chosen.helixMeshB.visible = true;
+        chosen.crescentMeshA.visible = true;
+        chosen.crescentMeshB.visible = true;
+        chosen.wingLeftMesh.visible = true;
+        chosen.wingRightMesh.visible = true;
+        chosen.ringUpperMesh.visible = true;
+        chosen.ringGyroAMesh.visible = true;
+        chosen.ringGyroBMesh.visible = true;
+        chosen.scorchMesh.visible = true;
+        chosen.flashCoreMesh.visible = true;
+        break;
+
+      case 'PHANTOM_IAIDO_SLASH':
+        chosen.energyUniforms.uColorA.value.setHex(0x06b6d4);
+        chosen.energyUniforms.uColorB.value.setHex(0xf43f5e);
+        chosen.ringUniforms.uColorA.value.setHex(0x22d3ee);
+        chosen.ringUniforms.uColorB.value.setHex(0x67e8f9);
+        chosen.scorchUniforms.uColorA.value.setHex(0x0891b2);
+        chosen.scorchUniforms.uColorB.value.setHex(0x67e8f9);
+        chosen.energyUniforms.uMode.value = 2;
+        chosen.energyUniforms.uDisplaceAmp.value = 0.14;
+        chosen.ringUniforms.uRingStyle.value = 1;
+        chosen.crescentMeshA.visible = true;
+        chosen.crescentMeshB.visible = true;
+        chosen.ringGyroAMesh.visible = true;
+        chosen.scorchMesh.visible = true;
+        break;
+
+      case 'PHANTOM_SLASH_BURST':
+        chosen.energyUniforms.uColorA.value.setHex(0xf43f5e);
+        chosen.energyUniforms.uColorB.value.setHex(0x22d3ee);
+        chosen.ringUniforms.uColorA.value.setHex(0x22d3ee);
+        chosen.ringUniforms.uColorB.value.setHex(0xf43f5e);
+        chosen.scorchUniforms.uColorA.value.setHex(0x0891b2);
+        chosen.scorchUniforms.uColorB.value.setHex(0x67e8f9);
+        chosen.flashUniforms.uColor.value.setHex(0x67e8f9);
+        chosen.energyUniforms.uMode.value = 2;
+        chosen.energyUniforms.uDisplaceAmp.value = 0.18;
+        chosen.ringUniforms.uRingStyle.value = 2;
+        chosen.crescentMeshA.visible = true;
+        chosen.crescentMeshB.visible = true;
+        chosen.ringUpperMesh.visible = true;
         chosen.scorchMesh.visible = true;
         chosen.flashCoreMesh.visible = true;
         break;

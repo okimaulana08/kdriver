@@ -28,6 +28,33 @@ export function getGemLevel(record: Readonly<SaveRecord>, elementId: ElementId):
   return Math.max(1, Math.min(MAX_GEM_LEVEL, Math.floor(raw)));
 }
 
+export function getPhantomCoreLevel(record: Readonly<SaveRecord>): number {
+  const raw = record.phantomCoreLevel;
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 1;
+  return Math.max(1, Math.min(MAX_GEM_LEVEL, Math.floor(raw)));
+}
+
+export function applyPhantomCoreUpgrade(
+  record: Readonly<SaveRecord>
+): { updated: SaveRecord; upgraded: boolean; newLevel: number; cost: number } {
+  const currentLevel = getPhantomCoreLevel(record);
+  const cost = getGemUpgradeCost(currentLevel);
+  if (currentLevel >= MAX_GEM_LEVEL || record.gemShards < cost) {
+    return { updated: record, upgraded: false, newLevel: currentLevel, cost };
+  }
+  const nextLevel = currentLevel + 1;
+  return {
+    upgraded: true,
+    newLevel: nextLevel,
+    cost,
+    updated: {
+      ...record,
+      gemShards: record.gemShards - cost,
+      phantomCoreLevel: nextLevel,
+    },
+  };
+}
+
 export function isElementUnlocked(record: Readonly<SaveRecord>, elementId: ElementId): boolean {
   return record.unlockedElements.includes(elementId);
 }

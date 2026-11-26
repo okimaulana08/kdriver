@@ -78,9 +78,11 @@ export interface CustomRigManifest {
   weapon_lunar?: CustomRigSlotConfig;
   weapon_umbra?: CustomRigSlotConfig;
   weapon_lux?: CustomRigSlotConfig;
+  weapon_phantom_katana?: CustomRigSlotConfig;
   pet_phoenix?: CustomRigSlotConfig;
   pet_raiju?: CustomRigSlotConfig;
   pet_leviathan?: CustomRigSlotConfig;
+  pet_phantom_fox?: CustomRigSlotConfig;
 }
 
 export type OptionalCustomAssetKey =
@@ -98,7 +100,9 @@ export type OptionalCustomAssetKey =
   | 'weapon_solar'
   | 'weapon_lunar'
   | 'weapon_umbra'
-  | 'weapon_lux';
+  | 'weapon_lux'
+  | 'weapon_phantom_katana'
+  | 'pet_phantom_fox';
 
 const OPTIONAL_CUSTOM_KEYS: readonly OptionalCustomAssetKey[] = [
   'rider_super',
@@ -116,6 +120,8 @@ const OPTIONAL_CUSTOM_KEYS: readonly OptionalCustomAssetKey[] = [
   'weapon_lunar',
   'weapon_umbra',
   'weapon_lux',
+  'weapon_phantom_katana',
+  'pet_phantom_fox',
 ];
 
 export interface LoadedAssetPrototype {
@@ -178,9 +184,11 @@ const DEFAULT_TARGET_HEIGHTS: Readonly<Record<keyof CustomRigManifest, number>> 
   weapon_lunar: 2.45,
   weapon_umbra: 0.56,
   weapon_lux: 2.65,
+  weapon_phantom_katana: 2.28,
   pet_phoenix: 1.45,
   pet_raiju: 1.25,
   pet_leviathan: 1.4,
+  pet_phantom_fox: 1.28,
 };
 
 /**

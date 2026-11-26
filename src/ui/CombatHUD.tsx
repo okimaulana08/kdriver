@@ -2,7 +2,7 @@ import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getRiderConfig } from '../game/data/riders';
 import { ULTIMATE_FORM_DURATION_SEC } from '../game/entities/PlayerRider';
-import { getGemLevel } from '../game/ProgressionSystem';
+import { getGemLevel, getPhantomCoreLevel } from '../game/ProgressionSystem';
 import type { ElementId, StatusEffectId } from '../game/types/schema';
 import { useGameStore } from '../store/useGameStore';
 import { FinisherCutIn } from './FinisherCutIn';
@@ -85,6 +85,22 @@ export function CombatHUD() {
   const diffConfig = getDifficultyConfig(selectedDifficulty);
   const riderConfig = getRiderConfig(selectedRiderId);
   const isPhantom = riderConfig.id === 'phantom';
+  const phantomLv = getPhantomCoreLevel(saveRecord);
+  const activeWeaponName = isPhantom
+    ? (riderConfig.signatureWeapon?.name ?? 'Kurokage Cyber Katana')
+    : activeConfig.weapon.name;
+  const activeSkillName = isPhantom
+    ? (riderConfig.signatureSkill?.name ?? 'Phantom Iaido Cross')
+    : activeConfig.skill.name;
+  const activePetName = isPhantom
+    ? (riderConfig.signaturePet?.name ?? 'Kitsune-02 Cyber Fox')
+    : activeConfig.pet.name;
+  const activePetPassive = isPhantom
+    ? (riderConfig.signaturePet?.passiveDescription ?? '+18% Overclock Gauge Gain')
+    : activeConfig.pet.passiveDescription;
+  const activeStatusName = isPhantom
+    ? (riderConfig.signatureStatus ?? 'MARK')
+    : activeConfig.statusApplied;
   const activeFinisherName = riderConfig.signatureFinisherName ?? activeConfig.finisherName;
   const canBreakKick = bossStaggered && riderKickCooldown <= 0;
   const activeSkillCd = skillCooldowns[activeElement];
@@ -527,14 +543,56 @@ export function CombatHUD() {
           </div>
 
           <div className="mt-2 flex items-center justify-between border-t border-slate-800 pt-1.5 text-[10px]">
-            <span className="text-slate-400">PASSIVE ({activeConfig.pet.name})</span>
-            <span className="font-semibold text-cyan-300">
-              {activeConfig.pet.passiveDescription}
+            <span className="truncate text-slate-400">PASSIVE ({activePetName})</span>
+            <span className="ml-2 shrink-0 font-semibold text-cyan-300">
+              {activePetPassive}
             </span>
           </div>
         </div>
 
-        {/* Bottom-Center: Custom-Ordered 3 Elemental Gem Slots */}
+        {/* Bottom-Center: UNIT-01 3-Element Deck OR UNIT-02 Fixed Single-Form Phantom Core Card */}
+        {isPhantom ? (
+          <div className="flex items-center gap-3 rounded-xl border border-cyan-400/55 bg-slate-950/88 px-4 py-2.5 font-mono shadow-[0_0_24px_rgba(34,211,238,0.25)] backdrop-blur-md">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <span className="rounded bg-cyan-500/25 px-1.5 py-0.5 text-[10px] font-black tracking-wider text-cyan-200 uppercase">
+                  PHANTOM CORE • L{phantomLv}
+                </span>
+                <span className="text-[9px] font-bold tracking-wider text-rose-300 uppercase">
+                  FIXED FORM (2 TIERS)
+                </span>
+              </div>
+              <span className="mt-1 text-xs font-black tracking-wide text-white uppercase">
+                {activeWeaponName}
+              </span>
+              <span className="text-[9px] tracking-wider text-cyan-300/85 uppercase">
+                STATUS: {activeStatusName} • 22% CRIT • NO ELEMENT SWAP
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-1 border-l border-white/10 pl-3 text-[9px]">
+              <span className="flex items-center gap-1.5 text-slate-300">
+                SKILL
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    activeSkillCd <= 0 ? 'bg-emerald-400' : 'bg-slate-600'
+                  }`}
+                />
+              </span>
+              <span className="flex items-center gap-1.5 text-slate-300">
+                FOX
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    activeElementPetRemaining > 0
+                      ? 'bg-emerald-400'
+                      : activePetCd <= 0
+                        ? 'bg-cyan-400'
+                        : 'bg-slate-600'
+                  }`}
+                />
+              </span>
+            </div>
+          </div>
+        ) : (
         <div className="flex items-center gap-2.5 rounded-xl border border-slate-800 bg-slate-950/85 px-3 py-2.5 font-mono shadow-2xl backdrop-blur-md">
           {loadoutOrder.map((gemId, idx) => {
             const cfg = getElementConfig(gemId);
@@ -585,6 +643,7 @@ export function CombatHUD() {
             );
           })}
         </div>
+        )}
 
         {/* Bottom-Right: Rider Kick (SPACE), Skill (Q), Pet Assist (E) & Instant Finisher (R) */}
         <div className="flex items-center gap-2 font-mono">
@@ -622,9 +681,9 @@ export function CombatHUD() {
                 {activeSkillCd <= 0 ? 'READY' : `${activeSkillCd.toFixed(1)}s`}
               </span>
             </div>
-            <span className="mt-1.5 truncate text-xs font-bold">{activeConfig.skill.name}</span>
+            <span className="mt-1.5 truncate text-xs font-bold">{activeSkillName}</span>
             <span className="text-[10px] text-slate-400">
-              Applies {activeConfig.statusApplied}
+              {isPhantom ? `Dash X-Slash • ${activeStatusName}` : `Applies ${activeStatusName}`}
             </span>
           </div>
 
@@ -659,7 +718,7 @@ export function CombatHUD() {
                     : `${activePetCd.toFixed(1)}s`}
               </span>
             </div>
-            <span className="mt-1.5 truncate text-xs font-bold">{activeConfig.pet.name}</span>
+            <span className="mt-1.5 truncate text-xs font-bold">{activePetName}</span>
             <span
               className={`text-[10px] ${
                 activeElementPetRemaining > 0
@@ -675,7 +734,7 @@ export function CombatHUD() {
                   ? 'Recharging (20s CD)'
                   : activePetRemaining > 0
                     ? `Ready • ${activePetCount} Active`
-                    : `Assist + ${activeConfig.pet.appliesStatus}`}
+                    : `Assist + ${activeStatusName}`}
             </span>
           </div>
 

@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { applyPhantomCoreUpgrade, getPhantomCoreLevel } from '../game/ProgressionSystem';
+import { DEFAULT_SAVE_RECORD } from '../game/StageManager';
 import { calculateDamage } from '../game/combat/DamageCalculator';
 import { PlayerFSM } from '../game/combat/PlayerFSM';
 import {
@@ -31,10 +33,23 @@ describe('Paket C — Playable Second Rider UNIT-02 PHANTOM (2-Form Counter-Assa
 
     expect(nexus.maxForms).toBe(3);
     expect(nexus.hasUltimateForm).toBe(true);
+    expect(nexus.locksElementSelection).toBe(false);
     expect(phantom.maxForms).toBe(2);
     expect(phantom.hasUltimateForm).toBe(false);
+    expect(phantom.locksElementSelection).toBe(true);
     expect(phantom.ultimateFormLabel).toBeNull();
     expect(phantom.signatureFinisherName).toBe('PHANTOM OMNISLASH');
+    expect(phantom.signatureWeapon?.id).toBe('phantom_katana');
+    expect(phantom.signaturePet?.id).toBe('pet_phantom_fox');
+    expect(phantom.signatureSkill?.name).toBe('Phantom Iaido Cross');
+
+    // Dedicated Phantom Core shard upgrade independent of Unit-01 Elemental Gems
+    const richSave = { ...DEFAULT_SAVE_RECORD, gemShards: 100, phantomCoreLevel: 1 };
+    expect(getPhantomCoreLevel(richSave)).toBe(1);
+    const up = applyPhantomCoreUpgrade(richSave);
+    expect(up.upgraded).toBe(true);
+    expect(up.newLevel).toBe(2);
+    expect(up.updated.gemShards).toBe(60);
 
     // Counter-assassin stat differentiation: faster speed, faster attacks, higher crit, lethal counter, lower HP
     expect(phantom.maxHp).toBeLessThan(nexus.maxHp);

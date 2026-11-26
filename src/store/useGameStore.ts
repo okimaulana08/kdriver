@@ -3,7 +3,11 @@ import { ALL_ELEMENT_IDS } from '../game/data/elements';
 import { getDifficultyConfig } from '../game/data/difficulty';
 import { getRiderConfig } from '../game/data/riders';
 import { getStageConfig } from '../game/data/stages';
-import { applyGemUpgrade, applyShardGemUnlock } from '../game/ProgressionSystem';
+import {
+  applyGemUpgrade,
+  applyPhantomCoreUpgrade,
+  applyShardGemUnlock,
+} from '../game/ProgressionSystem';
 import { loadSaveRecord, persistSaveRecord } from '../game/StageManager';
 import type {
   ArenaThemeId,
@@ -150,6 +154,7 @@ interface GameStoreState {
   setGamepadStatus: (connected: boolean, name: string | null) => void;
   setLoadoutOrder: (order: [ElementId, ElementId, ElementId]) => void;
   upgradeGemLevel: (elementId: ElementId) => boolean;
+  upgradePhantomCore: () => boolean;
   unlockGemWithShards: (elementId: ElementId) => boolean;
   setStageResult: (result: StageResult | null, saveRecord?: SaveRecord) => void;
   setPerformanceMetrics: (
@@ -465,6 +470,14 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   upgradeGemLevel: (elementId) => {
     const res = applyGemUpgrade(get().saveRecord, elementId);
+    if (!res.upgraded) return false;
+    persistSaveRecord(res.updated);
+    set({ saveRecord: res.updated });
+    return true;
+  },
+
+  upgradePhantomCore: () => {
+    const res = applyPhantomCoreUpgrade(get().saveRecord);
     if (!res.upgraded) return false;
     persistSaveRecord(res.updated);
     set({ saveRecord: res.updated });

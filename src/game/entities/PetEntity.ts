@@ -22,7 +22,7 @@ const PET_DEFAULT_STRIKE_DIST = 5.2;
 const PET_SHOT_RECOIL_SEC = 0.28;
 const PET_DESPAWN_FADE_SEC = 0.45;
 
-type PetRigArchetype = 'winged' | 'beast' | 'serpent';
+type PetRigArchetype = 'winged' | 'beast' | 'serpent' | 'fox';
 type PetPhase = 'STRIKE' | 'FOLLOW';
 
 const ELEMENT_PET_ARCHETYPE: Readonly<Record<ElementId, PetRigArchetype>> = {
@@ -40,6 +40,7 @@ const ELEMENT_PET_ARCHETYPE: Readonly<Record<ElementId, PetRigArchetype>> = {
 
 export interface PetImpactEvent {
   element: ElementId;
+  isPhantomFox: boolean;
   x: number;
   y: number;
   z: number;
@@ -51,6 +52,7 @@ export interface PetImpactEvent {
 
 export interface PetShotEvent {
   element: ElementId;
+  isPhantomFox: boolean;
   x: number;
   y: number;
   z: number;
@@ -117,7 +119,8 @@ interface PooledPetRig {
   shotRecoilTimer: number;
 }
 
-const ARCHETYPES: readonly PetRigArchetype[] = ['winged', 'beast', 'serpent'];
+const ARCHETYPES: readonly PetRigArchetype[] = ['winged', 'beast', 'serpent', 'fox'];
+const ELEMENT_ARCHETYPES: readonly PetRigArchetype[] = ['winged', 'beast', 'serpent'];
 
 function dampAngle(current: number, target: number, factor: number): number {
   let diff = ((target - current + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -139,6 +142,7 @@ export class PetEntity {
 
   private readonly rigs: Record<PetRigArchetype, PooledPetRig>;
   private readonly cooldowns: Record<ElementId, number>;
+  private phantomFoxCooldown = 0;
   private readonly ownedMaterials: THREE.Material[] = [];
 
   private ultimateElement: ElementId | null = null;
@@ -152,6 +156,7 @@ export class PetEntity {
   // Pre-allocated scratch results (Zero-Allocation Hot Path)
   private readonly impactResult: PetImpactEvent = {
     element: 'pyro',
+    isPhantomFox: false,
     x: 0,
     y: 1,
     z: 0,
@@ -161,9 +166,10 @@ export class PetEntity {
     healRiderAmount: 0,
   };
   private readonly scratchShotPool: PetShotEvent[] = [
-    { element: 'pyro', x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
-    { element: 'volt', x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
-    { element: 'aqua', x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
+    { element: 'pyro', isPhantomFox: false, x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
+    { element: 'volt', isPhantomFox: false, x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
+    { element: 'aqua', isPhantomFox: false, x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
+    { element: 'aqua', isPhantomFox: true, x: 0, y: 1, z: 0, targetX: 0, targetY: 1, targetZ: 0 },
   ];
   private readonly activeShots: PetShotEvent[] = [];
   private readonly updateResult: PetUpdateEvents = {
@@ -175,11 +181,15 @@ export class PetEntity {
   constructor(assetLoader: AssetLoader, pbrTextures: PbrTextureSet) {
     const buildRig = (
       archetype: PetRigArchetype,
-      key: 'pet_phoenix' | 'pet_raiju' | 'pet_leviathan',
+      key: 'pet_phoenix' | 'pet_raiju' | 'pet_leviathan' | 'pet_phantom_fox',
       bodyHex: number,
-      emissiveHex: number
+      emissiveHex: number,
+      allowHueShift = true
     ): PooledPetRig => {
-      const cloned = assetLoader.cloneRig(key);
+      const cloned =
+        key === 'pet_phantom_fox'
+          ? (assetLoader.cloneOptionalRig('pet_phantom_fox') ?? assetLoader.cloneRig('pet_raiju'))
+          : assetLoader.cloneRig(key);
       const group = cloned.scene;
       const armorMat = createRiderArmorMaterial(bodyHex, pbrTextures);
       const darkMat = createUndersuitMaterial(pbrTextures);
@@ -195,8 +205,8 @@ export class PetEntity {
         },
         {
           preserveExternalPbr: true,
-          envMapIntensity: 1.4,
-          enableArmorHueShift: cloned.isCustomExternal,
+          envMapIntensity: 1.45,
+          enableArmorHueShift: allowHueShift && cloned.isCustomExternal,
         }
       );
       this.ownedMaterials.push(...externalMats);
@@ -265,9 +275,10 @@ export class PetEntity {
     };
 
     this.rigs = {
-      winged: buildRig('winged', 'pet_phoenix', 0xe11d48, 0xff5722),
-      beast: buildRig('beast', 'pet_raiju', 0xfacc15, 0x38bdf8),
-      serpent: buildRig('serpent', 'pet_leviathan', 0x0284c7, 0x22d3ee),
+      winged: buildRig('winged', 'pet_phoenix', 0xe11d48, 0xff5722, true),
+      beast: buildRig('beast', 'pet_raiju', 0xfacc15, 0x38bdf8, true),
+      serpent: buildRig('serpent', 'pet_leviathan', 0x0284c7, 0x22d3ee, true),
+      fox: buildRig('fox', 'pet_phantom_fox', 0x0f172a, 0x22d3ee, false),
     };
 
     this.cooldowns = {
@@ -286,6 +297,83 @@ export class PetEntity {
 
   public getCooldown(element: ElementId): number {
     return this.cooldowns[element];
+  }
+
+  public getPhantomFoxCooldown(): number {
+    return this.phantomFoxCooldown;
+  }
+
+  public getPhantomFoxActiveRemaining(): number {
+    const rig = this.rigs.fox;
+    return rig.active ? Math.max(0, PET_COMPANION_DURATION_SEC - rig.elapsed) : 0;
+  }
+
+  public canSummonPhantomFox(): boolean {
+    if (this.ultimateElement !== null) return false;
+    if (this.phantomFoxCooldown > 0) return false;
+    return !this.rigs.fox.active;
+  }
+
+  public summonPhantomFox(
+    riderPos: Readonly<Vec3Snapshot>,
+    forwardX: number,
+    forwardZ: number,
+    targetPos: Readonly<Vec3Snapshot> | null
+  ): boolean {
+    if (!this.canSummonPhantomFox()) return false;
+    const rig = this.rigs.fox;
+    rig.activeElement = 'umbra';
+    rig.active = true;
+    rig.phase = 'STRIKE';
+    rig.elapsed = 0;
+    rig.impactFired = false;
+    rig.shotTimer = 0.6;
+    rig.shotRecoilTimer = 0;
+    this.phantomFoxCooldown = 0;
+
+    const sideX = -forwardZ * 1.45;
+    const sideZ = forwardX * 1.45;
+    rig.startX = riderPos.x + sideX - forwardX * 0.4;
+    rig.startY = 0.08;
+    rig.startZ = riderPos.z + sideZ - forwardZ * 0.4;
+
+    if (targetPos) {
+      rig.targetX = targetPos.x;
+      rig.targetY = 1.0;
+      rig.targetZ = targetPos.z;
+    } else {
+      rig.targetX = riderPos.x + forwardX * PET_DEFAULT_STRIKE_DIST;
+      rig.targetY = 1.0;
+      rig.targetZ = riderPos.z + forwardZ * PET_DEFAULT_STRIKE_DIST;
+    }
+
+    rig.posX = rig.startX;
+    rig.posY = rig.startY;
+    rig.posZ = rig.startZ;
+    rig.yaw = Math.atan2(rig.targetX - rig.startX, rig.targetZ - rig.startZ);
+    rig.moveSpeed = 0;
+    rig.group.position.set(rig.posX, rig.posY, rig.posZ);
+    rig.group.rotation.set(0, rig.yaw, 0);
+    rig.group.scale.setScalar(0.15);
+    rig.group.visible = true;
+    return true;
+  }
+
+  public activateUltimatePhantomFox(riderPos: Readonly<Vec3Snapshot>, riderYaw: number): void {
+    for (let i = 0; i < ARCHETYPES.length; i++) {
+      this.rigs[ARCHETYPES[i]!].group.visible = false;
+    }
+    this.ultimateElement = 'aqua';
+    this.ultimateArchetype = 'fox';
+    this.ultimateTrinityMode = false;
+    this.ultimateElapsed = 0;
+    this.ultimateAnchorX = riderPos.x;
+    this.ultimateAnchorZ = riderPos.z;
+    this.ultimateYaw = riderYaw;
+
+    const rig = this.rigs.fox;
+    rig.group.visible = true;
+    rig.group.scale.setScalar(0.2);
   }
 
   /**
@@ -350,8 +438,8 @@ export class PetEntity {
 
     if (isGrandUltimate) {
       // GRAND SOVEREIGN ULTIMATE FORM [R]: Summon ALL 3 Rigged Contract-Beast Pets simultaneously!
-      for (let i = 0; i < ARCHETYPES.length; i++) {
-        const arch = ARCHETYPES[i]!;
+      for (let i = 0; i < ELEMENT_ARCHETYPES.length; i++) {
+        const arch = ELEMENT_ARCHETYPES[i]!;
         const rig = this.rigs[arch];
         const tintElem: ElementId =
           arch === archetype
@@ -401,6 +489,7 @@ export class PetEntity {
     this.ultimateElement = null;
     this.ultimateArchetype = null;
     this.ultimateTrinityMode = false;
+    this.phantomFoxCooldown = 0;
     this.resetActiveSummons();
     for (let i = 0; i < ALL_ELEMENT_IDS.length; i++) {
       this.cooldowns[ALL_ELEMENT_IDS[i]!] = 0;
@@ -479,6 +568,9 @@ export class PetEntity {
         this.cooldowns[id] = Math.max(0, this.cooldowns[id] - dt);
       }
     }
+    if (this.phantomFoxCooldown > 0) {
+      this.phantomFoxCooldown = Math.max(0, this.phantomFoxCooldown - dt);
+    }
 
     if (this.ultimateElement) {
       this.ultimateElapsed += dt;
@@ -510,16 +602,18 @@ export class PetEntity {
         if (!rig.impactFired && rig.elapsed >= PET_IMPACT_TIME) {
           rig.impactFired = true;
           const elemId = rig.activeElement;
+          const isFox = rig.archetype === 'fox';
           const cfg = getElementConfig(elemId);
           this.impactResult.element = elemId;
+          this.impactResult.isPhantomFox = isFox;
           this.impactResult.x = rig.targetX;
           this.impactResult.y = rig.targetY;
           this.impactResult.z = rig.targetZ;
           this.impactResult.radius =
-            rig.archetype === 'serpent' ? 4.8 : rig.archetype === 'winged' ? 4.4 : 4.0;
-          this.impactResult.damageMultiplier = cfg.pet.assistDamageMultiplier;
-          this.impactResult.appliesStatus = cfg.pet.appliesStatus;
-          this.impactResult.healRiderAmount = cfg.pet.passiveBonus.stat === 'regen' ? 14 : 0;
+            rig.archetype === 'serpent' ? 4.8 : rig.archetype === 'winged' ? 4.4 : isFox ? 4.5 : 4.0;
+          this.impactResult.damageMultiplier = isFox ? 2.15 : cfg.pet.assistDamageMultiplier;
+          this.impactResult.appliesStatus = isFox ? 'MARK' : cfg.pet.appliesStatus;
+          this.impactResult.healRiderAmount = !isFox && cfg.pet.passiveBonus.stat === 'regen' ? 14 : 0;
           this.updateResult.impact = this.impactResult;
         }
 
@@ -533,11 +627,11 @@ export class PetEntity {
             rig.elapsed > PET_IMPACT_TIME ? (rig.elapsed - PET_IMPACT_TIME) * 2.1 : 0;
           rig.posY =
             THREE.MathUtils.lerp(rig.startY, rig.targetY + 0.35, easeStrike) + diveArc + postRise;
-        } else if (rig.archetype === 'beast') {
-          const dashT = Math.min(1.18, easeStrike * 1.12);
+        } else if (rig.archetype === 'beast' || rig.archetype === 'fox') {
+          const dashT = Math.min(1.2, easeStrike * 1.14);
           rig.posX = THREE.MathUtils.lerp(rig.startX, rig.targetX, dashT);
           rig.posZ = THREE.MathUtils.lerp(rig.startZ, rig.targetZ, dashT);
-          const hop = Math.sin(Math.min(1, strikeT) * Math.PI) * 0.55;
+          const hop = Math.sin(Math.min(1, strikeT) * Math.PI) * (rig.archetype === 'fox' ? 0.72 : 0.55);
           rig.posY = (rig.isCustomExternal ? 0.08 : 0.72) + hop;
         } else {
           const weave = Math.sin(rig.elapsed * 14) * 0.65 * (1 - strikeT * 0.5);
@@ -558,12 +652,17 @@ export class PetEntity {
       // Phase 2: Persistent Companion Follow + Auto Elemental Shot every 1.5s (1.15s - 18.0s)
       if (rig.elapsed >= PET_COMPANION_DURATION_SEC) {
         const finishedElement = rig.activeElement;
+        const wasFox = rig.archetype === 'fox';
         rig.active = false;
         rig.activeElement = null;
         rig.group.visible = false;
         rig.group.scale.setScalar(1.0);
         // Post-follow 20s cooldown begins right when the Pet finishes its 18s companion duration!
-        this.cooldowns[finishedElement] = PET_POST_FOLLOW_COOLDOWN_SEC;
+        if (wasFox) {
+          this.phantomFoxCooldown = PET_POST_FOLLOW_COOLDOWN_SEC;
+        } else {
+          this.cooldowns[finishedElement] = PET_POST_FOLLOW_COOLDOWN_SEC;
+        }
         continue;
       }
 
@@ -575,8 +674,8 @@ export class PetEntity {
         offsetRight = -1.95;
         offsetBack = -0.85;
         targetHoverY = rig.isCustomExternal ? 2.35 : 2.65;
-      } else if (rig.archetype === 'beast') {
-        offsetRight = 1.95;
+      } else if (rig.archetype === 'beast' || rig.archetype === 'fox') {
+        offsetRight = rig.archetype === 'fox' ? 1.85 : 1.95;
         offsetBack = -0.35;
         targetHoverY = rig.isCustomExternal ? 0.06 : 0.72;
       } else {
@@ -612,9 +711,11 @@ export class PetEntity {
             rig.shotRecoilTimer = PET_SHOT_RECOIL_SEC;
 
             const shotEv = this.scratchShotPool[shotPoolIdx++]!;
+            const isQuad = rig.archetype === 'beast' || rig.archetype === 'fox';
             const muzzleOffsetY =
-              rig.archetype === 'winged' ? 0.75 : rig.archetype === 'beast' ? 0.85 : 1.05;
+              rig.archetype === 'winged' ? 0.75 : isQuad ? 0.85 : 1.05;
             shotEv.element = rig.activeElement;
+            shotEv.isPhantomFox = rig.archetype === 'fox';
             shotEv.x = rig.posX + Math.sin(rig.yaw) * 0.65;
             shotEv.y = rig.posY + muzzleOffsetY;
             shotEv.z = rig.posZ + Math.cos(rig.yaw) * 0.65;
@@ -648,8 +749,8 @@ export class PetEntity {
         const easeSurge = 1 - Math.pow(1 - surgeT, 2.6);
         const fadeScale = t < 0.4 ? 0.22 + (t / 0.4) * 0.78 : t > 2.15 ? Math.max(0.05, 1 - (t - 2.15) / 0.5) : 1.0;
 
-        for (let i = 0; i < ARCHETYPES.length; i++) {
-          const arch = ARCHETYPES[i]!;
+        for (let i = 0; i < ELEMENT_ARCHETYPES.length; i++) {
+          const arch = ELEMENT_ARCHETYPES[i]!;
           const rig = this.rigs[arch];
           let baseScale = 2.65;
           let sideOffset = 0;
@@ -762,7 +863,7 @@ export class PetEntity {
           const flap = Math.sin(rig.elapsed * 26) * 0.65;
           if (rig.wingLeft) rig.wingLeft.rotation.z = flap;
           if (rig.wingRight) rig.wingRight.rotation.z = -flap;
-        } else if (rig.archetype === 'beast') {
+        } else if (rig.archetype === 'beast' || rig.archetype === 'fox') {
           rig.group.rotation.set(0, rig.yaw, Math.sin(rig.elapsed * 32) * 0.12);
           if (rig.tailPivot) rig.tailPivot.rotation.y = Math.sin(rig.elapsed * 28) * 0.45;
         } else {
@@ -786,7 +887,7 @@ export class PetEntity {
         const flap = Math.sin(rig.elapsed * 14) * 0.5;
         if (rig.wingLeft) rig.wingLeft.rotation.z = flap;
         if (rig.wingRight) rig.wingRight.rotation.z = -flap;
-      } else if (rig.archetype === 'beast') {
+      } else if (rig.archetype === 'beast' || rig.archetype === 'fox') {
         const runFactor = Math.min(1, rig.moveSpeed / 6.0);
         const trotHop = Math.abs(Math.sin(rig.elapsed * 13)) * 0.24 * runFactor;
         rig.group.position.set(
@@ -859,25 +960,26 @@ export class PetEntity {
       return;
     }
 
-    if (rig.archetype === 'beast') {
-      // 9-Bone Quadruped Beast Rig: bounding 4-leg gallop synced to movement speed + snapping jaw & whip tail!
+    if (rig.archetype === 'beast' || rig.archetype === 'fox') {
+      // 9-Bone Quadruped Beast / Cyber Fox Rig: bounding 4-leg gallop synced to movement speed + snapping jaw & sweeping cyber tail!
+      const isFox = rig.archetype === 'fox';
       const runIntensity =
-        phase === 'STRIKE' || isUltimate ? 1.0 : Math.min(1, 0.28 + (moveSpeed / 5.5) * 0.72);
-      const strideFreq = phase === 'STRIKE' || isUltimate ? 16.0 : 8.0 + runIntensity * 6.5;
-      const frontSwing = Math.sin(t * strideFreq) * 0.62 * runIntensity;
-      const frontAlt = Math.sin(t * strideFreq + 0.55) * 0.62 * runIntensity;
-      const backSwing = Math.sin(t * strideFreq + Math.PI) * 0.65 * runIntensity;
-      const backAlt = Math.sin(t * strideFreq + Math.PI + 0.55) * 0.65 * runIntensity;
+        phase === 'STRIKE' || isUltimate ? 1.0 : Math.min(1, 0.3 + (moveSpeed / 5.2) * 0.7);
+      const strideFreq = phase === 'STRIKE' || isUltimate ? (isFox ? 18.0 : 16.0) : (isFox ? 9.5 : 8.0) + runIntensity * 6.5;
+      const frontSwing = Math.sin(t * strideFreq) * (isFox ? 0.68 : 0.62) * runIntensity;
+      const frontAlt = Math.sin(t * strideFreq + 0.55) * (isFox ? 0.68 : 0.62) * runIntensity;
+      const backSwing = Math.sin(t * strideFreq + Math.PI) * (isFox ? 0.72 : 0.65) * runIntensity;
+      const backAlt = Math.sin(t * strideFreq + Math.PI + 0.55) * (isFox ? 0.72 : 0.65) * runIntensity;
 
-      if (b.body) b.body.rotation.set(Math.sin(t * strideFreq) * 0.12 * runIntensity, 0, 0);
-      if (b.chest) b.chest.rotation.set(-Math.sin(t * strideFreq) * 0.14 * runIntensity + recoilT * 0.22, 0, 0);
-      if (b.head) b.head.rotation.set(-0.08 - recoilT * 0.36 + Math.sin(t * 5.0) * 0.08, Math.sin(t * 3.2) * 0.14, 0);
+      if (b.body) b.body.rotation.set(Math.sin(t * strideFreq) * 0.13 * runIntensity, 0, 0);
+      if (b.chest) b.chest.rotation.set(-Math.sin(t * strideFreq) * 0.15 * runIntensity + recoilT * 0.22, 0, 0);
+      if (b.head) b.head.rotation.set(-0.06 - recoilT * 0.38 + Math.sin(t * 5.2) * 0.08, Math.sin(t * 3.4) * 0.16, 0);
       if (b.frontLegL) b.frontLegL.rotation.set(frontSwing - recoilT * 0.32, 0, 0);
       if (b.frontLegR) b.frontLegR.rotation.set(frontAlt - recoilT * 0.32, 0, 0);
       if (b.backLegL) b.backLegL.rotation.set(backSwing, 0, 0);
       if (b.backLegR) b.backLegR.rotation.set(backAlt, 0, 0);
-      if (b.tailBase) b.tailBase.rotation.set(0.18 + Math.sin(t * 9) * 0.18, Math.sin(t * 11) * 0.42, 0);
-      if (b.tailTip) b.tailTip.rotation.set(Math.sin(t * 9 - 0.8) * 0.24, Math.sin(t * 11 - 0.8) * 0.55, 0);
+      if (b.tailBase) b.tailBase.rotation.set(0.16 + Math.sin(t * (isFox ? 7.5 : 9)) * 0.2, Math.sin(t * (isFox ? 9.5 : 11)) * (isFox ? 0.48 : 0.42), 0);
+      if (b.tailTip) b.tailTip.rotation.set(Math.sin(t * (isFox ? 7.5 : 9) - 0.8) * 0.26, Math.sin(t * (isFox ? 9.5 : 11) - 0.8) * (isFox ? 0.62 : 0.55), 0);
       return;
     }
 

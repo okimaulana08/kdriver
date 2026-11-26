@@ -92,9 +92,113 @@ export function FinisherCutIn({
           {fromUltimate && (
             <div className="pointer-events-none absolute inset-x-0 top-2 bottom-2 z-20 border-y border-amber-200/70" />
           )}
-          {/* Layer A: Live-Action Photorealistic Ultimate Rider Visor Illustration (with automatic fallback) */}
+          {/* Layer A: Dedicated UNIT-02 PHANTOM Obsidian-Cyan Cyber Visor OR UNIT-01 Photorealistic Ultimate Visor */}
           <div className="animate-cutin-visor absolute inset-0 flex items-center justify-center">
-            {hasCustomArt ? (
+            {isPhantom ? (
+              <svg
+                viewBox="0 0 1600 680"
+                className="h-full w-full object-cover"
+                preserveAspectRatio="xMidYMid slice"
+              >
+                <defs>
+                  <radialGradient id="phantomEyeGlow" cx="50%" cy="50%" r="55%">
+                    <stop offset="0%" stopColor="#ffffff" />
+                    <stop offset="30%" stopColor="#67e8f9" />
+                    <stop offset="72%" stopColor="#06b6d4" />
+                    <stop offset="100%" stopColor="#020617" stopOpacity="0" />
+                  </radialGradient>
+                  <linearGradient id="phantomHelmMetal" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#0f172a" />
+                    <stop offset="48%" stopColor="#1e293b" />
+                    <stop offset="100%" stopColor="#020617" />
+                  </linearGradient>
+                  <linearGradient id="phantomBladeCrest" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#67e8f9" />
+                    <stop offset="50%" stopColor="#e2e8f0" />
+                    <stop offset="100%" stopColor="#22d3ee" />
+                  </linearGradient>
+                  <pattern id="phantomHexEye" width="16" height="14" patternUnits="userSpaceOnUse">
+                    <polygon
+                      points="8,0 16,3.5 16,10.5 8,14 0,10.5 0,3.5"
+                      fill="none"
+                      stroke="#ffffff"
+                      strokeOpacity="0.4"
+                      strokeWidth="1.2"
+                    />
+                  </pattern>
+                </defs>
+
+                {/* Cyber Clock-Up Radial Backburst + Diagonal Katana Slash Scars */}
+                <circle cx="1040" cy="340" r="440" fill="url(#phantomEyeGlow)" opacity="0.34" />
+                <polygon points="320,640 1560,55 1600,90 360,675" fill="#22d3ee" opacity="0.32" />
+                <polygon points="440,35 1540,610 1510,645 410,70" fill="#f43f5e" opacity="0.28" />
+
+                {/* Sleek Angular UNIT-02 PHANTOM Obsidian-Silver Helmet + Razor Cyber V-Crest */}
+                <g transform="translate(150, 0)">
+                  <polygon
+                    points="575,55 1205,55 1295,305 1130,630 650,630 485,305"
+                    fill="url(#phantomHelmMetal)"
+                    stroke="#22d3ee"
+                    strokeWidth="3.5"
+                    strokeOpacity="0.72"
+                  />
+                  {/* Metallic Silver Cheek & Brow Blades */}
+                  <polygon
+                    points="520,220 710,275 660,545 505,335"
+                    fill="#334155"
+                    stroke="#94a3b8"
+                    strokeWidth="2"
+                  />
+                  <polygon
+                    points="1260,220 1070,275 1120,545 1275,335"
+                    fill="#334155"
+                    stroke="#94a3b8"
+                    strokeWidth="2"
+                  />
+                  {/* Sharp Twin Cyber-Fox / Katana V-Crest */}
+                  <polygon
+                    points="890,265 615,28 710,36 890,178 1070,36 1165,28"
+                    fill="url(#phantomBladeCrest)"
+                  />
+                  {/* Glowing Crimson Core Diamond */}
+                  <polygon
+                    points="890,176 922,240 890,302 858,240"
+                    fill="#f43f5e"
+                    stroke="#ffffff"
+                    strokeWidth="3.5"
+                  />
+                  {/* Razor Slanted Electric-Cyan Compound Visor Eyes */}
+                  <polygon
+                    points="555,235 848,308 820,418 615,388"
+                    fill="url(#phantomEyeGlow)"
+                    stroke="#ffffff"
+                    strokeWidth="3.5"
+                  />
+                  <polygon points="555,235 848,308 820,418 615,388" fill="url(#phantomHexEye)" />
+                  <polygon
+                    points="1225,235 932,308 960,418 1165,388"
+                    fill="url(#phantomEyeGlow)"
+                    stroke="#ffffff"
+                    strokeWidth="3.5"
+                  />
+                  <polygon points="1225,235 932,308 960,418 1165,388" fill="url(#phantomHexEye)" />
+                  {/* Sleek Cyber Mask Respirator */}
+                  <polygon
+                    points="755,465 890,515 1025,465 985,595 890,625 795,595"
+                    fill="#020617"
+                    stroke="#22d3ee"
+                    strokeWidth="2.5"
+                    strokeOpacity="0.7"
+                  />
+                  <line x1="825" y1="500" x2="845" y2="585" stroke="#22d3ee" strokeWidth="3.5" />
+                  <line x1="890" y1="515" x2="890" y2="608" stroke="#f43f5e" strokeWidth="4" />
+                  <line x1="955" y1="500" x2="935" y2="585" stroke="#22d3ee" strokeWidth="3.5" />
+                  {/* Blinding Cyan + Crimson Anamorphic Katana Glint */}
+                  <rect x="220" y="336" width="1340" height="8" fill="#ffffff" opacity="0.82" />
+                  <rect x="340" y="326" width="1100" height="28" fill="#22d3ee" opacity="0.38" />
+                </g>
+              </svg>
+            ) : hasCustomArt ? (
               <div className="relative h-full w-full">
                 <img
                   src={CUTIN_VISOR_ART_URL}
@@ -267,7 +371,7 @@ export function FinisherCutIn({
               </span>
               <span className="font-game-ui text-xs font-bold tracking-[0.24em] text-slate-200 uppercase">
                 {isPhantom
-                  ? `UNIT-02 PHANTOM // ${cfg.name}`
+                  ? 'UNIT-02 PHANTOM // CYBER ECLIPSE'
                   : fromUltimate
                     ? `${cfg.name} // TRINITY CONTRACT BEASTS`
                     : `${cfg.name} // ${cfg.pet.name}`}
@@ -364,13 +468,18 @@ export function FinisherCutIn({
           ★
         </span>
         <span className="font-game-ui text-[11px] font-bold tracking-[0.26em] text-slate-400 uppercase">
-          {isPhantom ? 'UNIT-02 PHANTOM' : 'K-DRIVER'} // {cfg.weapon.name}
+          {isPhantom
+            ? 'UNIT-02 PHANTOM // KUROKAGE CYBER KATANA'
+            : `K-DRIVER // ${cfg.weapon.name}`}
         </span>
       </div>
 
       <div className="animate-cutin-letterbox fixed inset-x-0 bottom-0 flex h-16 origin-bottom items-center justify-between border-t border-white/15 bg-slate-950/95 px-8">
         <span className="font-game-ui text-[11px] font-bold tracking-[0.26em] text-slate-300 uppercase">
-          CONTRACT BEAST: <strong style={{ color: emissive }}>{cfg.pet.name}</strong>
+          CONTRACT BEAST:{' '}
+          <strong style={{ color: emissive }}>
+            {isPhantom ? 'Kitsune-02 Cyber Fox' : cfg.pet.name}
+          </strong>
         </span>
         <div className="animate-cutin-climax-caption flex items-center gap-3">
           <span

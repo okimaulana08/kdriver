@@ -40,10 +40,10 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
     const parsedManifest = JSON.parse(fs.readFileSync(customManifestPath, 'utf8'));
     expect(parsedManifest).toHaveProperty('rider');
 
-    // Verify dedicated Sector 02–05 Boss GLBs + Unit-02 Second Rider GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons
-    const riggedSpecs: readonly { file: string; minJoints: number }[] = [
-      { file: 'rider_unit2.glb', minJoints: 20 },
-      { file: 'rider_unit2_upgraded.glb', minJoints: 20 },
+    // Verify dedicated Sector 02–05 Boss GLBs + Unit-02 Second Rider GLBs (with 7 retargeted mocap clips!) + all 4 Contract-Beast Pet GLBs carry rigged skeletons
+    const riggedSpecs: readonly { file: string; minJoints: number; minAnims?: number }[] = [
+      { file: 'rider_unit2.glb', minJoints: 20, minAnims: 7 },
+      { file: 'rider_unit2_upgraded.glb', minJoints: 20, minAnims: 7 },
       { file: 'boss_magma.glb', minJoints: 20 },
       { file: 'boss_sylvan.glb', minJoints: 20 },
       { file: 'boss_chrono.glb', minJoints: 20 },
@@ -51,6 +51,7 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
       { file: 'pet_phoenix.glb', minJoints: 8 },
       { file: 'pet_raiju.glb', minJoints: 9 },
       { file: 'pet_leviathan.glb', minJoints: 7 },
+      { file: 'pet_phantom_fox.glb', minJoints: 9 },
     ];
     for (const spec of riggedSpecs) {
       const modelPath = path.join(publicDir, 'assets', 'models', 'custom', spec.file);
@@ -67,10 +68,21 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
         gltfJson.skins[0].joints.length,
         `${spec.file} must have >= ${spec.minJoints} joints`
       ).toBeGreaterThanOrEqual(spec.minJoints);
+      if (spec.minAnims) {
+        expect(
+          gltfJson.animations?.length ?? 0,
+          `${spec.file} must carry >= ${spec.minAnims} mocap animations`
+        ).toBeGreaterThanOrEqual(spec.minAnims);
+      }
       const attrs = gltfJson.meshes[0].primitives[0].attributes;
       expect(attrs).toHaveProperty('JOINTS_0');
       expect(attrs).toHaveProperty('WEIGHTS_0');
     }
+
+    // Verify UNIT-02 PHANTOM dedicated Cyber Katana GLB exists with valid glTF magic header
+    const katanaPath = path.join(publicDir, 'assets', 'models', 'custom', 'weapon_phantom_katana.glb');
+    expect(fs.existsSync(katanaPath), 'Missing weapon_phantom_katana.glb').toBe(true);
+    expect(fs.readFileSync(katanaPath).subarray(0, 4).toString('ascii')).toBe('glTF');
 
     // Total models + 360 skybox + PBR texture pack must remain well below 25 MB budget (leaving headroom for custom Mixamo rigs!)
     expect(totalBytes).toBeLessThan(8 * 1024 * 1024);

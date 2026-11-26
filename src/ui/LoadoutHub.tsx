@@ -16,6 +16,7 @@ import {
   MAX_GEM_LEVEL,
   getGemLevel,
   getGemUpgradeCost,
+  getPhantomCoreLevel,
   isElementUnlocked,
 } from '../game/ProgressionSystem';
 import type {
@@ -148,19 +149,48 @@ export function LoadoutHub({
   const engineStatus = useGameStore((s) => s.engineStatus);
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
   const upgradeGemLevel = useGameStore((s) => s.upgradeGemLevel);
+  const upgradePhantomCore = useGameStore((s) => s.upgradePhantomCore);
   const unlockGemWithShards = useGameStore((s) => s.unlockGemWithShards);
 
   const [editingSlot, setEditingSlot] = useState<0 | 1 | 2>(0);
 
   const previewConfig = getElementConfig(activeElement);
-  const previewLevel = getGemLevel(saveRecord, activeElement);
-  const previewMultPct = Math.round((getElementLevelDamageMultiplier(previewLevel) - 1) * 100);
   const selectedStage = getStageConfig(selectedStageId);
   const diffConfig = getDifficultyConfig(selectedDifficulty);
   const riderConfig = getRiderConfig(selectedRiderId);
+  const isPhantomLocked = riderConfig.locksElementSelection;
+  const phantomLevel = getPhantomCoreLevel(saveRecord);
+  const phantomUpgradeCost = getGemUpgradeCost(phantomLevel);
+  const canUpgradePhantom =
+    phantomLevel < MAX_GEM_LEVEL && saveRecord.gemShards >= phantomUpgradeCost;
+
+  const previewLevel = isPhantomLocked ? phantomLevel : getGemLevel(saveRecord, activeElement);
+  const previewMultPct = Math.round((getElementLevelDamageMultiplier(previewLevel) - 1) * 100);
   const scaledShardPreview = Math.round(selectedStage.shardReward * diffConfig.shardRewardMult);
-  const accentColor = previewConfig.primaryColor;
-  const glowColor = previewConfig.emissiveColor;
+  const accentColor = isPhantomLocked ? riderConfig.accentColor : previewConfig.primaryColor;
+  const glowColor = isPhantomLocked ? riderConfig.glowColor : previewConfig.emissiveColor;
+
+  const displayWeaponName = isPhantomLocked
+    ? (riderConfig.signatureWeapon?.name ?? 'Kurokage Cyber Katana')
+    : previewConfig.weapon.name;
+  const displayWeaponTag = isPhantomLocked
+    ? 'KATANA'
+    : formatArchetype(previewConfig.weapon.archetype);
+  const displayStatus = isPhantomLocked
+    ? (riderConfig.signatureStatus ?? 'MARK')
+    : previewConfig.statusApplied;
+  const displaySkillName = isPhantomLocked
+    ? (riderConfig.signatureSkill?.name ?? 'Phantom Iaido Cross')
+    : previewConfig.skill.name;
+  const displayPetName = isPhantomLocked
+    ? (riderConfig.signaturePet?.name ?? 'Kitsune-02 Cyber Fox')
+    : previewConfig.pet.name;
+  const displayPetPassive = isPhantomLocked
+    ? (riderConfig.signaturePet?.passiveDescription ?? '+18% Overclock Gauge Gain')
+    : previewConfig.pet.passiveDescription;
+  const displayPedestalSubtitle = isPhantomLocked
+    ? (riderConfig.signatureThemeName ?? 'FIXED FORM // CYBER KATANA')
+    : previewConfig.name;
 
   const moveSlot = (index: number, delta: -1 | 1) => {
     const target = index + delta;
@@ -190,6 +220,12 @@ export function LoadoutHub({
     if (upgradeGemLevel(elemId)) {
       onGemProgressionChanged();
       onPreviewElement(elemId);
+    }
+  };
+
+  const handleUpgradePhantom = () => {
+    if (upgradePhantomCore()) {
+      onGemProgressionChanged();
     }
   };
 
@@ -347,7 +383,173 @@ export function LoadoutHub({
 
       {/* ================= MAIN FLOATING ARMORY WORKSPACE ================= */}
       <div className="flex min-h-0 flex-1 items-stretch justify-between px-4 py-3 sm:px-5">
-        {/* LEFT TACTICAL RAIL: Driver Belt Slots + 10-Core Vault (No giant web modal!) */}
+        {/* LEFT TACTICAL RAIL: UNIT-01 3-Slot Element Deck OR UNIT-02 Fixed Single-Form Overclock Kit */}
+        {isPhantomLocked ? (
+          <aside className="game-scroll pointer-events-auto flex w-[410px] max-w-full flex-col justify-between gap-2.5 overflow-y-auto pr-1">
+            {/* FIXED SINGLE-FORM BANNER */}
+            <section className="flex flex-col gap-2">
+              <div className="flex items-center justify-between px-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-block h-3 w-1 bg-cyan-400 shadow-[0_0_8px_#22d3ee]" />
+                  <h2 className="font-game-display text-[11px] font-bold tracking-[0.18em] text-cyan-200 uppercase">
+                    PHANTOM OVERCLOCK KIT
+                  </h2>
+                </div>
+                <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-black tracking-wider text-cyan-200 uppercase ring-1 ring-cyan-400/45">
+                  SINGLE FORM LOCKED
+                </span>
+              </div>
+
+              {/* SIGNATURE WEAPON CARD: KUROKAGE CYBER KATANA */}
+              <div
+                className="game-chamfer-sm game-hud-surface p-3"
+                style={{
+                  borderLeft: '4px solid #06b6d4',
+                  boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.45), 0 0 18px rgba(6,182,212,0.18)',
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[9px] font-bold tracking-[0.2em] text-cyan-300 uppercase">
+                      SIGNATURE KATANA • LV.{phantomLevel}/{MAX_GEM_LEVEL}
+                    </p>
+                    <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
+                      {displayWeaponName}
+                    </h3>
+                  </div>
+                  {phantomLevel < MAX_GEM_LEVEL ? (
+                    <button
+                      type="button"
+                      disabled={!canUpgradePhantom}
+                      onClick={handleUpgradePhantom}
+                      className="shrink-0 cursor-pointer bg-amber-500/20 px-2 py-1 text-[9px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/50 hover:bg-amber-500/40 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      UPGRADE +{phantomUpgradeCost}◆
+                    </button>
+                  ) : (
+                    <span className="shrink-0 bg-emerald-500/20 px-2 py-1 text-[9px] font-black text-emerald-300">
+                      MAX LV.5
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[10px]">
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                      <span
+                        key={p}
+                        className="h-1.5 w-4"
+                        style={{
+                          backgroundColor: p < phantomLevel ? '#22d3ee' : 'rgba(148,163,184,0.22)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="font-bold text-emerald-300">
+                    ATK +{previewMultPct}% • 22% CRIT
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[10px] text-slate-300/85">
+                  Obsidian-cyan plasma odachi (3.15m reach • 1.24× swift slash). Applies{' '}
+                  <span className="font-bold text-cyan-300">MARK</span> on every strike.
+                </p>
+              </div>
+
+              {/* SIGNATURE PET CARD: KITSUNE-02 CYBER FOX */}
+              <div
+                className="game-chamfer-sm game-hud-surface p-3"
+                style={{
+                  borderLeft: '4px solid #38bdf8',
+                  boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.38)',
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[9px] font-bold tracking-[0.2em] text-sky-300 uppercase">
+                      CONTRACT BEAST [E] • AUTO-RIGGED
+                    </p>
+                    <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
+                      {displayPetName}
+                    </h3>
+                  </div>
+                  <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[9px] font-black text-sky-200 uppercase">
+                    CYBER FOX
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[10px] text-cyan-200/90">
+                  Passive: <strong>{displayPetPassive}</strong>
+                </p>
+                <p className="mt-0.5 text-[10px] text-slate-300/80">
+                  Pounces for 2.15× MARK burst, then sprints alongside Unit-02 for 18s firing cyan
+                  Fox-Fire Plasma Bolts.
+                </p>
+              </div>
+            </section>
+
+            {/* 2-FORM PROGRESSION & SIGNATURE ARTS (NO ELEMENT SELECTION) */}
+            <section className="game-chamfer-sm game-hud-surface flex flex-col gap-2 p-3 ring-1 ring-white/10">
+              <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                <span className="font-game-display text-[10px] font-bold tracking-[0.18em] text-white uppercase">
+                  2-FORM OVERCLOCK MATRIX
+                </span>
+                <span className="text-[9px] font-bold tracking-wider text-rose-300 uppercase">
+                  NO ELEMENT SWAP
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="rounded bg-slate-900/90 p-2 ring-1 ring-cyan-400/30">
+                  <p className="text-[8px] font-black tracking-widest text-cyan-300 uppercase">
+                    FORM 01 • BASE
+                  </p>
+                  <p className="font-game-display mt-0.5 text-[11px] font-bold text-white uppercase">
+                    BASIC FORM
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-slate-400">
+                    10.0 m/s Sprint • 2.15× Counter
+                  </p>
+                </div>
+                <div className="rounded bg-cyan-950/55 p-2 ring-1 ring-cyan-300/55">
+                  <p className="text-[8px] font-black tracking-widest text-rose-300 uppercase">
+                    FORM 02 • [F] MAX TIER
+                  </p>
+                  <p className="font-game-display mt-0.5 text-[11px] font-bold text-cyan-200 uppercase">
+                    UPGRADED FORM
+                  </p>
+                  <p className="mt-0.5 text-[9px] text-cyan-100/80">
+                    +40% DMG • 38s • Cyan Afterimage
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-1 border-t border-white/10 pt-1.5 text-[10px] text-slate-300">
+                <div className="flex items-center justify-between">
+                  <span>
+                    <strong className="text-amber-300">[Q]</strong> {displaySkillName}
+                  </span>
+                  <span className="text-[9px] text-slate-400">5.5s CD • Dash X-Slash</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>
+                    <strong className="text-orange-300">[SPACE]</strong> Phantom Kick
+                  </span>
+                  <span className="text-[9px] text-slate-400">6.0s CD • +75 Break</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>
+                    <strong className="text-rose-300">[R]</strong> PHANTOM OMNISLASH
+                  </span>
+                  <span className="text-[9px] text-cyan-300">Cyber Cage • 6 Clones • Kitsune-02</span>
+                </div>
+              </div>
+
+              <p className="rounded bg-slate-950/80 px-2 py-1.5 text-[9px] leading-relaxed text-slate-400">
+                UNIT-02 PHANTOM beroperasi dengan 1 wujud khusus tanpa pergantian 10 elemen seperti
+                UNIT-01 NEXUS. Pilih <strong className="text-rose-300">UNIT-01 NEXUS</strong> di
+                panel kanan jika ingin kustomisasi 10 Elemental Cores.
+              </p>
+            </section>
+          </aside>
+        ) : (
         <aside className="game-scroll pointer-events-auto flex w-[410px] max-w-full flex-col justify-between gap-2.5 overflow-y-auto pr-1">
           {/* SECTION 1: ACTIVE K-DRIVER BELT SLOTS [1] [2] [3] */}
           <section className="flex flex-col gap-1.5">
@@ -589,6 +791,7 @@ export function LoadoutHub({
             </div>
           </section>
         </aside>
+        )}
 
         {/* CENTER: OPEN 3D RIDER SHOWCASE STAGE (Subtle corner reticle brackets only) */}
         <div className="pointer-events-none relative hidden flex-1 lg:block">
@@ -600,7 +803,7 @@ export function LoadoutHub({
               className="font-game-display text-sm font-black tracking-[0.22em] uppercase italic"
               style={{ color: glowColor, textShadow: `0 0 14px ${accentColor}88` }}
             >
-              {previewConfig.name}
+              {displayPedestalSubtitle}
             </p>
           </div>
 
@@ -697,7 +900,7 @@ export function LoadoutHub({
                   ARMAMENT SPECS • LV.{previewLevel}
                 </p>
                 <h2 className="font-game-display mt-0.5 text-base font-black tracking-wide text-white uppercase italic">
-                  {previewConfig.weapon.name}
+                  {displayWeaponName}
                 </h2>
               </div>
               <span
@@ -708,7 +911,7 @@ export function LoadoutHub({
                   border: `1px solid ${accentColor}77`,
                 }}
               >
-                {formatArchetype(previewConfig.weapon.archetype)}
+                {displayWeaponTag}
               </span>
             </div>
 
@@ -716,7 +919,7 @@ export function LoadoutHub({
             <div className="mt-2.5 flex items-center justify-between border-y border-white/10 py-1.5 text-[10px]">
               <span className="font-bold tracking-wider text-slate-300 uppercase">
                 STATUS:{' '}
-                <span style={{ color: glowColor }}>{previewConfig.statusApplied}</span>
+                <span style={{ color: glowColor }}>{displayStatus}</span>
               </span>
               <span className="font-bold text-emerald-300">
                 ATK +{previewMultPct}%
@@ -733,7 +936,7 @@ export function LoadoutHub({
                   <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
                     SKILL{' '}
                   </span>
-                  {previewConfig.skill.name}
+                  {displaySkillName}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -744,9 +947,9 @@ export function LoadoutHub({
                   <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
                     PET{' '}
                   </span>
-                  {previewConfig.pet.name}{' '}
+                  {displayPetName}{' '}
                   <span className="text-[10px] text-cyan-300/80">
-                    ({previewConfig.pet.passiveDescription})
+                    ({displayPetPassive})
                   </span>
                 </span>
               </div>
@@ -776,10 +979,19 @@ export function LoadoutHub({
               </div>
             </div>
 
-            {/* Elemental Reaction Cheat Strip */}
+            {/* Elemental Reaction / Fixed Style Strip */}
             <div className="mt-2.5 border-t border-white/10 pt-1.5 text-[9px] tracking-wide text-slate-400">
-              <span className="font-bold text-slate-300 uppercase">REACTIONS: </span>
-              WET+VOLT • WET+PYRO • BURN+VOLT • ROOT+PYRO • MARK+LUX
+              {isPhantomLocked ? (
+                <>
+                  <span className="font-bold text-cyan-300 uppercase">STYLE: </span>
+                  FIXED SINGLE FORM • HIGH-CRIT KATANA • NO ELEMENT SWAP
+                </>
+              ) : (
+                <>
+                  <span className="font-bold text-slate-300 uppercase">REACTIONS: </span>
+                  WET+VOLT • WET+PYRO • BURN+VOLT • ROOT+PYRO • MARK+LUX
+                </>
+              )}
             </div>
           </div>
 

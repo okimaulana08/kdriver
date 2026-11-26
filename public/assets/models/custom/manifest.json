@@ -27,12 +27,12 @@
     "animationUrls": {}
   },
   "rider_unit2": {
-    "modelUrl": "/assets/models/custom/rider_unit2.glb?v=rig1",
+    "modelUrl": "/assets/models/custom/rider_unit2.glb?v=mocap1",
     "targetHeightMeters": 1.84,
     "animationUrls": {}
   },
   "rider_unit2_upgraded": {
-    "modelUrl": "/assets/models/custom/rider_unit2_upgraded.glb?v=rig1",
+    "modelUrl": "/assets/models/custom/rider_unit2_upgraded.glb?v=mocap1",
     "targetHeightMeters": 1.94,
     "animationUrls": {}
   },
@@ -111,6 +111,10 @@
     "modelUrl": "/assets/models/custom/weapon_lux.glb",
     "targetHeightMeters": 2.65
   },
+  "weapon_phantom_katana": {
+    "modelUrl": "/assets/models/custom/weapon_phantom_katana.glb?v=v2",
+    "targetHeightMeters": 2.28
+  },
   "pet_phoenix": {
     "modelUrl": "/assets/models/custom/pet_phoenix.glb?v=rig2",
     "targetHeightMeters": 1.6
@@ -122,5 +126,9 @@
   "pet_leviathan": {
     "modelUrl": "/assets/models/custom/pet_leviathan.glb?v=rig2",
     "targetHeightMeters": 1.85
+  },
+  "pet_phantom_fox": {
+    "modelUrl": "/assets/models/custom/pet_phantom_fox.glb?v=rig1",
+    "targetHeightMeters": 1.28
   }
 }
