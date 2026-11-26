@@ -34,6 +34,7 @@ import { evaluateElementalReaction } from '../game/combat/ReactionSystem';
 import { getDifficultyConfig, scaleEnemyConfigForDifficulty } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
 import { getEnemyConfig, type EnemyConfigId } from '../game/data/enemies';
+import { getRiderConfig } from '../game/data/riders';
 import { getStageConfig } from '../game/data/stages';
 import { BossKaijin } from '../game/entities/BossKaijin';
 import { EnemyBase } from '../game/entities/EnemyBase';
@@ -41,7 +42,6 @@ import { GemShardPool } from '../game/entities/GemShardPool';
 import { PetEntity } from '../game/entities/PetEntity';
 import {
   PlayerRider,
-  WARP_COUNTER_DAMAGE_MULTIPLIER,
   type PlayerDesiredMovement,
 } from '../game/entities/PlayerRider';
 import type {
@@ -49,6 +49,7 @@ import type {
   ElementId,
   FloatingTextKind,
   HurtboxTarget,
+  RiderId,
   StageId,
   Vec3Snapshot,
   WaveConfig,
@@ -305,6 +306,7 @@ export class GameApp {
       const initialOrder = initialStore.loadoutOrder;
       this.player = new PlayerRider(this.assetLoader, this.pbrTextures, initialOrder[0]);
       this.player.setLoadoutOrder(initialOrder);
+      this.player.setRiderProfile(initialStore.selectedRiderId);
       this.player.setGemLevels(initialStore.saveRecord.gemLevels);
       this.scene.add(this.player.root);
       this.scene.add(this.player.slashTrail.mesh);
@@ -385,6 +387,17 @@ export class GameApp {
     useGameStore.getState().setSelectedDifficulty(difficulty);
   }
 
+  public selectRider(riderId: RiderId): void {
+    const cfg = getRiderConfig(riderId);
+    useGameStore.getState().setSelectedRiderId(cfg.id);
+    if (!this.player) return;
+    this.audio.unlock();
+    this.player.setRiderProfile(cfg.id);
+    this.audio.playFormSwitch(this.player.currentElementId, false);
+    this.scratchColorHelper.set(cfg.accentColor);
+    this.particlePool.emitBeltSwitchBurst(0, 1.0, 0, this.scratchColorHelper.getHex());
+  }
+
   public syncGemProgression(): void {
     const record = useGameStore.getState().saveRecord;
     this.player?.setGemLevels(record.gemLevels);
@@ -437,7 +450,11 @@ export class GameApp {
     this.skillHitbox.endSwing();
     this.loop.resetTimeScale();
 
-    this.player.fsm.setDodgeIframeBonus(diffCfg.dodgeIframeBonusSec);
+    const riderCfg = getRiderConfig(store.selectedRiderId);
+    this.player.setRiderProfile(riderCfg.id);
+    this.player.fsm.setDodgeIframeBonus(
+      diffCfg.dodgeIframeBonusSec + riderCfg.dodgeIframeBonusSec
+    );
 
     this.comboCount = 0;
     this.comboResetTimer = 0;
@@ -464,7 +481,9 @@ export class GameApp {
     store.triggerWaveBanner(stage.name.toUpperCase(), stage.subtitle.toUpperCase(), stage.accentColor);
 
     this.updateBgmIntensity('COMBAT');
-    this.audio.playHenshinSuper('HENSHIN!');
+    this.audio.playHenshinSuper(
+      riderCfg.id === 'phantom' ? 'PHANTOM! HENSHIN!' : 'HENSHIN!'
+    );
     this.elementSkillVfx.spawnHenshinSuper(store.loadoutOrder[0], 0, 3.5, Math.PI);
     this.particlePool.emitHenshinAscension(store.loadoutOrder[0], 0, 1.1, 3.5, false);
   }
@@ -1562,17 +1581,18 @@ export class GameApp {
   private handleHenshinSuperEvent(): void {
     if (!this.player) return;
     const elemId = this.player.currentElementId;
-    this.audio.playHenshinSuper();
+    const isPhantom = this.player.currentRiderId === 'phantom';
+    this.audio.playHenshinSuper(isPhantom ? 'PHANTOM OVERCLOCK!' : 'SUPER FORM!');
     this.cameraRig.addShake(0.4, 0.35);
     this.player.getPosition(this.scratchOriginSnapshot);
     this.elementSkillVfx.spawnHenshinSuper(
-      elemId,
+      isPhantom ? 'aqua' : elemId,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.z,
       this.player.facingYaw
     );
     this.particlePool.emitHenshinAscension(
-      elemId,
+      isPhantom ? 'aqua' : elemId,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.y + 0.3,
       this.scratchOriginSnapshot.z,
@@ -1581,9 +1601,11 @@ export class GameApp {
     useGameStore
       .getState()
       .triggerWaveBanner(
-        'SUPER FORM HENSHIN!',
-        '+30% DMG • 32s SUSTAIN • FINISHER [R] READY',
-        '#facc15'
+        isPhantom ? 'PHANTOM OVERCLOCK!' : 'SUPER FORM HENSHIN!',
+        isPhantom
+          ? '+40% DMG • 38s SUSTAIN • PHANTOM OMNISLASH [R] READY'
+          : '+30% DMG • 32s SUSTAIN • FINISHER [R] READY',
+        isPhantom ? '#22d3ee' : '#facc15'
       );
 
     for (let i = 0; i < this.enemies.length; i++) {
@@ -1663,7 +1685,9 @@ export class GameApp {
     if (!this.player || !this.petEntity) return;
     const elemId = this.player.currentElementId;
     const cfg = getElementConfig(elemId);
-    const isGrand = this.player.wasFinisherCastFromUltimate;
+    const isPhantom = this.player.currentRiderId === 'phantom';
+    const isGrand = !isPhantom && this.player.wasFinisherCastFromUltimate;
+    const finisherTitle = this.player.effectiveFinisherName;
 
     // Capture current arena's natural daylight intensities once before domain dimming engages
     if (!this.domainDimActive && this.domainDimBlend <= 0.01) {
@@ -1674,9 +1698,13 @@ export class GameApp {
     }
     this.domainDimActive = true;
     this.ultimateSealSpawned = false;
-    this.finisherSpotLight.color.set(isGrand ? '#fde047' : cfg.emissiveColor);
+    this.finisherSpotLight.color.set(isPhantom ? '#22d3ee' : isGrand ? '#fde047' : cfg.emissiveColor);
 
-    this.audio.playUltimateFinisher(isGrand);
+    if (isPhantom) {
+      this.audio.playPhantomOmnislash();
+    } else {
+      this.audio.playUltimateFinisher(isGrand);
+    }
     this.player.getPosition(this.scratchOriginSnapshot);
     this.petEntity.activateUltimatePet(
       elemId,
@@ -1685,9 +1713,9 @@ export class GameApp {
       isGrand
     );
     this.cameraRig.setMode('ULTIMATE_CINEMATIC', this.player.facingYaw, isGrand);
-    this.cameraRig.addShake(isGrand ? 0.42 : 0.28, isGrand ? 0.42 : 0.3);
+    this.cameraRig.addShake(isGrand ? 0.42 : 0.3, isGrand ? 0.42 : 0.32);
     this.particlePool.emitHenshinAscension(
-      elemId,
+      isPhantom ? 'aqua' : elemId,
       this.scratchOriginSnapshot.x,
       this.scratchOriginSnapshot.y + 0.5,
       this.scratchOriginSnapshot.z,
@@ -1695,20 +1723,45 @@ export class GameApp {
     );
     useGameStore
       .getState()
-      .triggerFinisherCinematic(elemId, cfg.finisherName, isGrand);
+      .triggerFinisherCinematic(elemId, finisherTitle, isGrand, this.player.currentRiderId);
   }
 
   private resolveUltimateFinisherImpact(): void {
     if (!this.player) return;
     const elemId = this.player.currentElementId;
     const cfg = getElementConfig(elemId);
-    const isGrand = this.player.wasFinisherCastFromUltimate;
+    const isPhantom = this.player.currentRiderId === 'phantom';
+    const isGrand = !isPhantom && this.player.wasFinisherCastFromUltimate;
     this.player.getPosition(this.scratchOriginSnapshot);
     this.player.getForwardXZ(this.scratchPlayerForwardXZ);
     const impactX = this.scratchOriginSnapshot.x + this.scratchPlayerForwardXZ.x * 2.6;
     const impactZ = this.scratchOriginSnapshot.z + this.scratchPlayerForwardXZ.z * 2.6;
 
-    if (isGrand) {
+    if (isPhantom) {
+      // UNIT-02 PHANTOM OMNISLASH BLITZ: 4 cardinal holographic Phantom clones slicing inward + Cryo-Cyan X-Slash Cataclysm!
+      const cloneAngles = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+      for (let c = 0; c < cloneAngles.length; c++) {
+        const ang = this.player.facingYaw + cloneAngles[c]!;
+        const cx = impactX + Math.sin(ang) * 2.85;
+        const cz = impactZ + Math.cos(ang) * 2.85;
+        this.afterimageTrail.spawnGhost(
+          cx,
+          this.scratchOriginSnapshot.y,
+          cz,
+          ang + Math.PI,
+          c % 2 === 0 ? 0x22d3ee : 0xf43f5e,
+          0.55,
+          0.52,
+          1.08
+        );
+      }
+      this.elementSkillVfx.spawnFinisherClimax('aqua', impactX, impactZ, 13.8);
+      this.elementSkillVfx.spawnSkillVfx(elemId, impactX, impactZ, this.player.facingYaw, 7.5, true);
+      this.riderKickVfx.spawnImpactCrater('aqua', impactX, impactZ, 7.2, true);
+      this.particlePool.emitTokusatsuExplosion(elemId, impactX, 0.6, impactZ, 1.55);
+      this.loop.triggerHitStop(0.16);
+      this.cameraRig.addShake(0.66, 0.5);
+    } else if (isGrand) {
       // GRAND SOVEREIGN SUPERNOVA CLIMAX (Ultimate Form [R]!)
       this.elementSkillVfx.spawnGrandUltimateClimax(
         elemId,
@@ -1732,9 +1785,13 @@ export class GameApp {
     this.audio.playRiderKickImpact();
     this.audio.playReaction('STEAM_BURST');
 
-    const finisherMult = isGrand ? 7.8 : 6.2;
-    const hitRadius = isGrand ? 19.0 : 15.0;
-    const hitLabel = isGrand ? `OMEGA ${cfg.finisherName.toUpperCase()}` : cfg.finisherName.toUpperCase();
+    const finisherMult = isPhantom ? 7.0 : isGrand ? 7.8 : 6.2;
+    const hitRadius = isPhantom ? 17.0 : isGrand ? 19.0 : 15.0;
+    const hitLabel = isPhantom
+      ? 'PHANTOM OMNISLASH!'
+      : isGrand
+        ? `OMEGA ${cfg.finisherName.toUpperCase()}`
+        : cfg.finisherName.toUpperCase();
 
     for (let i = 0; i < this.enemies.length; i++) {
       const enemy = this.enemies[i]!;
@@ -2186,15 +2243,16 @@ export class GameApp {
       1.05
     );
 
+    const riderCfg = this.player.activeRiderConfig;
     this.player.addDriverGauge(12);
     this.applyElementalStrikeOnEnemy(
       target,
       elemId,
-      WARP_COUNTER_DAMAGE_MULTIPLIER,
+      riderCfg.warpCounterDamageMult,
       38,
       80,
       true,
-      'WARP COUNTER!',
+      riderCfg.id === 'phantom' ? 'PHANTOM COUNTER!' : 'WARP COUNTER!',
       false,
       true
     );
@@ -2223,10 +2281,12 @@ export class GameApp {
       baseDamage: this.player.getEffectiveBaseAttack(),
       skillMultiplier,
       formTier: this.player.currentFormTier,
+      formMultiplierOverride: this.player.currentFormDamageMultiplier,
       reactionMultiplier: reactionMult,
       targetDefense: enemy.config.defense,
       targetStaggered: enemy.isStaggered,
       targetStatuses: currentStatuses,
+      baseCritChance: this.player.activeRiderConfig.baseCritChance,
       ignoresDefense: reactionSpec?.ignoresDefense ?? false,
       critRoll: forceGuaranteedCrit ? 0 : undefined,
     });
@@ -2569,9 +2629,7 @@ export class GameApp {
     );
 
     const focused = this.lockedEnemy?.isAlive ? this.lockedEnemy : this.findPriorityTarget();
-    const ultimateTitle = this.player.fsm.isInCinematic
-      ? getElementConfig(this.player.currentElementId).finisherName
-      : null;
+    const ultimateTitle = this.player.fsm.isInCinematic ? this.player.effectiveFinisherName : null;
 
     store.setCombatSnapshot({
       playerState: this.player.fsm.state,
@@ -2824,21 +2882,37 @@ export class GameApp {
       );
     }
 
-    // Continuous holographic Afterimage Ghost Trail during Dodge, Rider Kick dive, & Super/Ultimate sprints!
+    // Continuous holographic Afterimage Ghost Trail during Dodge, Rider Kick dive, Super/Ultimate sprints & Unit-02 Upgraded Form!
     const pState = this.player.fsm.state;
+    const phantomOverclockTrail =
+      this.player.activeRiderConfig.upgradedAfterimageAlwaysOn &&
+      this.player.currentFormTier !== 'BASIC' &&
+      (pState === 'MOVE' ||
+        pState === 'ATTACK_1' ||
+        pState === 'ATTACK_2' ||
+        pState === 'ATTACK_3');
     const emitTrailState =
       pState === 'DODGE' ||
       kickState.active ||
+      phantomOverclockTrail ||
       (this.player.currentFormTier !== 'BASIC' && (pState === 'MOVE' || pState === 'ATTACK_3'));
     if (emitTrailState) {
       this.afterimageCooldown -= vfxDt;
       if (this.afterimageCooldown <= 0) {
-        this.afterimageCooldown = kickState.active ? 0.055 : pState === 'DODGE' ? 0.065 : 0.14;
+        this.afterimageCooldown = kickState.active
+          ? 0.055
+          : pState === 'DODGE'
+            ? 0.065
+            : phantomOverclockTrail
+              ? 0.08
+              : 0.14;
         const ghostColor = isGrandCinematic
           ? 0xfde047
-          : pState === 'DODGE'
-            ? 0x38bdf8
-            : this.scratchColorHelper.set(this.player.activeElement.emissiveColor).getHex();
+          : phantomOverclockTrail
+            ? 0x22d3ee
+            : pState === 'DODGE'
+              ? 0x38bdf8
+              : this.scratchColorHelper.set(this.player.activeElement.emissiveColor).getHex();
         this.afterimageTrail.spawnGhost(
           this.player.root.position.x,
           this.player.root.position.y,

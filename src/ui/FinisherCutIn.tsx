@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { getElementConfig } from '../game/data/elements';
-import type { ElementId } from '../game/types/schema';
+import type { ElementId, RiderId } from '../game/types/schema';
 
 interface FinisherCutInProps {
   elementId: ElementId;
   finisherTitle: string;
   fromUltimate: boolean;
+  riderId?: RiderId;
 }
 
 const CUTIN_VISOR_ART_URL = '/assets/textures/cutin_rider_visor.jpg';
@@ -34,15 +35,21 @@ export function FinisherCutIn({
   elementId,
   finisherTitle,
   fromUltimate,
+  riderId = 'nexus',
 }: FinisherCutInProps) {
   const [hasCustomArt, setHasCustomArt] = useState(true);
   const cfg = getElementConfig(elementId);
-  const primary = cfg.primaryColor;
-  const emissive = cfg.emissiveColor;
-  const hueDeg = CUTIN_HUE_ROTATE_DEG[elementId];
+  const isPhantom = riderId === 'phantom';
+  const primary = isPhantom ? '#06b6d4' : cfg.primaryColor;
+  const emissive = isPhantom ? '#67e8f9' : cfg.emissiveColor;
+  const hueDeg = isPhantom ? 186 : CUTIN_HUE_ROTATE_DEG[elementId];
 
-  const borderAccent = fromUltimate ? '#fde047' : emissive;
-  const displayTitle = fromUltimate ? `OMEGA ${finisherTitle}` : finisherTitle;
+  const borderAccent = isPhantom ? '#22d3ee' : fromUltimate ? '#fde047' : emissive;
+  const displayTitle = isPhantom
+    ? finisherTitle
+    : fromUltimate
+      ? `OMEGA ${finisherTitle}`
+      : finisherTitle;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-30 overflow-hidden select-none">
@@ -252,10 +259,18 @@ export function FinisherCutIn({
                   boxShadow: fromUltimate ? '0 0 24px #fde047' : undefined,
                 }}
               >
-                {fromUltimate ? 'GRAND SOVEREIGN DRIVE // FINAL FORM' : 'MAXIMUM OVERDRIVE'}
+                {isPhantom
+                  ? 'PHANTOM OVERCLOCK // UPGRADED FORM'
+                  : fromUltimate
+                    ? 'GRAND SOVEREIGN DRIVE // FINAL FORM'
+                    : 'MAXIMUM OVERDRIVE'}
               </span>
               <span className="font-game-ui text-xs font-bold tracking-[0.24em] text-slate-200 uppercase">
-                {fromUltimate ? `${cfg.name} // TRINITY CONTRACT BEASTS` : `${cfg.name} // ${cfg.pet.name}`}
+                {isPhantom
+                  ? `UNIT-02 PHANTOM // ${cfg.name}`
+                  : fromUltimate
+                    ? `${cfg.name} // TRINITY CONTRACT BEASTS`
+                    : `${cfg.name} // ${cfg.pet.name}`}
               </span>
             </div>
 
@@ -289,7 +304,11 @@ export function FinisherCutIn({
                 className="font-game-display text-xs font-bold tracking-[0.34em] uppercase"
                 style={{ color: borderAccent }}
               >
-                {fromUltimate ? 'ORBITAL CATACLYSM SUPERNOVA ENGAGED' : 'SYNCHRONIZED FINISHER ENGAGED'}
+                {isPhantom
+                  ? 'CLOCK-UP PHANTOM OMNISLASH ENGAGED'
+                  : fromUltimate
+                    ? 'ORBITAL CATACLYSM SUPERNOVA ENGAGED'
+                    : 'SYNCHRONIZED FINISHER ENGAGED'}
               </span>
             </div>
           </div>
@@ -308,12 +327,16 @@ export function FinisherCutIn({
             : `0 0 60px ${emissive}, 0 0 110px #ffffff`,
         }}
       />
-      {fromUltimate && (
+      {(fromUltimate || isPhantom) && (
         <div
           className="animate-cutin-slash-counter fixed inset-x-[-20%] top-1/2 -mt-10 h-20"
           style={{
-            background: `linear-gradient(180deg, transparent 0%, ${emissive} 25%, #ffffff 50%, ${emissive} 75%, transparent 100%)`,
-            boxShadow: `0 0 70px ${emissive}, 0 0 120px #fef08a`,
+            background: isPhantom
+              ? 'linear-gradient(180deg, transparent 0%, #f43f5e 25%, #ffffff 50%, #22d3ee 75%, transparent 100%)'
+              : `linear-gradient(180deg, transparent 0%, ${emissive} 25%, #ffffff 50%, ${emissive} 75%, transparent 100%)`,
+            boxShadow: isPhantom
+              ? '0 0 70px #22d3ee, 0 0 120px #f43f5e'
+              : `0 0 70px ${emissive}, 0 0 120px #fef08a`,
           }}
         />
       )}
@@ -332,10 +355,16 @@ export function FinisherCutIn({
           className="font-game-display text-[11px] font-black tracking-[0.34em] uppercase"
           style={{ color: emissive }}
         >
-          ★ {fromUltimate ? 'GRAND ULTIMATE RIDER FINISHER' : 'ULTIMATE RIDER FINISHER'} ★
+          ★{' '}
+          {isPhantom
+            ? 'UNIT-02 PHANTOM FINISHER'
+            : fromUltimate
+              ? 'GRAND ULTIMATE RIDER FINISHER'
+              : 'ULTIMATE RIDER FINISHER'}{' '}
+          ★
         </span>
         <span className="font-game-ui text-[11px] font-bold tracking-[0.26em] text-slate-400 uppercase">
-          K-DRIVER // {cfg.weapon.name}
+          {isPhantom ? 'UNIT-02 PHANTOM' : 'K-DRIVER'} // {cfg.weapon.name}
         </span>
       </div>
 

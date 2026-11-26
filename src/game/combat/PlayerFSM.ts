@@ -89,9 +89,14 @@ export class PlayerFSM {
   private kickSequenceId = 0;
   private perfectDodgeTriggeredThisDodge = false;
   private dodgeIframeBonusSec = 0;
+  private riderKickCooldownDurationSec = RIDER_KICK_COOLDOWN_SEC;
 
   public setDodgeIframeBonus(bonusSec: number): void {
-    this.dodgeIframeBonusSec = Math.max(0, Math.min(0.12, bonusSec));
+    this.dodgeIframeBonusSec = Math.max(0, Math.min(0.14, bonusSec));
+  }
+
+  public setRiderKickCooldownDuration(durationSec: number): void {
+    this.riderKickCooldownDurationSec = Math.max(3.0, Math.min(12.0, durationSec));
   }
 
   public get state(): PlayerStateId {
@@ -413,7 +418,7 @@ export class PlayerFSM {
       this.skillSequenceId++;
     } else if (next === 'RIDER_KICK') {
       this.kickSequenceId++;
-      this.riderKickCooldownRemainingSec = RIDER_KICK_COOLDOWN_SEC;
+      this.riderKickCooldownRemainingSec = this.riderKickCooldownDurationSec;
     } else if (next === 'FORM_SWITCH') {
       this.formSwitchCooldownRemainingSec = FORM_SWITCH_COOLDOWN_SEC;
     } else if (next === 'DODGE') {

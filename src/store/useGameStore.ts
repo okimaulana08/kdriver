@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ALL_ELEMENT_IDS } from '../game/data/elements';
 import { getDifficultyConfig } from '../game/data/difficulty';
+import { getRiderConfig } from '../game/data/riders';
 import { getStageConfig } from '../game/data/stages';
 import { applyGemUpgrade, applyShardGemUnlock } from '../game/ProgressionSystem';
 import { loadSaveRecord, persistSaveRecord } from '../game/StageManager';
@@ -16,6 +17,7 @@ import type {
   PlayerStateId,
   ReactionBannerEvent,
   ReactionSpec,
+  RiderId,
   SaveRecord,
   ScreenMode,
   StageId,
@@ -66,6 +68,7 @@ interface GameStoreState {
   screenMode: ScreenMode;
   selectedStageId: StageId;
   selectedDifficulty: DifficultyId;
+  selectedRiderId: RiderId;
   arenaTheme: ArenaThemeId;
   loadoutOrder: [ElementId, ElementId, ElementId];
   saveRecord: SaveRecord;
@@ -111,6 +114,7 @@ interface GameStoreState {
   finisherCinematicId: number;
   finisherCinematicElement: ElementId;
   finisherCinematicFromUltimate: boolean;
+  finisherCinematicRiderId: RiderId;
   bossIntroBanner: BossIntroBannerState | null;
   stageOutcomeCutIn: StageOutcomeCutInState | null;
 
@@ -141,6 +145,7 @@ interface GameStoreState {
   setScreenMode: (mode: ScreenMode) => void;
   setSelectedStageId: (stageId: StageId) => void;
   setSelectedDifficulty: (difficulty: DifficultyId) => void;
+  setSelectedRiderId: (riderId: RiderId) => void;
   setArenaTheme: (theme: ArenaThemeId) => void;
   setGamepadStatus: (connected: boolean, name: string | null) => void;
   setLoadoutOrder: (order: [ElementId, ElementId, ElementId]) => void;
@@ -190,7 +195,12 @@ interface GameStoreState {
     stageElapsedSec: number;
     focusedEnemy: EnemyHudSnapshot | null;
   }) => void;
-  triggerFinisherCinematic: (element: ElementId, title: string, fromUltimate: boolean) => void;
+  triggerFinisherCinematic: (
+    element: ElementId,
+    title: string,
+    fromUltimate: boolean,
+    riderId?: RiderId
+  ) => void;
   clearFinisherCinematic: () => void;
   triggerBossIntroBanner: (bossName: string, bossTitle: string, accentColor: string) => void;
   clearBossIntroBanner: () => void;
@@ -283,6 +293,7 @@ function sameEnemySnapshot(a: EnemyHudSnapshot | null, b: EnemyHudSnapshot | nul
 
 const initialSave = loadSaveRecord();
 const initialStage = getStageConfig(initialSave.selectedStageId);
+const initialRider = getRiderConfig(initialSave.selectedRiderId);
 
 export const useGameStore = create<GameStoreState>((set, get) => ({
   engineStatus: 'initializing',
@@ -295,6 +306,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   screenMode: 'HUB',
   selectedStageId: initialStage.id,
   selectedDifficulty: initialSave.selectedDifficulty,
+  selectedRiderId: initialRider.id,
   arenaTheme: initialStage.arenaTheme,
   loadoutOrder: initialSave.loadoutOrder,
   saveRecord: initialSave,
@@ -321,8 +333,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
 
   playerState: 'IDLE',
   formTier: 'BASIC',
-  playerHp: 220,
-  playerMaxHp: 220,
+  playerHp: initialRider.maxHp,
+  playerMaxHp: initialRider.maxHp,
   driverGauge: 0,
   overdriveGauge: 0,
   superFormRemaining: 0,
@@ -340,6 +352,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   finisherCinematicId: 0,
   finisherCinematicElement: initialSave.loadoutOrder[0],
   finisherCinematicFromUltimate: false,
+  finisherCinematicRiderId: initialRider.id,
   bossIntroBanner: null,
   stageOutcomeCutIn: null,
 
@@ -413,6 +426,18 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     persistSaveRecord(nextRecord);
     set({
       selectedDifficulty: cfg.id,
+      saveRecord: nextRecord,
+    });
+  },
+
+  setSelectedRiderId: (riderId) => {
+    const cfg = getRiderConfig(riderId);
+    const nextRecord: SaveRecord = { ...get().saveRecord, selectedRiderId: cfg.id };
+    persistSaveRecord(nextRecord);
+    set({
+      selectedRiderId: cfg.id,
+      playerHp: cfg.maxHp,
+      playerMaxHp: cfg.maxHp,
       saveRecord: nextRecord,
     });
   },
@@ -587,11 +612,12 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
     });
   },
 
-  triggerFinisherCinematic: (element, title, fromUltimate) => {
+  triggerFinisherCinematic: (element, title, fromUltimate, riderId) => {
     set((state) => ({
       finisherCinematicId: state.finisherCinematicId + 1,
       finisherCinematicElement: element,
       finisherCinematicFromUltimate: fromUltimate,
+      finisherCinematicRiderId: riderId ?? state.selectedRiderId,
       ultimateBannerTitle: title,
     }));
   },
@@ -767,6 +793,7 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
   resetArenaState: () => {
     const loadout = get().loadoutOrder;
     const stage = getStageConfig(get().selectedStageId);
+    const rider = getRiderConfig(get().selectedRiderId);
     const zeroSkills = createZeroCooldownMap();
     const zeroPets = createZeroCooldownMap();
     for (let i = 0; i < ALL_ELEMENT_IDS.length; i++) {
@@ -778,8 +805,8 @@ export const useGameStore = create<GameStoreState>((set, get) => ({
       activeElement: loadout[0],
       playerState: 'IDLE',
       formTier: 'BASIC',
-      playerHp: 220,
-      playerMaxHp: 220,
+      playerHp: rider.maxHp,
+      playerMaxHp: rider.maxHp,
       driverGauge: 0,
       overdriveGauge: 0,
       superFormRemaining: 0,

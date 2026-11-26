@@ -1,5 +1,6 @@
 import { getDifficultyConfig } from '../game/data/difficulty';
 import { getElementConfig } from '../game/data/elements';
+import { getRiderConfig } from '../game/data/riders';
 import { ULTIMATE_FORM_DURATION_SEC } from '../game/entities/PlayerRider';
 import { getGemLevel } from '../game/ProgressionSystem';
 import type { ElementId, StatusEffectId } from '../game/types/schema';
@@ -53,6 +54,7 @@ export function CombatHUD() {
   const bossStaggered = useGameStore((s) => s.bossStaggered);
   const warpCounterReady = useGameStore((s) => s.warpCounterReady);
   const selectedDifficulty = useGameStore((s) => s.selectedDifficulty);
+  const selectedRiderId = useGameStore((s) => s.selectedRiderId);
   const bossIntroBanner = useGameStore((s) => s.bossIntroBanner);
   const perfectDodgeFlashId = useGameStore((s) => s.perfectDodgeFlashId);
   const breakKickFlashId = useGameStore((s) => s.breakKickFlashId);
@@ -60,6 +62,7 @@ export function CombatHUD() {
   const finisherCinematicId = useGameStore((s) => s.finisherCinematicId);
   const finisherCinematicElement = useGameStore((s) => s.finisherCinematicElement);
   const finisherCinematicFromUltimate = useGameStore((s) => s.finisherCinematicFromUltimate);
+  const finisherCinematicRiderId = useGameStore((s) => s.finisherCinematicRiderId);
 
   const comboCount = useGameStore((s) => s.comboCount);
   const reactionCount = useGameStore((s) => s.reactionCount);
@@ -80,6 +83,9 @@ export function CombatHUD() {
 
   const activeConfig = getElementConfig(activeElement);
   const diffConfig = getDifficultyConfig(selectedDifficulty);
+  const riderConfig = getRiderConfig(selectedRiderId);
+  const isPhantom = riderConfig.id === 'phantom';
+  const activeFinisherName = riderConfig.signatureFinisherName ?? activeConfig.finisherName;
   const canBreakKick = bossStaggered && riderKickCooldown <= 0;
   const activeSkillCd = skillCooldowns[activeElement];
   const activePetCd = petCooldowns[activeElement];
@@ -92,7 +98,9 @@ export function CombatHUD() {
       formTier === 'ULTIMATE'
         ? (superFormRemaining / ULTIMATE_FORM_DURATION_SEC) * 100
         : formTier === 'SUPER'
-          ? overdriveGauge
+          ? riderConfig.hasUltimateForm
+            ? overdriveGauge
+            : (superFormRemaining / Math.max(1, riderConfig.upgradedFormDurationSec)) * 100
           : driverGauge
     )
   );
@@ -105,6 +113,7 @@ export function CombatHUD() {
         elementId={finisherCinematicElement}
         finisherTitle={ultimateBannerTitle}
         fromUltimate={finisherCinematicFromUltimate}
+        riderId={finisherCinematicRiderId}
       />
     );
   }
@@ -372,22 +381,35 @@ export function CombatHUD() {
           )}
           {warpCounterReady && (
             <div className="animate-bounce rounded-xl border-2 border-cyan-300 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-cyan-200 uppercase shadow-[0_0_28px_rgba(34,211,238,0.75)]">
-              ⚡ [LMB] WARP COUNTER! (CRIT 1.65×)
+              ⚡ [LMB] {isPhantom ? 'PHANTOM COUNTER!' : 'WARP COUNTER!'} (CRIT{' '}
+              {riderConfig.warpCounterDamageMult.toFixed(2)}×)
             </div>
           )}
           {canActivateSuper && (
-            <div className="animate-pulse rounded-xl border-2 border-amber-300 bg-slate-950/90 px-5 py-2 font-mono text-sm font-black tracking-widest text-amber-300 uppercase shadow-[0_0_28px_rgba(251,191,36,0.65)]">
-              ⚡ PRESS [F] — HENSHIN SUPER FORM!
+            <div
+              className={`animate-pulse rounded-xl border-2 bg-slate-950/90 px-5 py-2 font-mono text-sm font-black tracking-widest uppercase ${
+                isPhantom
+                  ? 'border-cyan-300 text-cyan-300 shadow-[0_0_28px_rgba(34,211,238,0.65)]'
+                  : 'border-amber-300 text-amber-300 shadow-[0_0_28px_rgba(251,191,36,0.65)]'
+              }`}
+            >
+              ⚡ PRESS [F] — {isPhantom ? 'UPGRADED FORM OVERCLOCK!' : 'HENSHIN SUPER FORM!'}
             </div>
           )}
-          {canActivateUltimateForm && (
+          {canActivateUltimateForm && riderConfig.hasUltimateForm && (
             <div className="animate-pulse rounded-xl border-2 border-rose-400 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-rose-300 uppercase shadow-[0_0_32px_rgba(244,63,94,0.75)]">
               ★ PRESS [F] — EVOLVE ULTIMATE FORM!
             </div>
           )}
           {canActivateUltimate && (
-            <div className="animate-pulse rounded-xl border-2 border-amber-300 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest text-amber-200 uppercase shadow-[0_0_30px_rgba(251,191,36,0.7)]">
-              🔥 PRESS [R] — FINISHER: {activeConfig.finisherName}!
+            <div
+              className={`animate-pulse rounded-xl border-2 bg-slate-950/92 px-5 py-2 font-mono text-sm font-black tracking-widest uppercase ${
+                isPhantom
+                  ? 'border-cyan-300 text-cyan-200 shadow-[0_0_30px_rgba(34,211,238,0.75)]'
+                  : 'border-amber-300 text-amber-200 shadow-[0_0_30px_rgba(251,191,36,0.7)]'
+              }`}
+            >
+              🔥 PRESS [R] — FINISHER: {activeFinisherName}!
             </div>
           )}
         </div>
@@ -400,28 +422,34 @@ export function CombatHUD() {
             formTier === 'ULTIMATE'
               ? 'border-rose-400/90 shadow-[0_0_30px_rgba(244,63,94,0.48)]'
               : formTier === 'SUPER'
-                ? 'border-amber-300/80 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
+                ? isPhantom
+                  ? 'border-cyan-300/85 shadow-[0_0_25px_rgba(34,211,238,0.42)]'
+                  : 'border-amber-300/80 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
                 : 'border-slate-700/80'
           }`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold tracking-wider text-slate-100 uppercase">
-                K-DRIVER
+                {isPhantom ? 'UNIT-02' : 'K-DRIVER'}
               </span>
               <span
                 className={`rounded px-1.5 py-0.5 text-[9px] font-black uppercase ${
                   formTier === 'ULTIMATE'
                     ? 'bg-gradient-to-r from-rose-500 to-amber-300 text-slate-950'
                     : formTier === 'SUPER'
-                      ? 'bg-amber-400 text-slate-950'
+                      ? isPhantom
+                        ? 'bg-gradient-to-r from-cyan-400 to-sky-300 text-slate-950'
+                        : 'bg-amber-400 text-slate-950'
                       : 'bg-slate-800 text-slate-300'
                 }`}
               >
                 {formTier === 'ULTIMATE'
                   ? `★ ULTIMATE ${superFormRemaining.toFixed(1)}s`
                   : formTier === 'SUPER'
-                    ? `SUPER ${superFormRemaining.toFixed(1)}s`
+                    ? isPhantom
+                      ? `★ UPGRADED ${superFormRemaining.toFixed(1)}s`
+                      : `SUPER ${superFormRemaining.toFixed(1)}s`
                     : 'BASIC FORM'}
               </span>
             </div>
@@ -443,29 +471,41 @@ export function CombatHUD() {
                 formTier === 'ULTIMATE'
                   ? 'text-rose-300'
                   : formTier === 'SUPER'
-                    ? 'text-amber-300'
-                    : 'text-amber-300'
+                    ? isPhantom
+                      ? 'text-cyan-300'
+                      : 'text-amber-300'
+                    : isPhantom
+                      ? 'text-cyan-300'
+                      : 'text-amber-300'
               }`}
             >
               {formTier === 'ULTIMATE'
                 ? 'Ultimate Power'
                 : formTier === 'SUPER'
-                  ? 'Overdrive -> Ult [F]'
-                  : 'Driver Gauge [F]'}
+                  ? riderConfig.hasUltimateForm
+                    ? 'Overdrive -> Ult [F]'
+                    : 'Overclock Sustain'
+                  : isPhantom
+                    ? 'Overclock Gauge [F]'
+                    : 'Driver Gauge [F]'}
             </span>
             <span
               className={`font-bold ${
                 canActivateUltimateForm || canActivateSuper
                   ? 'animate-pulse text-amber-300'
-                  : 'text-amber-200'
+                  : isPhantom
+                    ? 'text-cyan-200'
+                    : 'text-amber-200'
               }`}
             >
               {formTier === 'ULTIMATE'
                 ? 'FREE FINISHER [R]'
                 : formTier === 'SUPER'
-                  ? canActivateUltimateForm
-                    ? 'ULT FORM READY [F]!'
-                    : `${Math.round(gaugePct)}%`
+                  ? riderConfig.hasUltimateForm
+                    ? canActivateUltimateForm
+                      ? 'ULT FORM READY [F]!'
+                      : `${Math.round(gaugePct)}%`
+                    : 'OMNISLASH [R]'
                   : `${Math.round(gaugePct)}%`}
             </span>
           </div>
@@ -475,8 +515,12 @@ export function CombatHUD() {
                 formTier === 'ULTIMATE'
                   ? 'bg-gradient-to-r from-rose-500 via-fuchsia-400 to-amber-300'
                   : formTier === 'SUPER'
-                    ? 'bg-gradient-to-r from-rose-500 via-amber-400 to-yellow-200'
-                    : 'bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300'
+                    ? isPhantom
+                      ? 'bg-gradient-to-r from-cyan-500 via-sky-400 to-rose-400'
+                      : 'bg-gradient-to-r from-rose-500 via-amber-400 to-yellow-200'
+                    : isPhantom
+                      ? 'bg-gradient-to-r from-cyan-500 via-sky-400 to-teal-300'
+                      : 'bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300'
               }`}
               style={{ width: `${gaugePct}%` }}
             />
@@ -559,7 +603,7 @@ export function CombatHUD() {
                 {riderKickCooldown <= 0 ? 'READY' : `${riderKickCooldown.toFixed(1)}s`}
               </span>
             </div>
-            <span className="mt-1.5 truncate text-xs font-bold">Rider Kick</span>
+            <span className="mt-1.5 truncate text-xs font-bold">{riderConfig.riderKickName}</span>
             <span className="text-[10px] text-slate-400">Flying Dive • +75 Break</span>
           </div>
 
@@ -658,17 +702,23 @@ export function CombatHUD() {
                 {canActivateUltimate
                   ? 'READY!'
                   : formTier === 'BASIC'
-                    ? 'SUPER'
+                    ? isPhantom
+                      ? 'UPGRD'
+                      : 'SUPER'
                     : `${finisherCooldown.toFixed(1)}s`}
               </span>
             </div>
-            <span className="mt-1.5 truncate text-xs font-bold">{activeConfig.finisherName}</span>
+            <span className="mt-1.5 truncate text-xs font-bold">{activeFinisherName}</span>
             <span className="text-[10px] text-slate-400">
               {formTier === 'ULTIMATE'
                 ? 'Free • 1.3× Power'
                 : formTier === 'SUPER'
-                  ? 'Instant • -7s Super'
-                  : 'Need Super Form'}
+                  ? isPhantom
+                    ? 'Omnislash • -7s'
+                    : 'Instant • -7s Super'
+                  : isPhantom
+                    ? 'Need Upgraded'
+                    : 'Need Super Form'}
             </span>
           </div>
         </div>

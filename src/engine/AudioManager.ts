@@ -823,6 +823,45 @@ export class AudioManager {
     );
   }
 
+  public playPhantomOmnislash(): void {
+    const ready = this.ensureReady();
+    if (!ready) return;
+    const { ctx, out } = ready;
+    const now = ctx.currentTime;
+
+    // High-speed cyber-clockup riser + 5 rapid phantom blade slashes + sub-bass finish
+    const riser = ctx.createOscillator();
+    riser.type = 'sawtooth';
+    riser.frequency.setValueAtTime(320, now);
+    riser.frequency.exponentialRampToValueAtTime(2150, now + 0.92);
+    const rGain = ctx.createGain();
+    rGain.gain.setValueAtTime(0.02, now);
+    rGain.gain.linearRampToValueAtTime(0.32, now + 0.85);
+    rGain.gain.exponentialRampToValueAtTime(0.001, now + 1.05);
+    riser.connect(rGain);
+    rGain.connect(out);
+    riser.start(now);
+    riser.stop(now + 1.08);
+
+    const slashNotes = [1174.66, 1396.91, 1567.98, 1760.0, 2093.0];
+    for (let i = 0; i < slashNotes.length; i++) {
+      const t = now + 1.18 + i * 0.14;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(slashNotes[i]!, t);
+      osc.frequency.exponentialRampToValueAtTime(slashNotes[i]! * 0.45, t + 0.12);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.24, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.connect(gain);
+      gain.connect(out);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    }
+
+    this.announceDriverVoice('PHANTOM OVERCLOCK! OMNISLASH!', 0.92, 1.24);
+  }
+
   public playRiderKickLaunch(): void {
     const ready = this.ensureReady();
     if (!ready) return;

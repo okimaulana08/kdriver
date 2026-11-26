@@ -21,6 +21,41 @@ export type EnemyTier = 'MINION' | 'ELITE' | 'MINI_BOSS' | 'BOSS';
 export type ScreenMode = 'HUB' | 'ARENA' | 'RESULT';
 export type DifficultyId = 'easy' | 'medium' | 'hard' | 'hell';
 export type RankGrade = 'S+' | 'S' | 'A' | 'B' | 'C';
+export type RiderId = 'nexus' | 'phantom';
+
+export interface RiderConfig {
+  readonly id: RiderId;
+  readonly codeName: string;
+  readonly name: string;
+  readonly shortName: string;
+  readonly roleTag: string;
+  readonly accentColor: string;
+  readonly glowColor: string;
+  readonly maxForms: 2 | 3;
+  readonly hasUltimateForm: boolean;
+  readonly basicFormLabel: string;
+  readonly upgradedFormLabel: string;
+  readonly ultimateFormLabel: string | null;
+  readonly maxHp: number;
+  readonly moveSpeed: number;
+  readonly attackSpeedMult: number;
+  readonly baseCritChance: number;
+  readonly dodgeIframeBonusSec: number;
+  readonly warpCounterWindowSec: number;
+  readonly warpCounterDamageMult: number;
+  readonly riderKickCooldownSec: number;
+  readonly riderKickName: string;
+  readonly upgradedFormDamageMult: number;
+  readonly upgradedFormDurationSec: number;
+  readonly upgradedFormMaxDurationSec: number;
+  readonly ultimateFormDamageMult: number;
+  readonly ultimateFormDurationSec: number;
+  readonly ultimateFormMaxDurationSec: number;
+  readonly upgradedAfterimageAlwaysOn: boolean;
+  readonly signatureFinisherName: string | null;
+  readonly passiveLabel: string;
+  readonly passiveSummary: string;
+}
 
 export interface DifficultyConfig {
   readonly id: DifficultyId;
@@ -199,6 +234,7 @@ export interface SaveRecord {
   loadoutOrder: [ElementId, ElementId, ElementId];
   selectedStageId: StageId;
   selectedDifficulty: DifficultyId;
+  selectedRiderId: RiderId;
   stageDifficultyBestRanks: Partial<Record<string, RankGrade>>;
   unlockedElements: ElementId[];
   gemLevels: Partial<Record<ElementId, number>>;
@@ -261,6 +297,7 @@ export interface DamageCalculationInput {
   baseDamage: number;
   skillMultiplier: number;
   formTier: FormTier;
+  formMultiplierOverride?: number;
   reactionMultiplier?: number;
   targetDefense: number;
   targetStaggered?: boolean;

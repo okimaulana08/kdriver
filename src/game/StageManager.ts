@@ -5,11 +5,13 @@ import {
   makeStageDifficultyKey,
 } from './data/difficulty';
 import { MVP_STAGE_1, isValidStageId } from './data/stages';
+import { isValidRiderId } from './data/riders';
 import { calculateStageRewards, sanitizeUnlockedElements } from './ProgressionSystem';
 import type {
   DifficultyId,
   ElementId,
   RankGrade,
+  RiderId,
   SaveRecord,
   StageConfig,
   StageId,
@@ -52,6 +54,7 @@ function createDefaultSaveRecord(): SaveRecord {
     loadoutOrder: [...DEFAULT_LOADOUT_ORDER] as [ElementId, ElementId, ElementId],
     selectedStageId: 'stage_01_nexus_arena',
     selectedDifficulty: 'medium',
+    selectedRiderId: 'nexus',
     stageDifficultyBestRanks: {},
     unlockedElements: unlocked,
     gemLevels,
@@ -155,6 +158,10 @@ export function loadSaveRecord(): SaveRecord {
       ? parsed.selectedDifficulty
       : 'medium';
 
+    const selectedRiderId: RiderId = isValidRiderId(parsed.selectedRiderId)
+      ? parsed.selectedRiderId
+      : 'nexus';
+
     const stageDifficultyBestRanks: Partial<Record<string, RankGrade>> = {};
     if (parsed.stageDifficultyBestRanks && typeof parsed.stageDifficultyBestRanks === 'object') {
       for (const [k, v] of Object.entries(parsed.stageDifficultyBestRanks)) {
@@ -172,6 +179,7 @@ export function loadSaveRecord(): SaveRecord {
       loadoutOrder: validLoadout,
       selectedStageId,
       selectedDifficulty,
+      selectedRiderId,
       stageDifficultyBestRanks,
       unlockedElements,
       gemLevels,

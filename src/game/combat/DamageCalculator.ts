@@ -45,7 +45,7 @@ export function getCritChance(
 export function calculateDamage(input: DamageCalculationInput): DamageCalculationResult {
   const baseDamage = Math.max(0, input.baseDamage);
   const skillMultiplier = Math.max(0, input.skillMultiplier);
-  const formMultiplier = getFormMultiplier(input.formTier);
+  const formMultiplier = input.formMultiplierOverride ?? getFormMultiplier(input.formTier);
   const reactionMultiplier = Math.max(0, input.reactionMultiplier ?? 1.0);
   const effectiveDefense = input.ignoresDefense
     ? 0

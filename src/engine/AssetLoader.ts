@@ -59,6 +59,8 @@ export interface CustomRigManifest {
   rider?: CustomRigSlotConfig;
   rider_super?: CustomRigSlotConfig;
   rider_ultimate?: CustomRigSlotConfig;
+  rider_unit2?: CustomRigSlotConfig;
+  rider_unit2_upgraded?: CustomRigSlotConfig;
   enemy_grunt?: CustomRigSlotConfig;
   enemy_brute?: CustomRigSlotConfig;
   enemy_boss?: CustomRigSlotConfig;
@@ -84,6 +86,8 @@ export interface CustomRigManifest {
 export type OptionalCustomAssetKey =
   | 'rider_super'
   | 'rider_ultimate'
+  | 'rider_unit2'
+  | 'rider_unit2_upgraded'
   | 'boss_magma'
   | 'boss_sylvan'
   | 'boss_chrono'
@@ -99,6 +103,8 @@ export type OptionalCustomAssetKey =
 const OPTIONAL_CUSTOM_KEYS: readonly OptionalCustomAssetKey[] = [
   'rider_super',
   'rider_ultimate',
+  'rider_unit2',
+  'rider_unit2_upgraded',
   'boss_magma',
   'boss_sylvan',
   'boss_chrono',
@@ -153,6 +159,8 @@ const DEFAULT_TARGET_HEIGHTS: Readonly<Record<keyof CustomRigManifest, number>> 
   rider: 1.84,
   rider_super: 1.94,
   rider_ultimate: 2.02,
+  rider_unit2: 1.84,
+  rider_unit2_upgraded: 1.94,
   enemy_grunt: 1.75,
   enemy_brute: 2.25,
   enemy_boss: 2.7,

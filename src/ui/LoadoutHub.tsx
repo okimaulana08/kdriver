@@ -9,6 +9,7 @@ import {
   getElementConfig,
   getElementLevelDamageMultiplier,
 } from '../game/data/elements';
+import { RIDER_LIST, getRiderConfig } from '../game/data/riders';
 import { STAGE_LIST, getStageConfig } from '../game/data/stages';
 import {
   GEM_SHARD_UNLOCK_COST,
@@ -17,7 +18,13 @@ import {
   getGemUpgradeCost,
   isElementUnlocked,
 } from '../game/ProgressionSystem';
-import type { DifficultyId, ElementId, StageId, WeaponArchetype } from '../game/types/schema';
+import type {
+  DifficultyId,
+  ElementId,
+  RiderId,
+  StageId,
+  WeaponArchetype,
+} from '../game/types/schema';
 import { useGameStore } from '../store/useGameStore';
 
 interface LoadoutHubProps {
@@ -25,6 +32,7 @@ interface LoadoutHubProps {
   onUpdateLoadoutOrder: (order: [ElementId, ElementId, ElementId]) => void;
   onSelectStage: (stageId: StageId) => void;
   onSelectDifficulty: (difficulty: DifficultyId) => void;
+  onSelectRider: (riderId: RiderId) => void;
   onGemProgressionChanged: () => void;
   onDeploy: () => void;
   onResetView?: () => void;
@@ -126,6 +134,7 @@ export function LoadoutHub({
   onUpdateLoadoutOrder,
   onSelectStage,
   onSelectDifficulty,
+  onSelectRider,
   onGemProgressionChanged,
   onDeploy,
   onResetView,
@@ -134,6 +143,7 @@ export function LoadoutHub({
   const activeElement = useGameStore((s) => s.activeElement);
   const selectedStageId = useGameStore((s) => s.selectedStageId);
   const selectedDifficulty = useGameStore((s) => s.selectedDifficulty);
+  const selectedRiderId = useGameStore((s) => s.selectedRiderId);
   const saveRecord = useGameStore((s) => s.saveRecord);
   const engineStatus = useGameStore((s) => s.engineStatus);
   const gamepadConnected = useGameStore((s) => s.gamepadConnected);
@@ -147,6 +157,7 @@ export function LoadoutHub({
   const previewMultPct = Math.round((getElementLevelDamageMultiplier(previewLevel) - 1) * 100);
   const selectedStage = getStageConfig(selectedStageId);
   const diffConfig = getDifficultyConfig(selectedDifficulty);
+  const riderConfig = getRiderConfig(selectedRiderId);
   const scaledShardPreview = Math.round(selectedStage.shardReward * diffConfig.shardRewardMult);
   const accentColor = previewConfig.primaryColor;
   const glowColor = previewConfig.emissiveColor;
@@ -581,11 +592,9 @@ export function LoadoutHub({
 
         {/* CENTER: OPEN 3D RIDER SHOWCASE STAGE (Subtle corner reticle brackets only) */}
         <div className="pointer-events-none relative hidden flex-1 lg:block">
-          <div
-            className="absolute top-6 left-1/2 -translate-x-1/2 text-center opacity-80"
-          >
-            <p className="text-[9px] font-bold tracking-[0.35em] text-slate-300/80 uppercase">
-              LIVE FORM PREVIEW
+          <div className="absolute top-5 left-1/2 -translate-x-1/2 text-center opacity-90">
+            <p className="text-[9px] font-bold tracking-[0.32em] text-slate-300/85 uppercase">
+              {riderConfig.codeName} // {riderConfig.name}
             </p>
             <p
               className="font-game-display text-sm font-black tracking-[0.22em] uppercase italic"
@@ -616,11 +625,66 @@ export function LoadoutHub({
           </div>
         </div>
 
-        {/* RIGHT TACTICAL INTEL + DRAMATIC HENSHIN IGNITION TRIGGER */}
-        <div className="pointer-events-auto flex w-[340px] max-w-full flex-col justify-end gap-3">
+        {/* RIGHT TACTICAL INTEL + RIDER UNIT SWITCHER + DRAMATIC HENSHIN IGNITION TRIGGER */}
+        <div className="pointer-events-auto flex w-[348px] max-w-full flex-col justify-end gap-2">
+          {/* Playable Rider Selector (UNIT-01 NEXUS 3-Form vs UNIT-02 PHANTOM 2-Form!) */}
+          <div
+            className="game-chamfer-sm game-hud-surface p-2.5 ring-1 ring-white/10"
+            style={{ borderRight: `3px solid ${riderConfig.accentColor}` }}
+          >
+            <div className="flex items-center justify-between px-0.5">
+              <span className="font-game-display text-[9px] font-bold tracking-[0.2em] text-slate-300 uppercase">
+                RIDER UNIT
+              </span>
+              <span
+                className="text-[9px] font-black tracking-wider uppercase"
+                style={{ color: riderConfig.glowColor }}
+              >
+                {riderConfig.roleTag}
+              </span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              {RIDER_LIST.map((r) => {
+                const active = r.id === selectedRiderId;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => onSelectRider(r.id)}
+                    className={`game-chamfer-sm cursor-pointer px-2.5 py-1.5 text-left transition-all ${
+                      active
+                        ? 'bg-slate-900/95 text-white'
+                        : 'bg-slate-950/70 text-slate-400 hover:bg-slate-900/85 hover:text-slate-100'
+                    }`}
+                    style={
+                      active
+                        ? {
+                            borderLeft: `3px solid ${r.accentColor}`,
+                            boxShadow: `inset 0 0 0 1px ${r.accentColor}99, 0 0 14px ${r.accentColor}38`,
+                          }
+                        : { border: '1px solid rgba(148,163,184,0.18)' }
+                    }
+                  >
+                    <div className="flex items-center justify-between text-[8px] font-black tracking-[0.14em] uppercase">
+                      <span style={{ color: r.glowColor }}>{r.codeName}</span>
+                      <span className="text-slate-400">{r.maxForms} FORMS</span>
+                    </div>
+                    <p className="font-game-display mt-0.5 truncate text-[10px] font-black tracking-wide uppercase">
+                      {r.shortName}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-1.5 flex items-center justify-between px-0.5 text-[9px] text-slate-300/90">
+              <span className="truncate">{riderConfig.passiveSummary}</span>
+              <span className="ml-2 shrink-0 font-bold text-emerald-300">{riderConfig.maxHp} HP</span>
+            </div>
+          </div>
+
           {/* Active Form Combat Dossier */}
           <div
-            className="game-chamfer game-hud-surface game-scanlines relative p-4"
+            className="game-chamfer game-hud-surface game-scanlines relative p-3.5"
             style={{
               borderRight: `3px solid ${accentColor}`,
               boxShadow: `inset 0 0 0 1px ${accentColor}44, 0 14px 36px rgba(2,6,23,0.65)`,
@@ -694,7 +758,9 @@ export function LoadoutHub({
                   <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
                     HENSHIN{' '}
                   </span>
-                  Super (32s) → Ultimate (25s)
+                  {riderConfig.hasUltimateForm
+                    ? 'Super (32s) → Ultimate (25s)'
+                    : 'Upgraded Form (38s • +40% DMG)'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -705,7 +771,7 @@ export function LoadoutHub({
                   <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
                     FINISH{' '}
                   </span>
-                  {previewConfig.finisherName}
+                  {riderConfig.signatureFinisherName ?? previewConfig.finisherName}
                 </span>
               </div>
             </div>

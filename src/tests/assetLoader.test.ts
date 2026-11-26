@@ -40,8 +40,10 @@ describe('Phase 4.5 GLB, PBR Texture Manifest & Performance Budget Audit', () =>
     const parsedManifest = JSON.parse(fs.readFileSync(customManifestPath, 'utf8'));
     expect(parsedManifest).toHaveProperty('rider');
 
-    // Verify dedicated Sector 02–05 Boss GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons (skins + JOINTS_0 + WEIGHTS_0)
+    // Verify dedicated Sector 02–05 Boss GLBs + Unit-02 Second Rider GLBs + all 3 Contract-Beast Pet GLBs carry rigged skeletons
     const riggedSpecs: readonly { file: string; minJoints: number }[] = [
+      { file: 'rider_unit2.glb', minJoints: 20 },
+      { file: 'rider_unit2_upgraded.glb', minJoints: 20 },
       { file: 'boss_magma.glb', minJoints: 20 },
       { file: 'boss_sylvan.glb', minJoints: 20 },
       { file: 'boss_chrono.glb', minJoints: 20 },

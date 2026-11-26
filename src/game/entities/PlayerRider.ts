@@ -29,17 +29,20 @@ import {
   getElementConfig,
   getElementLevelDamageMultiplier,
 } from '../data/elements';
+import { getRiderConfig } from '../data/riders';
 import type {
   ElementConfig,
   ElementId,
   FormTier,
   HurtboxTarget,
   PlayerStateId,
+  RiderConfig,
+  RiderId,
   Vec3Snapshot,
 } from '../types/schema';
 import { SlashTrail } from '../vfx/SlashTrail';
 
-const PLAYER_MOVE_SPEED = 8.8;
+export const PLAYER_MOVE_SPEED = 8.8;
 const PLAYER_TURN_SPEED = 16.0;
 const PLAYER_MAX_HP = 220;
 const RECENT_SWITCH_WINDOW_SEC = 2.0;
@@ -130,6 +133,8 @@ export class PlayerRider implements HurtboxTarget {
   public readonly fsm = new PlayerFSM();
 
   private loadoutOrder: [ElementId, ElementId, ElementId] = ['pyro', 'volt', 'aqua'];
+  private riderId: RiderId = 'nexus';
+  private riderConfig: RiderConfig = getRiderConfig('nexus');
   private activeElementId: ElementId;
   private elementConfig: ElementConfig;
   private gemLevels: Partial<Record<ElementId, number>> = { pyro: 1, volt: 1, aqua: 1 };
@@ -234,6 +239,16 @@ export class PlayerRider implements HurtboxTarget {
   private readonly ultimateBoneDriver: HumanoidBoneDriver | null;
   private readonly ultimateRightHandSocket: THREE.Object3D | null;
   private readonly ultimateLeftHandSocket: THREE.Object3D | null;
+  private readonly unit2BasicRigHost: THREE.Group | null;
+  private readonly unit2BasicSkeletalAnimator: SkeletalAnimator | null;
+  private readonly unit2BasicBoneDriver: HumanoidBoneDriver | null;
+  private readonly unit2BasicRightHandSocket: THREE.Object3D | null;
+  private readonly unit2BasicLeftHandSocket: THREE.Object3D | null;
+  private readonly unit2UpgradedRigHost: THREE.Group | null;
+  private readonly unit2UpgradedSkeletalAnimator: SkeletalAnimator | null;
+  private readonly unit2UpgradedBoneDriver: HumanoidBoneDriver | null;
+  private readonly unit2UpgradedRightHandSocket: THREE.Object3D | null;
+  private readonly unit2UpgradedLeftHandSocket: THREE.Object3D | null;
   private activeBodyMode: FormTier = 'BASIC';
   private prevVisualState: PlayerStateId | null = null;
   private prevVisualSwingId = -1;
@@ -517,10 +532,11 @@ export class PlayerRider implements HurtboxTarget {
     this.superRightWingPivot =
       assetLoader.findSocket(riderRig, 'SuperRightWingPivot') ?? new THREE.Group();
 
-    // Optional dedicated Super Form (`rider_super`) & Ultimate Form (`rider_ultimate`) 3D rigs
+    // Optional dedicated Super/Ultimate Form (UNIT-01) & Basic/Upgraded Form (UNIT-02 PHANTOM) 3D rigs
     const setupOptionalFormRig = (
-      optKey: 'rider_super' | 'rider_ultimate',
-      hostName: string
+      optKey: 'rider_super' | 'rider_ultimate' | 'rider_unit2' | 'rider_unit2_upgraded',
+      hostName: string,
+      enableHueShift = true
     ) => {
       const cloned = assetLoader.cloneOptionalRig(optKey);
       if (!cloned) return null;
@@ -534,13 +550,15 @@ export class PlayerRider implements HurtboxTarget {
       const extMats = bindPbrMaterials(rigScene, roleMaterials, {
         preserveExternalPbr: true,
         envMapIntensity: 1.5,
-        enableArmorHueShift: true,
+        enableArmorHueShift: enableHueShift,
       });
       this.externalMaterials.push(...extMats);
       this.ownedMaterials.push(...extMats);
-      for (let i = 0; i < extMats.length; i++) {
-        const u = extMats[i]!.userData.armorHueShiftUniforms as ArmorHueShiftUniforms | undefined;
-        if (u) this.armorHueUniforms.push(u);
+      if (enableHueShift) {
+        for (let i = 0; i < extMats.length; i++) {
+          const u = extMats[i]!.userData.armorHueShiftUniforms as ArmorHueShiftUniforms | undefined;
+          if (u) this.armorHueUniforms.push(u);
+        }
       }
 
       const animator = new SkeletalAnimator(rigScene, cloned.animations);
@@ -589,12 +607,30 @@ export class PlayerRider implements HurtboxTarget {
     this.superRightHandSocket = superSetup?.rightSock ?? null;
     this.superLeftHandSocket = superSetup?.leftSock ?? null;
 
-    const ultimateSetup = setupOptionalFormRig('rider_ultimate', 'UltimateRiderVisualHost');
+    const ultimateSetup = setupOptionalFormRig('rider_ultimate', 'UltimateRiderVisualHost', true);
     this.ultimateRigHost = ultimateSetup?.host ?? null;
     this.ultimateSkeletalAnimator = ultimateSetup?.animator ?? null;
     this.ultimateBoneDriver = ultimateSetup?.driver ?? null;
     this.ultimateRightHandSocket = ultimateSetup?.rightSock ?? null;
     this.ultimateLeftHandSocket = ultimateSetup?.leftSock ?? null;
+
+    const unit2BasicSetup = setupOptionalFormRig('rider_unit2', 'Unit2BasicVisualHost', false);
+    this.unit2BasicRigHost = unit2BasicSetup?.host ?? null;
+    this.unit2BasicSkeletalAnimator = unit2BasicSetup?.animator ?? null;
+    this.unit2BasicBoneDriver = unit2BasicSetup?.driver ?? null;
+    this.unit2BasicRightHandSocket = unit2BasicSetup?.rightSock ?? null;
+    this.unit2BasicLeftHandSocket = unit2BasicSetup?.leftSock ?? null;
+
+    const unit2UpgradedSetup = setupOptionalFormRig(
+      'rider_unit2_upgraded',
+      'Unit2UpgradedVisualHost',
+      false
+    );
+    this.unit2UpgradedRigHost = unit2UpgradedSetup?.host ?? null;
+    this.unit2UpgradedSkeletalAnimator = unit2UpgradedSetup?.animator ?? null;
+    this.unit2UpgradedBoneDriver = unit2UpgradedSetup?.driver ?? null;
+    this.unit2UpgradedRightHandSocket = unit2UpgradedSetup?.rightSock ?? null;
+    this.unit2UpgradedLeftHandSocket = unit2UpgradedSetup?.leftSock ?? null;
 
     // Clone & attach the 3 sculpted .glb elemental weapons into RightHand & LeftHand sockets (works on Mixamo/Meshy bones too!)
     const pyroCloned = assetLoader.cloneRig('weapon_pyro');
@@ -798,6 +834,36 @@ export class PlayerRider implements HurtboxTarget {
     this.root.position.set(0, PLAYER_SPAWN_Y, 0);
   }
 
+  public get currentRiderId(): RiderId {
+    return this.riderId;
+  }
+
+  public get activeRiderConfig(): RiderConfig {
+    return this.riderConfig;
+  }
+
+  public get currentFormDamageMultiplier(): number {
+    if (this.formTier === 'ULTIMATE') return this.riderConfig.ultimateFormDamageMult;
+    if (this.formTier === 'SUPER') return this.riderConfig.upgradedFormDamageMult;
+    return 1.0;
+  }
+
+  public get effectiveFinisherName(): string {
+    return this.riderConfig.signatureFinisherName ?? this.elementConfig.finisherName;
+  }
+
+  public setRiderProfile(riderId: RiderId): void {
+    this.riderId = riderId;
+    this.riderConfig = getRiderConfig(riderId);
+    this.maxHp = this.riderConfig.maxHp;
+    this.hp = Math.min(this.hp, this.maxHp);
+    if (this.formTier === 'ULTIMATE' && !this.riderConfig.hasUltimateForm) {
+      this.formTier = 'SUPER';
+    }
+    this.fsm.setRiderKickCooldownDuration(this.riderConfig.riderKickCooldownSec);
+    this.setModularSuperArmorVisible(this.formTier !== 'BASIC', this.formTier);
+  }
+
   public get isAlive(): boolean {
     return this.hp > 0 && !this.fsm.isDead;
   }
@@ -896,13 +962,19 @@ export class PlayerRider implements HurtboxTarget {
    */
   public getKickBootWorldPosition(out: THREE.Vector3): THREE.Vector3 {
     const activeDriver =
-      this.activeBodyMode === 'ULTIMATE' && this.ultimateBoneDriver?.isActive
-        ? this.ultimateBoneDriver
-        : this.activeBodyMode === 'SUPER' && this.superBoneDriver?.isActive
-          ? this.superBoneDriver
-          : this.boneDriver.isActive
-            ? this.boneDriver
-            : null;
+      this.riderId === 'phantom' && this.unit2BasicRigHost
+        ? this.activeBodyMode !== 'BASIC' && this.unit2UpgradedBoneDriver?.isActive
+          ? this.unit2UpgradedBoneDriver
+          : this.unit2BasicBoneDriver?.isActive
+            ? this.unit2BasicBoneDriver
+            : null
+        : this.activeBodyMode === 'ULTIMATE' && this.ultimateBoneDriver?.isActive
+          ? this.ultimateBoneDriver
+          : this.activeBodyMode === 'SUPER' && this.superBoneDriver?.isActive
+            ? this.superBoneDriver
+            : this.boneDriver.isActive
+              ? this.boneDriver
+              : null;
     const footBone = activeDriver?.getBone('RightFoot') ?? null;
     if (footBone) {
       this.root.updateMatrixWorld(true);
@@ -956,6 +1028,7 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   public canActivateUltimateForm(bossStaggered: boolean): boolean {
+    if (!this.riderConfig.hasUltimateForm) return false;
     return (
       this.formTier === 'SUPER' &&
       (this.overdriveGauge >= 100 || bossStaggered) &&
@@ -976,12 +1049,14 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   /**
-   * Overdrive Sustain: extends remaining Super/Ultimate Form duration on enemy kills & reactions.
+   * Overdrive Sustain: extends remaining Super/Upgraded/Ultimate Form duration on enemy kills & reactions.
    */
   public extendFormDuration(seconds: number): number {
     if (seconds <= 0 || this.formTier === 'BASIC' || this.fsm.isInCinematic) return 0;
     const maxDur =
-      this.formTier === 'ULTIMATE' ? ULTIMATE_FORM_MAX_DURATION_SEC : SUPER_FORM_MAX_DURATION_SEC;
+      this.formTier === 'ULTIMATE'
+        ? this.riderConfig.ultimateFormMaxDurationSec
+        : this.riderConfig.upgradedFormMaxDurationSec;
     const before = this.superFormRemainingSec;
     this.superFormRemainingSec = Math.min(maxDur, this.superFormRemainingSec + seconds);
     return this.superFormRemainingSec - before;
@@ -1042,6 +1117,7 @@ export class PlayerRider implements HurtboxTarget {
     const scaled = passive.stat === 'gaugeGain' ? amount * (1 + passive.value) : amount;
 
     if (this.formTier === 'SUPER') {
+      if (!this.riderConfig.hasUltimateForm) return;
       this.overdriveGauge = Math.min(100, this.overdriveGauge + scaled * SUPER_OVERDRIVE_MULTIPLIER);
     } else {
       this.driverGauge = Math.min(100, this.driverGauge + scaled * BASIC_GAUGE_ACCELERATION);
@@ -1116,7 +1192,7 @@ export class PlayerRider implements HurtboxTarget {
     const outcome = this.fsm.receiveIncomingHit(hasSuperArmor, effectiveHeavy);
     if (outcome === 'PERFECT_DODGE') {
       this.dodgeFlashRemaining = 0.45;
-      this.warpCounterTimer = WARP_COUNTER_WINDOW_SEC;
+      this.warpCounterTimer = this.riderConfig.warpCounterWindowSec;
       return outcome;
     }
     if (outcome === 'DAMAGED') {
@@ -1169,7 +1245,7 @@ export class PlayerRider implements HurtboxTarget {
       this.fsm.state !== 'HENSHIN_SUPER'
     ) {
       this.superFormRemainingSec = Math.max(0, this.superFormRemainingSec - dt);
-      if (this.formTier === 'SUPER') {
+      if (this.formTier === 'SUPER' && this.riderConfig.hasUltimateForm) {
         this.overdriveGauge = Math.min(100, this.overdriveGauge + SUPER_PASSIVE_OVERDRIVE_PER_SEC * dt);
       }
       if (this.superFormRemainingSec === 0) {
@@ -1272,6 +1348,7 @@ export class PlayerRider implements HurtboxTarget {
 
     const effectiveAttackSpeed =
       this.elementConfig.weapon.attackSpeed *
+      this.riderConfig.attackSpeedMult *
       (this.formTier === 'ULTIMATE' ? 1.22 : this.formTier === 'SUPER' ? 1.15 : 1.0);
 
     this.scratchFsmInput.isMoving = hasMoveInput;
@@ -1338,10 +1415,10 @@ export class PlayerRider implements HurtboxTarget {
 
     if (enteredNewState) {
       if (nextState === 'HENSHIN_SUPER') {
-        if (this.pendingHenshinTargetTier === 'ULTIMATE') {
+        if (this.pendingHenshinTargetTier === 'ULTIMATE' && this.riderConfig.hasUltimateForm) {
           this.formTier = 'ULTIMATE';
           this.overdriveGauge = 0;
-          this.superFormRemainingSec = ULTIMATE_FORM_DURATION_SEC;
+          this.superFormRemainingSec = this.riderConfig.ultimateFormDurationSec;
           this.finisherCooldownSec = 0;
           this.beltBurstTimer = 0.95;
           this.slashTrail.endSwing();
@@ -1351,7 +1428,7 @@ export class PlayerRider implements HurtboxTarget {
           this.formTier = 'SUPER';
           this.driverGauge = 0;
           this.overdriveGauge = 0;
-          this.superFormRemainingSec = SUPER_FORM_DURATION_SEC;
+          this.superFormRemainingSec = this.riderConfig.upgradedFormDurationSec;
           this.finisherCooldownSec = 0;
           this.beltBurstTimer = 0.85;
           this.slashTrail.endSwing();
@@ -1361,12 +1438,13 @@ export class PlayerRider implements HurtboxTarget {
       } else if (nextState === 'ULTIMATE_CINEMATIC') {
         this.preCinematicFormTier = this.formTier === 'BASIC' ? 'SUPER' : this.formTier;
         this.preCinematicRemainingSec = this.superFormRemainingSec;
-        this.formTier = 'ULTIMATE';
+        const cinematicVisualTier: FormTier = this.riderConfig.hasUltimateForm ? 'ULTIMATE' : 'SUPER';
+        this.formTier = cinematicVisualTier;
         this.ultimateImpactFired = false;
         this.ultimatePostExplosionsFired = 0;
         this.beltBurstTimer = 1.0;
         this.slashTrail.endSwing();
-        this.setModularSuperArmorVisible(true, 'ULTIMATE');
+        this.setModularSuperArmorVisible(true, cinematicVisualTier);
         this.frameEvents.startedUltimateFinisher = true;
         if (lockTargetPos) {
           const toX = lockTargetPos.x - this.root.position.x;
@@ -1475,7 +1553,9 @@ export class PlayerRider implements HurtboxTarget {
       const pulseTimes =
         this.preCinematicFormTier === 'ULTIMATE'
           ? [2.26, 2.46, 2.66, 2.86, 3.06, 3.26]
-          : [2.48, 2.82, 3.16];
+          : this.riderId === 'phantom'
+            ? [2.22, 2.44, 2.68, 2.92, 3.16]
+            : [2.48, 2.82, 3.16];
       if (
         this.ultimatePostExplosionsFired < pulseTimes.length &&
         t >= pulseTimes[this.ultimatePostExplosionsFired]!
@@ -1492,8 +1572,8 @@ export class PlayerRider implements HurtboxTarget {
       const passiveSpeed = passive.stat === 'speed' ? 1 + passive.value : 1.0;
       const speedBonus =
         (this.formTier === 'ULTIMATE' ? 1.2 : this.formTier === 'SUPER' ? 1.12 : 1.0) * passiveSpeed;
-      vx = this.scratchMoveDir.x * PLAYER_MOVE_SPEED * speedBonus;
-      vz = this.scratchMoveDir.z * PLAYER_MOVE_SPEED * speedBonus;
+      vx = this.scratchMoveDir.x * this.riderConfig.moveSpeed * speedBonus;
+      vz = this.scratchMoveDir.z * this.riderConfig.moveSpeed * speedBonus;
       const targetYaw = Math.atan2(this.scratchMoveDir.x, this.scratchMoveDir.z);
       this.yaw = this.dampAngle(this.yaw, targetYaw, PLAYER_TURN_SPEED * dt);
     } else if (this.fsm.isAttacking) {
@@ -1654,7 +1734,41 @@ export class PlayerRider implements HurtboxTarget {
       (this.elementConfig.weapon.archetype === 'RANGED' &&
         (state === 'ATTACK_1' || state === 'ATTACK_2' || state === 'ATTACK_3'));
 
-    if (this.activeBodyMode === 'ULTIMATE' && this.ultimateRigHost) {
+    if (this.riderId === 'phantom' && this.unit2BasicRigHost) {
+      if (this.activeBodyMode !== 'BASIC' && this.unit2UpgradedRigHost) {
+        if (!forceBespokeProceduralPose && this.unit2UpgradedSkeletalAnimator?.hasClipForState(state)) {
+          this.driveSkeletalClipForState(this.unit2UpgradedSkeletalAnimator, state, enteredNewVisualAction, renderDt);
+        } else if (this.unit2UpgradedBoneDriver?.isActive) {
+          this.unit2UpgradedSkeletalAnimator?.pauseForProceduralBlend();
+          this.unit2UpgradedBoneDriver.applyRiderPose(
+            state,
+            progress,
+            this.animTime,
+            this.activeElementId,
+            this.formTier,
+            this.fsm.stateTime,
+            renderDt
+          );
+        } else {
+          this.applyUnriggedFormBodyMotion(this.unit2UpgradedRigHost, state, progress);
+        }
+      } else if (!forceBespokeProceduralPose && this.unit2BasicSkeletalAnimator?.hasClipForState(state)) {
+        this.driveSkeletalClipForState(this.unit2BasicSkeletalAnimator, state, enteredNewVisualAction, renderDt);
+      } else if (this.unit2BasicBoneDriver?.isActive) {
+        this.unit2BasicSkeletalAnimator?.pauseForProceduralBlend();
+        this.unit2BasicBoneDriver.applyRiderPose(
+          state,
+          progress,
+          this.animTime,
+          this.activeElementId,
+          this.formTier,
+          this.fsm.stateTime,
+          renderDt
+        );
+      } else {
+        this.applyUnriggedFormBodyMotion(this.unit2BasicRigHost, state, progress);
+      }
+    } else if (this.activeBodyMode === 'ULTIMATE' && this.ultimateRigHost) {
       if (!forceBespokeProceduralPose && this.ultimateSkeletalAnimator?.hasClipForState(state)) {
         this.driveSkeletalClipForState(this.ultimateSkeletalAnimator, state, enteredNewVisualAction, renderDt);
       } else if (this.ultimateBoneDriver?.isActive) {
@@ -1724,6 +1838,17 @@ export class PlayerRider implements HurtboxTarget {
   public updateHubPedestalVisuals(renderDt: number): void {
     this.animTime += renderDt * 2.8;
     this.root.position.set(0, PLAYER_SPAWN_Y, 0);
+
+    if (this.riderId === 'phantom' && this.unit2BasicRigHost) {
+      this.yaw = 0;
+      this.root.rotation.y = 0;
+      if (this.unit2BasicBoneDriver?.isActive) {
+        this.unit2BasicBoneDriver.applyRiderPose('IDLE', 0, this.animTime, this.activeElementId, 'BASIC', 0, renderDt);
+      }
+      this.updateMaterialFeedback();
+      return;
+    }
+
     // Offset Idle_5's sideways martial-arts hips/spine stance (+0.58 rad) so the Rider's chest & face align cleanly toward camera
     this.yaw = this.skeletalAnimator.hasClipForState('IDLE') ? 0.58 : 0;
     this.root.rotation.y = this.yaw;
@@ -1784,6 +1909,8 @@ export class PlayerRider implements HurtboxTarget {
     this.skeletalAnimator.dispose();
     this.superSkeletalAnimator?.dispose();
     this.ultimateSkeletalAnimator?.dispose();
+    this.unit2BasicSkeletalAnimator?.dispose();
+    this.unit2UpgradedSkeletalAnimator?.dispose();
     this.slashTrail.dispose();
     this.dodgeRingMesh.geometry.dispose();
     this.superAuraRingMesh.geometry.dispose();
@@ -1801,6 +1928,54 @@ export class PlayerRider implements HurtboxTarget {
   }
 
   private setModularSuperArmorVisible(visible: boolean, tier: FormTier = visible ? 'SUPER' : 'BASIC'): void {
+    const isPhantom = this.riderId === 'phantom' && this.unit2BasicRigHost !== null;
+    if (isPhantom) {
+      const useUpgraded =
+        visible &&
+        tier !== 'BASIC' &&
+        this.unit2UpgradedRigHost !== null &&
+        this.unit2UpgradedRightHandSocket !== null &&
+        this.unit2UpgradedLeftHandSocket !== null;
+      this.activeBodyMode = useUpgraded ? 'SUPER' : 'BASIC';
+      this.basicRigHost.visible = false;
+      if (this.superRigHost) this.superRigHost.visible = false;
+      if (this.ultimateRigHost) this.ultimateRigHost.visible = false;
+      if (this.unit2BasicRigHost) this.unit2BasicRigHost.visible = !useUpgraded;
+      if (this.unit2UpgradedRigHost) this.unit2UpgradedRigHost.visible = useUpgraded;
+
+      const targetRight =
+        useUpgraded && this.unit2UpgradedRightHandSocket
+          ? this.unit2UpgradedRightHandSocket
+          : this.unit2BasicRightHandSocket ?? this.rightHandSocket;
+      const targetLeft =
+        useUpgraded && this.unit2UpgradedLeftHandSocket
+          ? this.unit2UpgradedLeftHandSocket
+          : this.unit2BasicLeftHandSocket ?? this.leftHandSocket;
+
+      targetRight.add(
+        this.pyroGreatsword,
+        this.voltRightDagger,
+        this.aquaTrident,
+        this.rangedGunRightGroup,
+        this.weaponBaseMarker,
+        this.weaponTipMarker
+      );
+      for (const mesh of this.customRightWeapons.values()) {
+        targetRight.add(mesh);
+      }
+      targetLeft.add(this.voltLeftDagger, this.rangedBowGroup, this.rangedGunLeftGroup);
+      for (const mesh of this.customLeftWeapons.values()) {
+        targetLeft.add(mesh);
+      }
+      this.superAuraUniforms.uColor.value.setHex(0x22d3ee);
+      this.superAuraRingMesh.visible = visible;
+      return;
+    }
+
+    if (this.unit2BasicRigHost) this.unit2BasicRigHost.visible = false;
+    if (this.unit2UpgradedRigHost) this.unit2UpgradedRigHost.visible = false;
+    this.superAuraUniforms.uColor.value.setHex(0xfacc15);
+
     const useUltimate =
       visible &&
       tier === 'ULTIMATE' &&

@@ -1,0 +1,83 @@
+import type { RiderConfig, RiderId } from '../types/schema';
+
+export const RIDER_CONFIGS: Readonly<Record<RiderId, RiderConfig>> = {
+  nexus: {
+    id: 'nexus',
+    codeName: 'UNIT-01',
+    name: 'K-DRIVER NEXUS',
+    shortName: 'NEXUS',
+    roleTag: 'ALL-ROUNDER • 3 FORMS',
+    accentColor: '#f43f5e',
+    glowColor: '#fda4af',
+    maxForms: 3,
+    hasUltimateForm: true,
+    basicFormLabel: 'BASIC FORM',
+    upgradedFormLabel: 'SUPER FORM',
+    ultimateFormLabel: 'ULTIMATE FORM',
+    maxHp: 220,
+    moveSpeed: 8.8,
+    attackSpeedMult: 1.0,
+    baseCritChance: 0.1,
+    dodgeIframeBonusSec: 0,
+    warpCounterWindowSec: 1.45,
+    warpCounterDamageMult: 1.65,
+    riderKickCooldownSec: 8.0,
+    riderKickName: 'Rider Kick',
+    upgradedFormDamageMult: 1.3,
+    upgradedFormDurationSec: 32.0,
+    upgradedFormMaxDurationSec: 40.0,
+    ultimateFormDamageMult: 1.6,
+    ultimateFormDurationSec: 25.0,
+    ultimateFormMaxDurationSec: 32.0,
+    upgradedAfterimageAlwaysOn: false,
+    signatureFinisherName: null,
+    passiveLabel: 'Trinity Henshin Drive',
+    passiveSummary: '3 Forms: Basic → Super (+30%) → Ultimate (+60%)',
+  },
+  phantom: {
+    id: 'phantom',
+    codeName: 'UNIT-02',
+    name: 'PHANTOM OVERCLOCK',
+    shortName: 'PHANTOM',
+    roleTag: 'COUNTER-ASSASSIN • 2 FORMS',
+    accentColor: '#06b6d4',
+    glowColor: '#67e8f9',
+    maxForms: 2,
+    hasUltimateForm: false,
+    basicFormLabel: 'BASIC FORM',
+    upgradedFormLabel: 'UPGRADED FORM',
+    ultimateFormLabel: null,
+    maxHp: 195,
+    moveSpeed: 10.0,
+    attackSpeedMult: 1.22,
+    baseCritChance: 0.22,
+    dodgeIframeBonusSec: 0.04,
+    warpCounterWindowSec: 2.0,
+    warpCounterDamageMult: 2.15,
+    riderKickCooldownSec: 6.0,
+    riderKickName: 'Phantom Kick',
+    upgradedFormDamageMult: 1.4,
+    upgradedFormDurationSec: 38.0,
+    upgradedFormMaxDurationSec: 46.0,
+    ultimateFormDamageMult: 1.4,
+    ultimateFormDurationSec: 0,
+    ultimateFormMaxDurationSec: 0,
+    upgradedAfterimageAlwaysOn: true,
+    signatureFinisherName: 'PHANTOM OMNISLASH',
+    passiveLabel: 'Phantom Clock-Up',
+    passiveSummary: '2 Forms: Basic → Upgraded (+40%) • 22% Crit • 2.15× Counter',
+  },
+};
+
+export const RIDER_LIST: readonly RiderConfig[] = [
+  RIDER_CONFIGS.nexus,
+  RIDER_CONFIGS.phantom,
+];
+
+export function getRiderConfig(id: RiderId): RiderConfig {
+  return RIDER_CONFIGS[id] ?? RIDER_CONFIGS.nexus;
+}
+
+export function isValidRiderId(value: unknown): value is RiderId {
+  return value === 'nexus' || value === 'phantom';
+}

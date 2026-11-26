@@ -26,6 +26,16 @@
     "targetHeightMeters": 2.02,
     "animationUrls": {}
   },
+  "rider_unit2": {
+    "modelUrl": "/assets/models/custom/rider_unit2.glb?v=rig1",
+    "targetHeightMeters": 1.84,
+    "animationUrls": {}
+  },
+  "rider_unit2_upgraded": {
+    "modelUrl": "/assets/models/custom/rider_unit2_upgraded.glb?v=rig1",
+    "targetHeightMeters": 1.94,
+    "animationUrls": {}
+  },
   "enemy_grunt": {
     "modelUrl": "/assets/models/custom/kaijin_grunt.glb",
     "targetHeightMeters": 1.82,
