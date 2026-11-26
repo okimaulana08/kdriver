@@ -4,6 +4,9 @@ import { getElementConfig } from '../game/data/elements';
 import { getStageConfig } from '../game/data/stages';
 import type { RankGrade } from '../game/types/schema';
 import { useGameStore } from '../store/useGameStore';
+import { ShimmerText } from './motion/HoloEffects';
+import { MagneticGlowButton } from './motion/MagneticGlowButton';
+import { SpotlightBeamPanel } from './motion/SpotlightBeamPanel';
 
 interface ResultModalProps {
   onRetry: () => void;
@@ -130,13 +133,16 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
               )}
             </div>
 
-            <h1
-              className="mt-1.5 font-game-display text-4xl leading-none font-black tracking-wider text-white uppercase italic sm:text-5xl"
-              style={{
-                textShadow: `0 0 28px ${primaryAccent}99, 0 5px 18px rgba(0,0,0,0.95)`,
-              }}
-            >
-              {isVictory ? 'STAGE CLEARED!' : 'MISSION FAILED'}
+            <h1 className="mt-1.5 font-game-display text-4xl leading-none font-black tracking-wider uppercase italic sm:text-5xl">
+              <ShimmerText
+                color="#ffffff"
+                shimmerColor={primaryAccent}
+                style={{
+                  filter: `drop-shadow(0 0 22px ${primaryAccent}99) drop-shadow(0 5px 14px rgba(0,0,0,0.95))`,
+                }}
+              >
+                {isVictory ? 'STAGE CLEARED!' : 'MISSION FAILED'}
+              </ShimmerText>
             </h1>
           </div>
 
@@ -160,13 +166,11 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
           </div>
         </div>
 
-        {/* Main 2-Column Tactical Container */}
-        <div
-          className="game-chamfer game-hud-surface game-scanlines relative overflow-hidden p-5 sm:p-6"
-          style={{
-            borderTop: `3px solid ${primaryAccent}`,
-            boxShadow: `inset 0 0 0 1px ${primaryAccent}44, 0 24px 60px rgba(0,0,0,0.8)`,
-          }}
+        {/* Main 2-Column Tactical Container with Cursor Spotlight & Traveling Border Beam */}
+        <SpotlightBeamPanel
+          accentColor={primaryAccent}
+          glowColor={secondaryAccent}
+          className="game-scanlines p-5 sm:p-6"
         >
           {/* Decorative corner slash glow */}
           <div
@@ -361,27 +365,21 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
 
           {/* Bottom Skewed Arcade Action Triggers */}
           <div className="relative z-10 mt-5 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.97 }}
+            <MagneticGlowButton
               onClick={onRetry}
-              className="game-skew-cta group relative flex-1 cursor-pointer overflow-hidden px-6 py-3.5 text-center"
-              style={{
-                background: isVictory
+              accentColor={primaryAccent}
+              glowColor={secondaryAccent}
+              gradient={
+                isVictory
                   ? 'linear-gradient(105deg, #0284c7 0%, #06b6d4 50%, #f59e0b 100%)'
-                  : 'linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)',
-                boxShadow: `0 0 28px ${primaryAccent}66, inset 0 1px 0 rgba(255,255,255,0.35)`,
-              }}
+                  : 'linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)'
+              }
+              className="flex-1 px-6 py-3.5 text-center"
             >
-              <span
-                className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                aria-hidden="true"
-              />
-              <span className="font-game-display relative z-10 text-sm font-black tracking-[0.24em] text-white uppercase italic drop-shadow">
+              <span className="font-game-display text-sm font-black tracking-[0.24em] text-white uppercase italic drop-shadow">
                 ↻ {isVictory ? 'REPLAY SECTOR' : 'RETRY MISSION'}
               </span>
-            </motion.button>
+            </MagneticGlowButton>
 
             <motion.button
               type="button"
@@ -396,7 +394,7 @@ export function ResultModal({ onRetry, onReturnToHub }: ResultModalProps) {
               ◀ RETURN TO ARMORY HUB
             </motion.button>
           </div>
-        </div>
+        </SpotlightBeamPanel>
       </motion.div>
     </div>
   );

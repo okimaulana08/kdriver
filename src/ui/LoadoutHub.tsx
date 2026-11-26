@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { HubCameraPreset } from '../engine/CameraRig';
 import {
@@ -29,6 +29,10 @@ import type {
   WeaponArchetype,
 } from '../game/types/schema';
 import { useGameStore } from '../store/useGameStore';
+import { HoloGlitchFlash, ShimmerText } from './motion/HoloEffects';
+import { MagneticGlowButton } from './motion/MagneticGlowButton';
+import { SpillwayCardDeck, type SpillwayDeckItem } from './motion/SpillwayCardDeck';
+import { SpotlightBeamPanel } from './motion/SpotlightBeamPanel';
 
 interface LoadoutHubProps {
   onPreviewElement: (id: ElementId) => void;
@@ -42,8 +46,26 @@ interface LoadoutHubProps {
   onSelectCameraPreset?: (preset: HubCameraPreset) => void;
 }
 
+interface ElementDeckCard extends SpillwayDeckItem {
+  readonly elemId: ElementId;
+  readonly indexNum: number;
+}
+
+type PhantomCardKey = 'katana' | 'fox' | 'forms';
+
+interface PhantomDeckCard extends SpillwayDeckItem {
+  readonly cardKey: PhantomCardKey;
+  readonly label: string;
+}
+
 const SPRING_SNAPPY = { type: 'spring' as const, stiffness: 460, damping: 32, mass: 0.8 };
 const SPRING_PANEL = { type: 'spring' as const, stiffness: 320, damping: 28, mass: 0.9 };
+
+const PHANTOM_DECK_CARDS: readonly PhantomDeckCard[] = [
+  { id: 'katana', cardKey: 'katana', label: '01 KATANA', accentColor: '#06b6d4', glowColor: '#67e8f9' },
+  { id: 'fox', cardKey: 'fox', label: '02 FOX PET', accentColor: '#38bdf8', glowColor: '#bae6fd' },
+  { id: 'forms', cardKey: 'forms', label: '03 2-FORMS', accentColor: '#f43f5e', glowColor: '#67e8f9' },
+];
 
 function ElementEmblem({ id, color, size = 16 }: { id: ElementId; color: string; size?: number }) {
   return (
@@ -136,6 +158,12 @@ function formatArchetype(arch: WeaponArchetype): string {
   }
 }
 
+function trackBorderGlow(e: MouseEvent<HTMLElement>): void {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty('--bx', `${(e.clientX - rect.left).toFixed(1)}px`);
+  e.currentTarget.style.setProperty('--by', `${(e.clientY - rect.top).toFixed(1)}px`);
+}
+
 const CAMERA_PRESETS: ReadonlyArray<{ id: HubCameraPreset; label: string }> = [
   { id: 'full', label: 'FULL' },
   { id: 'helmet', label: 'VISOR' },
@@ -167,6 +195,23 @@ export function LoadoutHub({
 
   const [editingSlot, setEditingSlot] = useState<0 | 1 | 2>(0);
   const [camPreset, setCamPreset] = useState<HubCameraPreset>('full');
+  const [phantomCardId, setPhantomCardId] = useState<PhantomCardKey>('katana');
+  const [glitchSeq, setGlitchSeq] = useState(0);
+
+  const elementDeckItems = useMemo<ElementDeckCard[]>(
+    () =>
+      ALL_ELEMENT_IDS.map((elemId, index) => {
+        const cfg = getElementConfig(elemId);
+        return {
+          id: elemId,
+          elemId,
+          indexNum: index + 1,
+          accentColor: cfg.primaryColor,
+          glowColor: cfg.emissiveColor,
+        };
+      }),
+    []
+  );
 
   const previewConfig = getElementConfig(activeElement);
   const selectedStage = getStageConfig(selectedStageId);
@@ -208,7 +253,7 @@ export function LoadoutHub({
     ? (riderConfig.signatureThemeName ?? 'FIXED FORM // CYBER KATANA')
     : previewConfig.name;
 
-  // Data-driven animated combat profile percentages (0-100) for AAA Weapon Inspector bars
+  // Data-driven animated weapon stat percentages
   const statPowerPct = Math.min(
     100,
     Math.max(24, Math.round(((activeWeaponCfg.baseDamage * levelMult) / 56) * 100))
@@ -221,6 +266,8 @@ export function LoadoutHub({
     ? Math.min(100, Math.round((riderConfig.baseCritChance / 0.25) * 100))
     : Math.min(100, Math.max(28, Math.round((Math.min(activeWeaponCfg.range, 6.2) / 6.2) * 100)));
 
+  const pulseGlitch = () => setGlitchSeq((n) => n + 1);
+
   const moveSlot = (index: number, delta: -1 | 1) => {
     const target = index + delta;
     if (target < 0 || target > 2) return;
@@ -229,6 +276,7 @@ export function LoadoutHub({
     next[index] = next[target]!;
     next[target] = tmp;
     onUpdateLoadoutOrder(next);
+    pulseGlitch();
   };
 
   const equipElementToSlot = (elemId: ElementId) => {
@@ -237,24 +285,34 @@ export function LoadoutHub({
     if (existingIdx >= 0) {
       setEditingSlot(existingIdx as 0 | 1 | 2);
       onPreviewElement(elemId);
+      pulseGlitch();
       return;
     }
     const next = [...loadoutOrder] as [ElementId, ElementId, ElementId];
     next[editingSlot] = elemId;
     onUpdateLoadoutOrder(next);
     onPreviewElement(elemId);
+    pulseGlitch();
+  };
+
+  const cycleElementDeck = (delta: -1 | 1) => {
+    const currIdx = Math.max(0, ALL_ELEMENT_IDS.indexOf(activeElement));
+    const nextElem = ALL_ELEMENT_IDS[(currIdx + delta + ALL_ELEMENT_IDS.length) % ALL_ELEMENT_IDS.length]!;
+    onPreviewElement(nextElem);
   };
 
   const handleUpgrade = (elemId: ElementId) => {
     if (upgradeGemLevel(elemId)) {
       onGemProgressionChanged();
       onPreviewElement(elemId);
+      pulseGlitch();
     }
   };
 
   const handleUpgradePhantom = () => {
     if (upgradePhantomCore()) {
       onGemProgressionChanged();
+      pulseGlitch();
     }
   };
 
@@ -262,7 +320,15 @@ export function LoadoutHub({
     if (unlockGemWithShards(elemId)) {
       onGemProgressionChanged();
       onPreviewElement(elemId);
+      pulseGlitch();
     }
+  };
+
+  const handleSelectRiderWithGlitch = (rId: RiderId) => {
+    if (rId !== selectedRiderId) {
+      pulseGlitch();
+    }
+    onSelectRider(rId);
   };
 
   const handleCameraPresetClick = (preset: HubCameraPreset) => {
@@ -286,7 +352,7 @@ export function LoadoutHub({
       <div
         className="pointer-events-none fixed inset-0 -z-10 transition-all duration-500"
         style={{
-          background: `linear-gradient(90deg, rgba(2,6,23,0.78) 0%, rgba(2,6,23,0.22) 34%, rgba(2,6,23,0.0) 56%, rgba(2,6,23,0.48) 100%), radial-gradient(ellipse at 52% 94%, ${accentColor}22 0%, transparent 56%)`,
+          background: `linear-gradient(90deg, rgba(2,6,23,0.8) 0%, rgba(2,6,23,0.22) 34%, rgba(2,6,23,0.0) 56%, rgba(2,6,23,0.5) 100%), radial-gradient(ellipse at 52% 94%, ${accentColor}24 0%, transparent 56%)`,
         }}
       />
 
@@ -359,7 +425,7 @@ export function LoadoutHub({
           </div>
         </div>
 
-        {/* Center: Mission Sector (01-05) + Boss Rush Selector Ribbon with Shared layoutId Laser Track */}
+        {/* Center: Mission Sector Ribbon with Cursor-Tracking BorderGlow + Shared layoutId Laser Track */}
         <div className="flex min-w-0 items-center justify-center gap-1 overflow-x-auto py-0.5">
           {STAGE_LIST.map((stage, idx) => {
             const isSelected = stage.id === selectedStageId;
@@ -375,6 +441,7 @@ export function LoadoutHub({
                 whileHover={{ y: -1.5 }}
                 whileTap={{ scale: 0.96 }}
                 transition={SPRING_SNAPPY}
+                onMouseMove={trackBorderGlow}
                 onClick={() => onSelectStage(stage.id)}
                 className={`game-chamfer-sm group relative shrink-0 cursor-pointer overflow-hidden px-2.5 py-1.5 text-left transition-colors ${
                   isSelected
@@ -382,19 +449,27 @@ export function LoadoutHub({
                     : 'bg-slate-950/65 text-slate-400 hover:bg-slate-900/85 hover:text-slate-100'
                 }`}
               >
+                {/* Edge-Sensitive Cursor BorderGlow */}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                  style={{
+                    background: `radial-gradient(90px circle at var(--bx, 50%) var(--by, 50%), ${stage.accentColor}44, transparent 70%)`,
+                  }}
+                />
                 {isSelected && (
                   <motion.div
                     layoutId="hub-sector-active"
                     transition={SPRING_SNAPPY}
                     className="pointer-events-none absolute inset-0 -z-10"
                     style={{
-                      background: `linear-gradient(180deg, ${stage.accentColor}2e 0%, rgba(15,23,42,0.96) 100%)`,
+                      background: `linear-gradient(180deg, ${stage.accentColor}30 0%, rgba(15,23,42,0.96) 100%)`,
                       borderBottom: `2px solid ${stage.accentColor}`,
                       boxShadow: `inset 0 0 18px ${stage.accentColor}30`,
                     }}
                   />
                 )}
-                <div className="flex items-center justify-between gap-1.5 text-[8px] font-bold tracking-[0.12em] uppercase">
+                <div className="relative z-10 flex items-center justify-between gap-1.5 text-[8px] font-bold tracking-[0.12em] uppercase">
                   <span style={{ color: stage.accentColor }}>
                     {stage.isBossRush ? '★ ENDGAME' : `SEC 0${idx + 1}`}
                   </span>
@@ -416,7 +491,7 @@ export function LoadoutHub({
                     )}
                   </span>
                 </div>
-                <p className="font-game-display mt-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-wide uppercase">
+                <p className="font-game-display relative z-10 mt-0.5 whitespace-nowrap text-[9.5px] font-bold tracking-wide uppercase">
                   {stage.name}
                 </p>
               </motion.button>
@@ -475,8 +550,8 @@ export function LoadoutHub({
 
       {/* ================= MAIN FLOATING ARMORY WORKSPACE ================= */}
       <div className="flex min-h-0 flex-1 items-stretch justify-between px-4 py-2.5 sm:px-5">
-        {/* LEFT TACTICAL RAIL: Animated swap between UNIT-01 Deck & UNIT-02 Fixed Overclock Kit */}
-        <div className="pointer-events-auto flex w-[404px] max-w-full flex-col min-h-0">
+        {/* LEFT TACTICAL RAIL: Spillway Ride-Card Deck (UNIT-01) OR Interactive 3-Card Overclock Stack (UNIT-02) */}
+        <div className="pointer-events-auto flex min-h-0 w-[404px] max-w-full flex-col">
           <AnimatePresence mode="wait">
             {isPhantomLocked ? (
               <motion.aside
@@ -485,183 +560,264 @@ export function LoadoutHub({
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: -24, opacity: 0 }}
                 transition={SPRING_PANEL}
-                className="game-scroll flex h-full flex-col justify-between gap-2.5 overflow-y-auto pr-1"
+                className="flex h-full flex-col justify-between gap-2.5 pr-1"
               >
-                {/* FIXED SINGLE-FORM BANNER */}
-                <section className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between px-0.5">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-block h-3.5 w-1 bg-cyan-400 shadow-[0_0_10px_#22d3ee]" />
-                      <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-cyan-200 uppercase">
-                        PHANTOM OVERCLOCK KIT
-                      </h2>
-                    </div>
-                    <span className="game-chamfer-sm bg-cyan-500/20 px-2 py-0.5 text-[9px] font-black tracking-wider text-cyan-200 uppercase ring-1 ring-cyan-400/45">
-                      SINGLE FORM LOCKED
-                    </span>
+                {/* Header */}
+                <div className="flex items-center justify-between px-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3.5 w-1 bg-cyan-400 shadow-[0_0_10px_#22d3ee]" />
+                    <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-cyan-200 uppercase">
+                      PHANTOM OVERCLOCK DECK
+                    </h2>
                   </div>
+                  <span className="game-chamfer-sm bg-cyan-500/20 px-2 py-0.5 text-[9px] font-black tracking-wider text-cyan-200 uppercase ring-1 ring-cyan-400/45">
+                    SINGLE FORM LOCKED
+                  </span>
+                </div>
 
-                  {/* SIGNATURE WEAPON CARD: KUROKAGE CYBER KATANA */}
-                  <motion.div
-                    whileHover={{ x: 3 }}
-                    transition={SPRING_SNAPPY}
-                    className="game-chamfer-sm game-panel-bezel game-corner-brackets relative overflow-hidden p-3"
-                    style={{
-                      borderLeft: '4px solid #06b6d4',
-                      boxShadow:
-                        'inset 0 0 0 1px rgba(34,211,238,0.45), 0 0 22px rgba(6,182,212,0.2)',
-                    }}
-                  >
-                    <div className="animate-hud-scan pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-cyan-400/12 to-transparent" />
-                    <div className="relative z-10 flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[9px] font-bold tracking-[0.2em] text-cyan-300 uppercase">
-                          SIGNATURE KATANA • LV.{phantomLevel}/{MAX_GEM_LEVEL}
-                        </p>
-                        <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
-                          {displayWeaponName}
-                        </h3>
-                      </div>
-                      {phantomLevel < MAX_GEM_LEVEL ? (
-                        <motion.button
-                          type="button"
-                          whileHover={canUpgradePhantom ? { scale: 1.05 } : undefined}
-                          whileTap={canUpgradePhantom ? { scale: 0.94 } : undefined}
-                          disabled={!canUpgradePhantom}
-                          onClick={handleUpgradePhantom}
-                          className="game-chamfer-sm shrink-0 cursor-pointer bg-amber-500/25 px-2.5 py-1 text-[9px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/60 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-35"
-                        >
-                          UPGRADE +{phantomUpgradeCost}◆
-                        </motion.button>
-                      ) : (
-                        <span className="game-chamfer-sm shrink-0 bg-emerald-500/20 px-2 py-1 text-[9px] font-black text-emerald-300">
-                          MAX LV.5
-                        </span>
-                      )}
-                    </div>
-                    <div className="relative z-10 mt-2 flex items-center justify-between text-[10px]">
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
-                          <motion.span
-                            key={p}
-                            animate={{
-                              backgroundColor:
-                                p < phantomLevel ? '#22d3ee' : 'rgba(148,163,184,0.22)',
-                              boxShadow: p < phantomLevel ? '0 0 8px #22d3ee' : 'none',
+                {/* 3-Card Interactive Spillway Stack for UNIT-02 Signature Kit */}
+                <div className="flex flex-1 flex-col justify-center">
+                  <SpillwayCardDeck
+                    items={PHANTOM_DECK_CARDS}
+                    activeId={phantomCardId}
+                    onActiveChange={(card) => setPhantomCardId(card.cardKey)}
+                    cardHeight={248}
+                    peekLayers={2}
+                    peekGap={13}
+                    peekShrink={0.052}
+                    ariaLabel="UNIT-02 PHANTOM Signature Kit Card Stack"
+                    renderCard={(card) => {
+                      if (card.cardKey === 'katana') {
+                        return (
+                          <div
+                            className="game-panel-bezel game-corner-brackets relative flex h-full w-full flex-col justify-between p-4"
+                            style={{
+                              borderLeft: '4px solid #06b6d4',
+                              boxShadow: 'inset 0 0 0 1px rgba(34,211,238,0.5)',
+                              background:
+                                'linear-gradient(140deg, rgba(8,47,73,0.92) 0%, rgba(7,12,24,0.94) 65%, rgba(2,6,23,0.98) 100%)',
                             }}
-                            className="h-1.5 w-5"
-                          />
-                        ))}
-                      </div>
-                      <span className="font-bold text-emerald-300">
-                        ATK +{previewMultPct}% • 22% CRIT
-                      </span>
-                    </div>
-                    <p className="relative z-10 mt-1.5 text-[10px] text-slate-300/85">
-                      Obsidian-cyan plasma odachi (3.15m reach • 1.24× swift slash). Applies{' '}
-                      <span className="font-bold text-cyan-300">MARK</span> on every strike.
-                    </p>
-                  </motion.div>
+                          >
+                            <div className="animate-hud-scan pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-cyan-400/18 to-transparent" />
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-game-display text-[9px] font-black tracking-[0.24em] text-cyan-300 uppercase">
+                                  CARD 01/03 • SIGNATURE KATANA
+                                </span>
+                                <span className="bg-cyan-500/20 px-1.5 py-0.5 font-game-display text-[9px] font-black text-cyan-200 ring-1 ring-cyan-400/45">
+                                  LV.{phantomLevel}/{MAX_GEM_LEVEL}
+                                </span>
+                              </div>
+                              <h3 className="font-game-display mt-2 text-lg font-black tracking-wide text-white uppercase italic">
+                                {displayWeaponName}
+                              </h3>
+                              <p className="mt-1.5 text-[11px] leading-relaxed text-slate-300/90">
+                                Obsidian-cyan plasma odachi (3.15m reach • 1.24× swift slash).
+                                Applies <strong className="text-cyan-300">MARK</strong> on every
+                                strike with <strong className="text-amber-300">22% CRIT</strong>.
+                              </p>
+                            </div>
 
-                  {/* SIGNATURE PET CARD: KITSUNE-02 CYBER FOX */}
-                  <motion.div
-                    whileHover={{ x: 3 }}
-                    transition={SPRING_SNAPPY}
-                    className="game-chamfer-sm game-panel-bezel p-3"
-                    style={{
-                      borderLeft: '4px solid #38bdf8',
-                      boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.42)',
+                            <div className="space-y-2.5 border-t border-cyan-400/20 pt-2.5">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                                    <span
+                                      key={p}
+                                      className="h-2 w-6"
+                                      style={{
+                                        backgroundColor:
+                                          p < phantomLevel ? '#22d3ee' : 'rgba(148,163,184,0.22)',
+                                        boxShadow: p < phantomLevel ? '0 0 10px #22d3ee' : 'none',
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="font-game-display text-[11px] font-black text-emerald-300">
+                                  ATK +{previewMultPct}%
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-[9px] tracking-[0.18em] text-slate-400 uppercase">
+                                  ⇄ DRAG / CLICK CARD TO FLIP
+                                </span>
+                                {phantomLevel < MAX_GEM_LEVEL ? (
+                                  <motion.button
+                                    type="button"
+                                    data-no-drag="true"
+                                    whileHover={canUpgradePhantom ? { scale: 1.05 } : undefined}
+                                    whileTap={canUpgradePhantom ? { scale: 0.94 } : undefined}
+                                    disabled={!canUpgradePhantom}
+                                    onClick={handleUpgradePhantom}
+                                    className="game-chamfer-sm cursor-pointer bg-amber-500/25 px-3 py-1 font-game-display text-[10px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/65 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-35"
+                                  >
+                                    UPGRADE +{phantomUpgradeCost}◆
+                                  </motion.button>
+                                ) : (
+                                  <span className="game-chamfer-sm bg-emerald-500/20 px-2.5 py-1 text-[9px] font-black text-emerald-300">
+                                    MAX LV.5
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (card.cardKey === 'fox') {
+                        return (
+                          <div
+                            className="game-panel-bezel game-corner-brackets relative flex h-full w-full flex-col justify-between p-4"
+                            style={{
+                              borderLeft: '4px solid #38bdf8',
+                              boxShadow: 'inset 0 0 0 1px rgba(56,189,248,0.48)',
+                              background:
+                                'linear-gradient(140deg, rgba(12,74,110,0.9) 0%, rgba(7,12,24,0.95) 68%, rgba(2,6,23,0.98) 100%)',
+                            }}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-game-display text-[9px] font-black tracking-[0.24em] text-sky-300 uppercase">
+                                  CARD 02/03 • CONTRACT BEAST [E]
+                                </span>
+                                <span className="flex items-center gap-1 bg-sky-500/20 px-2 py-0.5 text-[9px] font-black text-sky-200 ring-1 ring-sky-400/45">
+                                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
+                                  9-BONE RIG
+                                </span>
+                              </div>
+                              <h3 className="font-game-display mt-2 text-lg font-black tracking-wide text-white uppercase italic">
+                                {displayPetName}
+                              </h3>
+                              <p className="mt-1.5 text-[11px] font-semibold text-cyan-200">
+                                Passive: {displayPetPassive}
+                              </p>
+                              <p className="mt-1 text-[10.5px] leading-relaxed text-slate-300/85">
+                                Pounces for 2.15× MARK burst, then sprints alongside Unit-02 for
+                                18s firing cyan Fox-Fire Plasma Bolts. Transforms into a Giant
+                                Spectral Fox during [R] PHANTOM OMNISLASH.
+                              </p>
+                            </div>
+                            <div className="flex items-center justify-between border-t border-sky-400/20 pt-2 text-[9px] tracking-[0.18em] text-slate-400 uppercase">
+                              <span>SUMMON CD: 20s • 18s ACTIVE</span>
+                              <span className="text-sky-300">⇄ DRAG TO FLIP</span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          className="game-panel-bezel game-corner-brackets relative flex h-full w-full flex-col justify-between p-4"
+                          style={{
+                            borderLeft: '4px solid #f43f5e',
+                            boxShadow: 'inset 0 0 0 1px rgba(244,63,94,0.45)',
+                            background:
+                              'linear-gradient(140deg, rgba(76,5,25,0.88) 0%, rgba(10,17,34,0.95) 62%, rgba(2,6,23,0.98) 100%)',
+                          }}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <span className="font-game-display text-[9px] font-black tracking-[0.24em] text-rose-300 uppercase">
+                                CARD 03/03 • 2-FORM MATRIX
+                              </span>
+                              <span className="text-[9px] font-black text-cyan-300 uppercase">
+                                NO ELEMENT SWAP
+                              </span>
+                            </div>
+                            <div className="mt-2.5 grid grid-cols-2 gap-2 text-[10px]">
+                              <div className="game-chamfer-sm bg-slate-900/90 p-2 ring-1 ring-cyan-400/35">
+                                <p className="text-[8px] font-black tracking-widest text-cyan-300 uppercase">
+                                  FORM 01 • BASE
+                                </p>
+                                <p className="font-game-display mt-0.5 text-[11px] font-bold text-white uppercase">
+                                  BASIC FORM
+                                </p>
+                                <p className="mt-0.5 text-[9px] text-slate-400">
+                                  10.0 m/s • 2.15× Counter
+                                </p>
+                              </div>
+                              <div className="game-chamfer-sm bg-cyan-950/65 p-2 ring-1 ring-cyan-300/60">
+                                <p className="text-[8px] font-black tracking-widest text-rose-300 uppercase">
+                                  FORM 02 • [F]
+                                </p>
+                                <p className="font-game-display mt-0.5 text-[11px] font-bold text-cyan-200 uppercase">
+                                  UPGRADED FORM
+                                </p>
+                                <p className="mt-0.5 text-[9px] text-cyan-100/80">
+                                  +40% DMG • 38s
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-2.5 space-y-1 text-[10px] text-slate-300">
+                              <div className="flex justify-between">
+                                <span>
+                                  <strong className="text-amber-300">[Q]</strong> {displaySkillName}
+                                </span>
+                                <span className="text-slate-400">5.5s CD</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span>
+                                  <strong className="text-rose-300">[R]</strong> PHANTOM OMNISLASH
+                                </span>
+                                <span className="text-cyan-300">6 Clones + Cage</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between border-t border-rose-400/20 pt-2 text-[9px] tracking-[0.18em] text-slate-400 uppercase">
+                            <span>SINGLE-FORM ASSASSIN</span>
+                            <span className="text-rose-300">⇄ DRAG TO FLIP</span>
+                          </div>
+                        </div>
+                      );
                     }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[9px] font-bold tracking-[0.2em] text-sky-300 uppercase">
-                          CONTRACT BEAST [E] • AUTO-RIGGED 9-BONE
-                        </p>
-                        <h3 className="font-game-display mt-0.5 text-sm font-black tracking-wide text-white uppercase italic">
-                          {displayPetName}
-                        </h3>
-                      </div>
-                      <span className="game-chamfer-sm flex items-center gap-1.5 bg-sky-500/20 px-2 py-0.5 text-[9px] font-black text-sky-200 uppercase">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
-                        CYBER FOX
-                      </span>
-                    </div>
-                    <p className="mt-1.5 text-[10px] text-cyan-200/90">
-                      Passive: <strong>{displayPetPassive}</strong>
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-slate-300/80">
-                      Pounces for 2.15× MARK burst, then sprints alongside Unit-02 for 18s firing
-                      cyan Fox-Fire Plasma Bolts.
-                    </p>
-                  </motion.div>
-                </section>
+                  />
 
-                {/* 2-FORM PROGRESSION & SIGNATURE ARTS (NO ELEMENT SELECTION) */}
-                <section className="game-chamfer-sm game-panel-bezel flex flex-col gap-2 p-3 ring-1 ring-cyan-400/20">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                    <span className="font-game-display text-[10px] font-bold tracking-[0.18em] text-white uppercase">
-                      2-FORM OVERCLOCK MATRIX
-                    </span>
-                    <span className="text-[9px] font-bold tracking-wider text-rose-300 uppercase">
-                      NO ELEMENT SWAP
-                    </span>
+                  {/* 3-Card Quick-Select Tabs */}
+                  <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    {PHANTOM_DECK_CARDS.map((card) => {
+                      const active = phantomCardId === card.cardKey;
+                      return (
+                        <motion.button
+                          key={card.id}
+                          type="button"
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setPhantomCardId(card.cardKey)}
+                          className={`game-chamfer-sm relative cursor-pointer py-1.5 font-game-display text-[9.5px] font-black tracking-wider uppercase transition-colors ${
+                            active
+                              ? 'text-slate-950'
+                              : 'bg-slate-950/80 text-slate-400 ring-1 ring-white/10 hover:text-white'
+                          }`}
+                        >
+                          {active && (
+                            <motion.span
+                              layoutId="phantom-card-tab"
+                              transition={SPRING_SNAPPY}
+                              className="pointer-events-none absolute inset-0 -z-10"
+                              style={{
+                                backgroundColor: card.glowColor,
+                                boxShadow: `0 0 14px ${card.accentColor}88`,
+                              }}
+                            />
+                          )}
+                          {card.label}
+                        </motion.button>
+                      );
+                    })}
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-                    <div className="game-chamfer-sm bg-slate-900/90 p-2 ring-1 ring-cyan-400/30">
-                      <p className="text-[8px] font-black tracking-widest text-cyan-300 uppercase">
-                        FORM 01 • BASE
-                      </p>
-                      <p className="font-game-display mt-0.5 text-[11px] font-bold text-white uppercase">
-                        BASIC FORM
-                      </p>
-                      <p className="mt-0.5 text-[9px] text-slate-400">
-                        10.0 m/s Sprint • 2.15× Counter
-                      </p>
-                    </div>
-                    <div className="game-chamfer-sm bg-cyan-950/60 p-2 ring-1 ring-cyan-300/60 shadow-[inset_0_0_16px_rgba(34,211,238,0.18)]">
-                      <p className="text-[8px] font-black tracking-widest text-rose-300 uppercase">
-                        FORM 02 • [F] MAX TIER
-                      </p>
-                      <p className="font-game-display mt-0.5 text-[11px] font-bold text-cyan-200 uppercase">
-                        UPGRADED FORM
-                      </p>
-                      <p className="mt-0.5 text-[9px] text-cyan-100/80">
-                        +40% DMG • 38s • Cyan Afterimage
-                      </p>
-                    </div>
+                {/* Fixed Single Form Info Strip */}
+                <div className="game-chamfer-sm game-panel-bezel p-3 ring-1 ring-cyan-400/20">
+                  <div className="flex items-center justify-between text-[9.5px] font-bold tracking-wider uppercase">
+                    <span className="text-cyan-300">PHANTOM CORE LOCK</span>
+                    <span className="text-rose-300">NO 10-ELEMENT SWAP</span>
                   </div>
-
-                  <div className="space-y-1 border-t border-white/10 pt-1.5 text-[10px] text-slate-300">
-                    <div className="flex items-center justify-between">
-                      <span>
-                        <strong className="text-amber-300">[Q]</strong> {displaySkillName}
-                      </span>
-                      <span className="text-[9px] text-slate-400">5.5s CD • Dash X-Slash</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>
-                        <strong className="text-orange-300">[SPACE]</strong> Phantom Kick
-                      </span>
-                      <span className="text-[9px] text-slate-400">6.0s CD • +75 Break</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>
-                        <strong className="text-rose-300">[R]</strong> PHANTOM OMNISLASH
-                      </span>
-                      <span className="text-[9px] text-cyan-300">
-                        Cyber Cage • 6 Clones • Kitsune-02
-                      </span>
-                    </div>
-                  </div>
-
-                  <p className="bg-slate-950/85 px-2.5 py-1.5 text-[9px] leading-relaxed text-slate-400 ring-1 ring-white/5">
-                    UNIT-02 PHANTOM beroperasi dengan 1 wujud khusus tanpa pergantian 10 elemen.
-                    Pilih <strong className="text-rose-300">UNIT-01 NEXUS</strong> di panel kanan
-                    untuk kustomisasi 10 Elemental Cores.
+                  <p className="mt-1 text-[9.5px] leading-relaxed text-slate-300/85">
+                    UNIT-02 PHANTOM bertarung dengan 1 wujud tetap + Kurokage Cyber Katana &
+                    Kitsune-02 Fox. Pilih <strong className="text-rose-300">UNIT-01 NEXUS</strong>{' '}
+                    di kanan untuk mengakses 10 Elemental Ride-Cards.
                   </p>
-                </section>
+                </div>
               </motion.aside>
             ) : (
               <motion.aside
@@ -670,10 +826,10 @@ export function LoadoutHub({
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ x: -24, opacity: 0 }}
                 transition={SPRING_PANEL}
-                className="game-scroll flex h-full flex-col justify-between gap-2 overflow-y-auto pr-1"
+                className="flex h-full flex-col justify-between gap-2.5 pr-1"
               >
                 {/* SECTION 1: ACTIVE K-DRIVER BELT SLOTS [1] [2] [3] */}
-                <section className="flex flex-col gap-1.5">
+                <section className="relative flex flex-col gap-1.5">
                   <div className="flex items-center justify-between px-0.5">
                     <div className="flex items-center gap-2">
                       <span
@@ -707,6 +863,7 @@ export function LoadoutHub({
                           whileHover={{ x: 4 }}
                           whileTap={{ scale: 0.985 }}
                           transition={SPRING_SNAPPY}
+                          onMouseMove={trackBorderGlow}
                           onClick={() => {
                             setEditingSlot(idx as 0 | 1 | 2);
                             onPreviewElement(elemId);
@@ -721,6 +878,14 @@ export function LoadoutHub({
                                 : 'inset 0 0 0 1px rgba(148,163,184,0.16)',
                           }}
                         >
+                          {/* Cursor-Tracking Edge BorderGlow */}
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                            style={{
+                              background: `radial-gradient(150px circle at var(--bx, 50%) var(--by, 50%), ${cfg.emissiveColor}28, transparent 72%)`,
+                            }}
+                          />
                           {isEditing && (
                             <motion.span
                               layoutId="belt-slot-rail"
@@ -734,13 +899,12 @@ export function LoadoutHub({
                           )}
                           {isEditing && (
                             <span
-                              className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/12 to-transparent"
+                              className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/14 to-transparent"
                               aria-hidden="true"
                             />
                           )}
 
                           <div className="relative z-10 flex min-w-0 items-center gap-2.5">
-                            {/* Skewed Keycap Slot Trigger */}
                             <div
                               className="flex h-8 w-7 shrink-0 -skew-x-12 items-center justify-center font-game-display text-xs font-black shadow"
                               style={{
@@ -819,124 +983,267 @@ export function LoadoutHub({
                   </div>
                 </section>
 
-                {/* SECTION 2: 10-ELEMENT CORE GEM VAULT (Compact 2x5 Cartridges — Tactile Spring Chips!) */}
-                <section className="flex flex-1 flex-col justify-center gap-1.5">
+                {/* SECTION 2: SPILLWAY RIDE-CARD DECK (Stacked 3D Physics Elemental Core Cards + Quick-Jump Bar!) */}
+                <section className="flex flex-1 flex-col justify-end gap-2">
                   <div className="flex items-center justify-between px-0.5">
                     <div className="flex items-center gap-2">
                       <span className="inline-block h-3.5 w-1 bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
                       <h2 className="font-game-display text-[11px] font-black tracking-[0.2em] text-amber-200 uppercase">
-                        ELEMENTAL CORES
+                        ELEMENTAL RIDE-DECK
                       </h2>
                     </div>
-                    <span className="text-[9.5px] tracking-wider text-slate-400 uppercase">
-                      LOAD INTO SLOT [{editingSlot + 1}]
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => cycleElementDeck(-1)}
+                        className="game-chamfer-sm cursor-pointer bg-slate-900/90 px-2 py-0.5 font-game-display text-[9px] font-bold text-slate-300 ring-1 ring-white/12 hover:bg-slate-800 hover:text-white"
+                        title="Previous Ride-Card"
+                      >
+                        ◀
+                      </button>
+                      <span className="px-1 font-mono text-[9px] font-bold text-slate-300">
+                        {String(ALL_ELEMENT_IDS.indexOf(activeElement) + 1).padStart(2, '0')}/10
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => cycleElementDeck(1)}
+                        className="game-chamfer-sm cursor-pointer bg-slate-900/90 px-2 py-0.5 font-game-display text-[9px] font-bold text-slate-300 ring-1 ring-white/12 hover:bg-slate-800 hover:text-white"
+                        title="Next Ride-Card"
+                      >
+                        ▶
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {ALL_ELEMENT_IDS.map((elemId) => {
-                      const cfg = getElementConfig(elemId);
-                      const unlocked = isElementUnlocked(saveRecord, elemId);
-                      const level = getGemLevel(saveRecord, elemId);
+                  {/* Spillway 240Hz Physics Stacked Ride-Cards */}
+                  <SpillwayCardDeck
+                    items={elementDeckItems}
+                    activeId={activeElement}
+                    onActiveChange={(card) => onPreviewElement(card.elemId)}
+                    cardHeight={184}
+                    peekLayers={3}
+                    peekGap={10}
+                    peekShrink={0.048}
+                    ariaLabel="Elemental Cores Spillway Ride-Card Deck"
+                    renderCard={(card) => {
+                      const cfg = getElementConfig(card.elemId);
+                      const unlocked = isElementUnlocked(saveRecord, card.elemId);
+                      const level = getGemLevel(saveRecord, card.elemId);
                       const upgradeCost = getGemUpgradeCost(level);
-                      const equippedIdx = loadoutOrder.indexOf(elemId);
+                      const equippedIdx = loadoutOrder.indexOf(card.elemId);
                       const isEquipped = equippedIdx >= 0;
-                      const isPreviewing = activeElement === elemId;
                       const canUpgrade =
                         unlocked && level < MAX_GEM_LEVEL && saveRecord.gemShards >= upgradeCost;
-                      const canUnlock = !unlocked && saveRecord.gemShards >= GEM_SHARD_UNLOCK_COST;
+                      const canUnlock =
+                        !unlocked && saveRecord.gemShards >= GEM_SHARD_UNLOCK_COST;
 
                       return (
-                        <motion.div
-                          key={elemId}
-                          whileHover={unlocked ? { y: -1.5, scale: 1.015 } : undefined}
-                          whileTap={unlocked ? { scale: 0.97 } : undefined}
-                          transition={SPRING_SNAPPY}
-                          onClick={() => {
-                            if (unlocked) equipElementToSlot(elemId);
-                          }}
-                          className={`game-chamfer-tr game-panel-bezel relative flex flex-col justify-between px-2.5 py-1.5 ${
-                            unlocked ? 'cursor-pointer' : 'opacity-65 grayscale-[35%]'
+                        <div
+                          className={`relative flex h-full w-full flex-col justify-between p-3.5 ${
+                            unlocked ? '' : 'grayscale-[45%]'
                           }`}
                           style={{
-                            borderLeft: `3px solid ${unlocked ? cfg.primaryColor : '#334155'}`,
-                            boxShadow: isPreviewing
-                              ? `inset 0 0 0 1px ${cfg.primaryColor}dd, 0 0 16px ${cfg.primaryColor}3d`
-                              : isEquipped
-                                ? `inset 0 0 0 1px ${cfg.primaryColor}66`
-                                : 'inset 0 0 0 1px rgba(148,163,184,0.14)',
+                            borderLeft: `4px solid ${unlocked ? cfg.primaryColor : '#475569'}`,
+                            boxShadow: `inset 0 0 0 1px ${cfg.primaryColor}99`,
+                            background: `linear-gradient(135deg, ${cfg.primaryColor}40 0%, rgba(8,14,28,0.96) 44%, #040914 100%)`,
                           }}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <div className="flex min-w-0 items-center gap-1.5">
-                              <ElementEmblem
-                                id={elemId}
-                                color={unlocked ? cfg.primaryColor : '#64748b'}
-                                size={14}
-                              />
-                              <span className="font-game-display truncate text-[10px] font-bold tracking-wider text-white uppercase">
-                                {elemId}
+                          {/* Subtle Diagonal Holographic Foil Watermark Emblem */}
+                          <div className="pointer-events-none absolute -right-4 -bottom-4 opacity-14">
+                            <ElementEmblem id={card.elemId} color={cfg.emissiveColor} size={112} />
+                          </div>
+
+                          {/* Card Top Bar */}
+                          <div className="relative z-10 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="font-game-display text-[9px] font-black tracking-[0.22em] uppercase"
+                                style={{ color: cfg.emissiveColor }}
+                              >
+                                RIDE-CORE #{String(card.indexNum).padStart(2, '0')}
                               </span>
-                              {unlocked && (
-                                <span className="text-[9px] font-bold text-amber-300">L{level}</span>
-                              )}
+                              <span className="bg-slate-950/75 px-1.5 py-0.5 text-[8.5px] font-bold tracking-wider text-slate-300 uppercase ring-1 ring-white/10">
+                                {formatArchetype(cfg.weapon.archetype)}
+                              </span>
                             </div>
+
                             {isEquipped ? (
                               <span
-                                className="px-1 text-[8px] font-black tracking-wider uppercase"
+                                className="game-chamfer-sm px-2 py-0.5 font-game-display text-[9px] font-black tracking-wider uppercase"
                                 style={{
-                                  backgroundColor: `${cfg.primaryColor}36`,
+                                  backgroundColor: `${cfg.primaryColor}40`,
                                   color: cfg.emissiveColor,
+                                  boxShadow: `0 0 12px ${cfg.primaryColor}55`,
                                 }}
                               >
-                                S{equippedIdx + 1}
+                                SLOT [{equippedIdx + 1}] ARMED
                               </span>
                             ) : (
-                              <span className="text-[8px] font-semibold tracking-wider text-slate-400 uppercase">
-                                {cfg.weapon.archetype === 'RANGED' ? 'RANGED' : cfg.statusApplied}
+                              <span className="text-[9px] font-bold tracking-wider text-slate-400 uppercase">
+                                {unlocked ? cfg.statusApplied : 'LOCKED'}
                               </span>
                             )}
                           </div>
 
-                          <div className="mt-1 flex items-center justify-between gap-1">
-                            <p className="truncate text-[9px] text-slate-300/80">{cfg.weapon.name}</p>
+                          {/* Card Hero Content */}
+                          <div className="relative z-10 my-1 flex items-center gap-3">
+                            <div
+                              className="game-hex flex h-12 w-13 shrink-0 items-center justify-center shadow-lg"
+                              style={{
+                                background: `linear-gradient(135deg, ${cfg.primaryColor}, #0f172a)`,
+                                boxShadow: `0 0 22px ${cfg.primaryColor}80`,
+                              }}
+                            >
+                              <ElementEmblem id={card.elemId} color="#ffffff" size={24} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-game-display truncate text-base font-black tracking-wide text-white uppercase italic">
+                                {cfg.name}
+                              </h3>
+                              <p className="truncate text-[10.5px] font-semibold text-slate-200">
+                                {cfg.weapon.name} <span className="text-slate-500">//</span>{' '}
+                                <span className="text-cyan-300">{cfg.pet.name}</span>
+                              </p>
+                              <div className="mt-1 flex items-center gap-1.5">
+                                {Array.from({ length: MAX_GEM_LEVEL }).map((_, p) => (
+                                  <span
+                                    key={p}
+                                    className="h-1.5 w-4"
+                                    style={{
+                                      backgroundColor:
+                                        unlocked && p < level
+                                          ? cfg.emissiveColor
+                                          : 'rgba(148,163,184,0.2)',
+                                      boxShadow:
+                                        unlocked && p < level
+                                          ? `0 0 6px ${cfg.emissiveColor}`
+                                          : 'none',
+                                    }}
+                                  />
+                                ))}
+                                <span className="ml-1 font-mono text-[9.5px] font-bold text-amber-300">
+                                  LV.{level}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Interactive Action Triggers (data-no-drag prevents accidental card throw!) */}
+                          <div className="relative z-10 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
                             {unlocked ? (
-                              level < MAX_GEM_LEVEL ? (
+                              <>
                                 <motion.button
                                   type="button"
-                                  whileHover={canUpgrade ? { scale: 1.08 } : undefined}
-                                  whileTap={canUpgrade ? { scale: 0.92 } : undefined}
-                                  disabled={!canUpgrade}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpgrade(elemId);
+                                  data-no-drag="true"
+                                  whileHover={{ scale: 1.03 }}
+                                  whileTap={{ scale: 0.95 }}
+                                  onClick={() => equipElementToSlot(card.elemId)}
+                                  className="game-chamfer-sm flex-1 cursor-pointer py-1.5 font-game-display text-[9.5px] font-black tracking-[0.14em] uppercase transition-colors"
+                                  style={{
+                                    backgroundColor: isEquipped
+                                      ? 'rgba(15,23,42,0.88)'
+                                      : cfg.primaryColor,
+                                    color: isEquipped ? cfg.emissiveColor : '#ffffff',
+                                    border: `1px solid ${cfg.emissiveColor}88`,
+                                    boxShadow: isEquipped
+                                      ? 'none'
+                                      : `0 0 16px ${cfg.primaryColor}66`,
                                   }}
-                                  className="shrink-0 cursor-pointer bg-amber-500/20 px-1.5 py-0.5 text-[8px] font-bold tracking-wider text-amber-200 ring-1 ring-amber-400/45 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-30"
                                 >
-                                  +{upgradeCost}◆
+                                  {isEquipped
+                                    ? `ACTIVE IN SLOT [${equippedIdx + 1}]`
+                                    : `EQUIP → SLOT [${editingSlot + 1}]`}
                                 </motion.button>
-                              ) : (
-                                <span className="shrink-0 bg-emerald-500/20 px-1.5 py-0.5 text-[8px] font-black text-emerald-300">
-                                  MAX
-                                </span>
-                              )
+
+                                {level < MAX_GEM_LEVEL ? (
+                                  <motion.button
+                                    type="button"
+                                    data-no-drag="true"
+                                    whileHover={canUpgrade ? { scale: 1.05 } : undefined}
+                                    whileTap={canUpgrade ? { scale: 0.94 } : undefined}
+                                    disabled={!canUpgrade}
+                                    onClick={() => handleUpgrade(card.elemId)}
+                                    className="game-chamfer-sm shrink-0 cursor-pointer bg-amber-500/22 px-2.5 py-1.5 font-game-display text-[9.5px] font-black tracking-wider text-amber-200 ring-1 ring-amber-400/55 hover:bg-amber-500/45 disabled:cursor-not-allowed disabled:opacity-35"
+                                  >
+                                    +{upgradeCost}◆
+                                  </motion.button>
+                                ) : (
+                                  <span className="game-chamfer-sm shrink-0 bg-emerald-500/20 px-2.5 py-1.5 font-game-display text-[9px] font-black text-emerald-300">
+                                    MAX
+                                  </span>
+                                )}
+                              </>
                             ) : (
-                              <button
+                              <motion.button
                                 type="button"
+                                data-no-drag="true"
+                                whileTap={canUnlock ? { scale: 0.95 } : undefined}
                                 disabled={!canUnlock}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleShardUnlock(elemId);
-                                }}
-                                className="shrink-0 cursor-pointer bg-violet-500/25 px-1.5 py-0.5 text-[8px] font-bold text-violet-200 ring-1 ring-violet-400/40 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-35"
+                                onClick={() => handleShardUnlock(card.elemId)}
+                                className="game-chamfer-sm w-full cursor-pointer bg-violet-500/28 py-1.5 font-game-display text-[10px] font-black tracking-widest text-violet-200 ring-1 ring-violet-400/50 hover:bg-violet-500/45 disabled:cursor-not-allowed disabled:opacity-40"
                               >
-                                LOCK {GEM_SHARD_UNLOCK_COST}◆
-                              </button>
+                                UNLOCK CORE ({GEM_SHARD_UNLOCK_COST}◆)
+                              </motion.button>
                             )}
                           </div>
-                        </motion.div>
+                        </div>
                       );
-                    })}
+                    }}
+                  />
+
+                  {/* 10-Element Quick-Jump Ribbon (1-Click Spillway Fling + Live Preview!) */}
+                  <div className="mt-1 flex flex-col gap-1">
+                    <div className="grid grid-cols-5 gap-1">
+                      {ALL_ELEMENT_IDS.map((elemId) => {
+                        const cfg = getElementConfig(elemId);
+                        const unlocked = isElementUnlocked(saveRecord, elemId);
+                        const isPreviewing = activeElement === elemId;
+                        const equippedIdx = loadoutOrder.indexOf(elemId);
+                        const isEquipped = equippedIdx >= 0;
+
+                        return (
+                          <motion.button
+                            key={elemId}
+                            type="button"
+                            whileHover={{ y: -1.5, scale: 1.04 }}
+                            whileTap={{ scale: 0.93 }}
+                            transition={SPRING_SNAPPY}
+                            onClick={() => onPreviewElement(elemId)}
+                            className={`game-chamfer-sm relative flex cursor-pointer items-center justify-center gap-1 py-1.5 text-[8.5px] font-black tracking-wider uppercase transition-colors ${
+                              isPreviewing
+                                ? 'bg-slate-900 text-white'
+                                : unlocked
+                                  ? 'bg-slate-950/80 text-slate-400 hover:bg-slate-900 hover:text-slate-100'
+                                  : 'bg-slate-950/60 text-slate-600 opacity-60'
+                            }`}
+                            style={{
+                              boxShadow: isPreviewing
+                                ? `inset 0 0 0 1.5px ${cfg.emissiveColor}, 0 0 12px ${cfg.primaryColor}55`
+                                : isEquipped
+                                  ? `inset 0 -2px 0 0 ${cfg.primaryColor}`
+                                  : 'inset 0 0 0 1px rgba(148,163,184,0.14)',
+                            }}
+                            title={`${cfg.name} — Click to bring card to front`}
+                          >
+                            <ElementEmblem
+                              id={elemId}
+                              color={unlocked ? cfg.primaryColor : '#64748b'}
+                              size={12}
+                            />
+                            <span className="truncate">{elemId}</span>
+                            {isEquipped && (
+                              <span
+                                className="absolute top-0.5 right-1 h-1.5 w-1.5 rounded-full"
+                                style={{ backgroundColor: cfg.emissiveColor }}
+                              />
+                            )}
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-center text-[8.5px] font-bold tracking-[0.2em] text-slate-400/90 uppercase">
+                      ⇄ DRAG / THROW / SCROLL CARD DECK • CLICK ICON TO JUMP
+                    </p>
                   </div>
                 </section>
               </motion.aside>
@@ -944,7 +1251,7 @@ export function LoadoutHub({
           </AnimatePresence>
         </div>
 
-        {/* CENTER: OPEN 3D HOLOGRAPHIC RIDER SHOWCASE VIEWPORT (Diegetic Brackets + Camera Angle Rig) */}
+        {/* CENTER: OPEN 3D HOLOGRAPHIC RIDER SHOWCASE VIEWPORT (Diegetic Brackets + ShimmerText + Camera Rig) */}
         <div className="pointer-events-none relative hidden flex-1 lg:block">
           {/* Subtle Diegetic Viewfinder Corner Brackets flanking the 3D Hero */}
           <div className="pointer-events-none absolute inset-x-10 top-6 bottom-16 opacity-45">
@@ -966,7 +1273,7 @@ export function LoadoutHub({
             />
           </div>
 
-          {/* Animated Center Rider Designation Header */}
+          {/* Animated Center Rider Designation Header with ShimmerTextFX */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 text-center">
             <AnimatePresence mode="wait">
               <motion.div
@@ -990,12 +1297,14 @@ export function LoadoutHub({
                     style={{ backgroundColor: glowColor }}
                   />
                 </div>
-                <p
+                <ShimmerText
+                  color={glowColor}
+                  shimmerColor="#ffffff"
                   className="font-game-display mt-0.5 text-base font-black tracking-[0.24em] uppercase italic"
-                  style={{ color: glowColor, textShadow: `0 0 18px ${accentColor}aa, 0 2px 10px rgba(0,0,0,0.85)` }}
+                  style={{ filter: `drop-shadow(0 0 14px ${accentColor}aa)` }}
                 >
                   {displayPedestalSubtitle}
-                </p>
+                </ShimmerText>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -1005,7 +1314,7 @@ export function LoadoutHub({
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ ...SPRING_PANEL, delay: 0.12 }}
-            className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-2 bg-slate-950/78 px-3 py-1.5 text-[9.5px] font-bold tracking-[0.16em] text-slate-300 uppercase ring-1 ring-white/14 backdrop-blur-md game-chamfer-sm"
+            className="game-chamfer-sm pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-2 bg-slate-950/78 px-3 py-1.5 text-[9.5px] font-bold tracking-[0.16em] text-slate-300 uppercase ring-1 ring-white/14 backdrop-blur-md"
           >
             <div className="flex items-center gap-1 border-r border-white/12 pr-2">
               {CAMERA_PRESETS.map((p) => {
@@ -1054,14 +1363,14 @@ export function LoadoutHub({
           </motion.div>
         </div>
 
-        {/* RIGHT TACTICAL INTEL + RIDER UNIT SWITCHER + DRAMATIC HENSHIN IGNITION TRIGGER */}
+        {/* RIGHT TACTICAL INTEL + SPOTLIGHT BORDER-BEAM DOSSIER + MAGNETIC GLOW DEPLOY */}
         <motion.div
           initial={{ x: 36, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={SPRING_PANEL}
           className="pointer-events-auto flex w-[348px] max-w-full flex-col justify-end gap-2"
         >
-          {/* Playable Rider Selector with Sliding Neon layoutId Plate */}
+          {/* Playable Rider Selector with BorderGlow + Sliding layoutId Neon Plate */}
           <div
             className="game-chamfer-sm game-panel-bezel p-2.5 ring-1 ring-white/10"
             style={{ borderRight: `3px solid ${riderConfig.accentColor}` }}
@@ -1087,30 +1396,38 @@ export function LoadoutHub({
                     whileHover={{ y: -1 }}
                     whileTap={{ scale: 0.97 }}
                     transition={SPRING_SNAPPY}
-                    onClick={() => onSelectRider(r.id)}
-                    className={`game-chamfer-sm relative cursor-pointer overflow-hidden px-2.5 py-1.5 text-left transition-colors ${
+                    onMouseMove={trackBorderGlow}
+                    onClick={() => handleSelectRiderWithGlitch(r.id)}
+                    className={`game-chamfer-sm group relative cursor-pointer overflow-hidden px-2.5 py-1.5 text-left transition-colors ${
                       active
                         ? 'text-white'
                         : 'bg-slate-950/75 text-slate-400 hover:bg-slate-900/90 hover:text-slate-100'
                     }`}
                   >
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                      style={{
+                        background: `radial-gradient(100px circle at var(--bx, 50%) var(--by, 50%), ${r.glowColor}35, transparent 70%)`,
+                      }}
+                    />
                     {active && (
                       <motion.div
                         layoutId="rider-unit-highlight"
                         transition={SPRING_SNAPPY}
                         className="pointer-events-none absolute inset-0 -z-10"
                         style={{
-                          background: `linear-gradient(125deg, ${r.accentColor}35 0%, rgba(15,23,42,0.96) 100%)`,
+                          background: `linear-gradient(125deg, ${r.accentColor}38 0%, rgba(15,23,42,0.96) 100%)`,
                           borderLeft: `3px solid ${r.accentColor}`,
                           boxShadow: `inset 0 0 0 1px ${r.accentColor}99, 0 0 16px ${r.accentColor}38`,
                         }}
                       />
                     )}
-                    <div className="flex items-center justify-between text-[8px] font-black tracking-[0.14em] uppercase">
+                    <div className="relative z-10 flex items-center justify-between text-[8px] font-black tracking-[0.14em] uppercase">
                       <span style={{ color: r.glowColor }}>{r.codeName}</span>
                       <span className="text-slate-400">{r.maxForms} FORMS</span>
                     </div>
-                    <p className="font-game-display mt-0.5 truncate text-[10px] font-black tracking-wide uppercase">
+                    <p className="font-game-display relative z-10 mt-0.5 truncate text-[10px] font-black tracking-wide uppercase">
                       {r.shortName}
                     </p>
                   </motion.button>
@@ -1123,15 +1440,17 @@ export function LoadoutHub({
             </div>
           </div>
 
-          {/* Active Form Combat Dossier with Animated Spring Stat Bars */}
-          <div
-            className="game-chamfer game-panel-bezel game-scanlines game-corner-brackets relative overflow-hidden p-3"
-            style={{
-              borderRight: `3px solid ${accentColor}`,
-              boxShadow: `inset 0 0 0 1px ${accentColor}48, 0 14px 36px rgba(2,6,23,0.72)`,
-            }}
+          {/* Active Form Combat Dossier wrapped in Spotlight + Traveling Border Beam + Holo Glitch Flash */}
+          <SpotlightBeamPanel
+            accentColor={accentColor}
+            glowColor={glowColor}
+            className="game-scanlines game-corner-brackets p-3"
           >
-            {/* Header Row */}
+            <HoloGlitchFlash
+              triggerKey={`${selectedRiderId}-${displayWeaponName}-${glitchSeq}`}
+              accentColor={accentColor}
+            />
+
             <AnimatePresence mode="wait">
               <motion.div
                 key={`${selectedRiderId}-${displayWeaponName}-${previewLevel}`}
@@ -1270,7 +1589,6 @@ export function LoadoutHub({
               </div>
             </div>
 
-            {/* Status + Style Strip */}
             <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-1.5 text-[9px] tracking-wide text-slate-400">
               <span className="truncate">
                 <span className="font-bold text-slate-300 uppercase">STATUS: </span>
@@ -1281,9 +1599,9 @@ export function LoadoutHub({
                 {isPhantomLocked ? 'FIXED SINGLE FORM' : 'REACTION READY'}
               </span>
             </div>
-          </div>
+          </SpotlightBeamPanel>
 
-          {/* DIFFICULTY SELECTOR (layoutId Slider) + MISSION BRIEF + KINETIC IGNITION DEPLOY */}
+          {/* DIFFICULTY SELECTOR + MISSION BRIEF + MAGNETIC GLOW DEPLOY BUTTON */}
           <div className="flex flex-col gap-1.5">
             <div className="game-chamfer-sm game-panel-bezel p-2.5 ring-1 ring-white/10">
               <div className="flex items-center justify-between px-0.5">
@@ -1305,13 +1623,23 @@ export function LoadoutHub({
                       key={diff.id}
                       type="button"
                       whileTap={{ scale: 0.94 }}
+                      onMouseMove={trackBorderGlow}
                       onClick={() => onSelectDifficulty(diff.id)}
-                      className={`game-chamfer-sm relative cursor-pointer overflow-hidden py-1.5 font-game-display text-[10px] font-black tracking-wider uppercase transition-colors ${
+                      className={`game-chamfer-sm group relative cursor-pointer overflow-hidden py-1.5 font-game-display text-[10px] font-black tracking-wider uppercase transition-colors ${
                         active
                           ? 'text-slate-950'
                           : 'bg-slate-950/75 text-slate-400 hover:bg-slate-900 hover:text-white'
                       }`}
                     >
+                      {!active && (
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                          style={{
+                            background: `radial-gradient(64px circle at var(--bx, 50%) var(--by, 50%), ${diff.accentColor}44, transparent 70%)`,
+                          }}
+                        />
+                      )}
                       {active && (
                         <motion.span
                           layoutId="hazard-active-plate"
@@ -1323,7 +1651,7 @@ export function LoadoutHub({
                           }}
                         />
                       )}
-                      {diff.label}
+                      <span className="relative z-10">{diff.label}</span>
                     </motion.button>
                   );
                 })}
@@ -1341,29 +1669,19 @@ export function LoadoutHub({
               <span className="shrink-0 font-bold text-amber-300">+{scaledShardPreview} ◆</span>
             </div>
 
-            <motion.button
-              type="button"
+            <MagneticGlowButton
               disabled={engineStatus !== 'ready'}
-              whileHover={engineStatus === 'ready' ? { scale: 1.025, filter: 'brightness(1.1)' } : undefined}
-              whileTap={engineStatus === 'ready' ? { scale: 0.965 } : undefined}
-              transition={SPRING_SNAPPY}
               onClick={onDeploy}
-              className="game-skew-cta group relative w-full cursor-pointer overflow-hidden px-6 py-3.5 text-center disabled:cursor-wait disabled:opacity-50"
-              style={{
-                background: isPhantomLocked
+              accentColor={isPhantomLocked ? '#06b6d4' : '#f43f5e'}
+              glowColor={isPhantomLocked ? '#67e8f9' : '#fde047'}
+              gradient={
+                isPhantomLocked
                   ? 'linear-gradient(105deg, #0284c7 0%, #06b6d4 48%, #e11d48 100%)'
-                  : 'linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)',
-                boxShadow: isPhantomLocked
-                  ? '0 0 32px rgba(6, 182, 212, 0.58), inset 0 1px 0 rgba(255,255,255,0.4)'
-                  : '0 0 32px rgba(244, 63, 94, 0.58), inset 0 1px 0 rgba(255,255,255,0.4)',
-              }}
+                  : 'linear-gradient(105deg, #e11d48 0%, #f97316 52%, #f59e0b 100%)'
+              }
+              className="w-full px-6 py-3.5 text-center"
             >
-              {/* Animated Tokusatsu light-sweep beam */}
-              <span
-                className="animate-henshin-sheen pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/45 to-transparent"
-                aria-hidden="true"
-              />
-              <span className="font-game-display relative z-10 flex items-center justify-center gap-2.5 text-sm font-black tracking-[0.22em] text-white uppercase italic drop-shadow">
+              <span className="font-game-display flex items-center justify-center gap-2.5 text-sm font-black tracking-[0.22em] text-white uppercase italic drop-shadow">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />
                 </svg>
@@ -1373,7 +1691,7 @@ export function LoadoutHub({
                     : 'DEPLOY // HENSHIN!'
                   : 'INITIALIZING DRIVER...'}
               </span>
-            </motion.button>
+            </MagneticGlowButton>
           </div>
         </motion.div>
       </div>

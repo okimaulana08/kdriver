@@ -8,6 +8,7 @@ import { CombatHUD } from './ui/CombatHUD';
 import { DamageNumbers } from './ui/DamageNumbers';
 import { DebugOverlay } from './ui/DebugOverlay';
 import { LoadoutHub } from './ui/LoadoutHub';
+import { CyberCounterPreloader } from './ui/motion/CyberCounterPreloader';
 import { ResultModal } from './ui/ResultModal';
 import { StageOutcomeCutIn } from './ui/StageOutcomeCutIn';
 
@@ -137,42 +138,7 @@ export function App() {
 
         <AnimatePresence>
           {engineStatus === 'initializing' && (
-            <motion.div
-              key="boot-overlay"
-              initial={{ opacity: 1 }}
-              exit={{ opacity: 0, scale: 1.04 }}
-              transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/94 backdrop-blur-md"
-            >
-              <div className="game-chamfer game-panel-bezel relative w-96 overflow-hidden border-t-2 border-cyan-400/80 px-7 py-6 text-center shadow-[0_0_60px_rgba(6,182,212,0.28)]">
-                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 2.4, ease: 'linear' }}
-                    className="game-hex flex h-12 w-12 items-center justify-center bg-gradient-to-br from-cyan-400 via-rose-500 to-amber-400 p-[2px]"
-                  >
-                    <div className="game-hex flex h-full w-full items-center justify-center bg-slate-950 font-game-display text-xs font-black text-cyan-300">
-                      K
-                    </div>
-                  </motion.div>
-                </div>
-                <p className="font-game-display text-xs font-black tracking-[0.3em] text-cyan-300 uppercase">
-                  K-DRIVER SYSTEM BOOT
-                </p>
-                <div className="mt-3.5 h-2 w-full overflow-hidden bg-slate-900 ring-1 ring-white/10">
-                  <motion.div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-rose-500 to-amber-400"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${loadProgress}%` }}
-                    transition={{ duration: 0.18, ease: 'easeOut' }}
-                  />
-                </div>
-                <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-slate-300">
-                  <span className="truncate pr-2">{loadLabel}</span>
-                  <span className="shrink-0 font-bold text-amber-300">{loadProgress}%</span>
-                </div>
-              </div>
-            </motion.div>
+            <CyberCounterPreloader progress={loadProgress} label={loadLabel} />
           )}
         </AnimatePresence>
 

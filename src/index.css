@@ -187,6 +187,33 @@ canvas {
   animation: hud-scan-sweep 4.6s linear infinite;
 }
 
+@keyframes border-beam-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-border-beam {
+  animation: border-beam-spin 4.2s linear infinite;
+}
+
+@keyframes shimmer-text-sweep {
+  0% {
+    background-position: 130% 0%;
+  }
+  45%,
+  100% {
+    background-position: -110% 0%;
+  }
+}
+
+.animate-shimmer-text {
+  animation: shimmer-text-sweep 3.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+}
+
 .game-panel-bezel {
   background:
     linear-gradient(155deg, rgba(12, 21, 42, 0.88) 0%, rgba(4, 8, 19, 0.84) 100%),
