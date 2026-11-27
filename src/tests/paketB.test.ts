@@ -30,6 +30,7 @@ describe('Paket B — Sector 04 Neon District, Sector 05 Glacial Citadel, 2 New 
 
     expect(getStageConfig('stage_04_neon_district').arenaTheme).toBe('neon_district');
     expect(getStageConfig('stage_05_glacial_citadel').arenaTheme).toBe('glacial_citadel');
+    expect(getStageConfig('stage_boss_rush').arenaTheme).toBe('eclipse_sanctum');
     expect(STAGE_4_NEON_DISTRICT.waves[2]?.spawns[0]?.enemyId).toBe('chrono_volt_striker');
     expect(STAGE_5_GLACIAL_CITADEL.waves[2]?.spawns[0]?.enemyId).toBe('cryo_eclipse_emperor');
 
@@ -76,6 +77,8 @@ describe('Paket B — Sector 04 Neon District, Sector 05 Glacial Citadel, 2 New 
       'floor_glacial_ice_albedo.jpg',
       'floor_glacial_ice_normal.png',
       'floor_glacial_ice_roughness.png',
+      'env_eclipse_sanctum_360.jpg',
+      'floor_eclipse_albedo.jpg',
     ];
     for (const file of expectedTextures) {
       expect(fs.existsSync(path.join(texDir, file)), `Missing texture ${file}`).toBe(true);

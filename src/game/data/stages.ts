@@ -182,8 +182,8 @@ export const STAGE_5_GLACIAL_CITADEL: StageConfig = {
 export const STAGE_BOSS_RUSH: StageConfig = {
   id: 'stage_boss_rush',
   name: 'Boss Rush',
-  subtitle: '5-Boss Endurance Gauntlet • +35% HP Recovery',
-  arenaTheme: 'glacial_citadel',
+  subtitle: 'Eclipse Sanctum Colosseum • 5-Boss Gauntlet (+35% HP)',
+  arenaTheme: 'eclipse_sanctum',
   accentColor: '#f43f5e',
   recommendedLevel: 5,
   shardReward: 260,

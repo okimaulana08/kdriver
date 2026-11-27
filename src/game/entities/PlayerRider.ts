@@ -581,8 +581,22 @@ export class PlayerRider implements HurtboxTarget {
         animator.playState('IDLE', { loop: true });
       }
 
-      const calR = driver.isActive ? driver.createCalibratedHandMount('RightHand') : null;
-      const calL = driver.isActive ? driver.createCalibratedHandMount('LeftHand') : null;
+      // Identity-bind AutoHumanoidSkin rigs (Unit-02) have local -Y pointing down from wrist cuff into palm/fingers!
+      const isUnit2Basic = optKey === 'rider_unit2';
+      const isUnit2Upgraded = optKey === 'rider_unit2_upgraded';
+      const rightPalmOffset: readonly [number, number, number] | undefined = isUnit2Basic
+        ? [0.004, -0.052, 0.012]
+        : isUnit2Upgraded
+          ? [0.004, -0.024, 0.012]
+          : undefined;
+      const leftPalmOffset: readonly [number, number, number] | undefined = isUnit2Basic
+        ? [-0.004, -0.052, 0.012]
+        : isUnit2Upgraded
+          ? [-0.004, -0.024, 0.012]
+          : undefined;
+
+      const calR = driver.isActive ? driver.createCalibratedHandMount('RightHand', rightPalmOffset) : null;
+      const calL = driver.isActive ? driver.createCalibratedHandMount('LeftHand', leftPalmOffset) : null;
 
       let rightSock: THREE.Object3D;
       if (calR) {

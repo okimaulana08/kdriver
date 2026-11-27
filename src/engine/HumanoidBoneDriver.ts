@@ -212,7 +212,10 @@ export class HumanoidBoneDriver {
    * for centimeter-scale armatures (0.01 -> 100x) and arbitrary hand bind-pose roll so meter-scale
    * weapons mount flush inside the Rider's real animated palm!
    */
-  public createCalibratedHandMount(slot: 'RightHand' | 'LeftHand'): THREE.Group | null {
+  public createCalibratedHandMount(
+    slot: 'RightHand' | 'LeftHand',
+    customPalmOffsetMeters?: readonly [number, number, number]
+  ): THREE.Group | null {
     const captured = this.bones.get(slot);
     if (!captured) return null;
 
@@ -232,9 +235,18 @@ export class HumanoidBoneDriver {
 
     const mount = new THREE.Group();
     mount.name = `Calibrated_${slot}_WeaponMount`;
-    // Center grip directly inside the sculpted clenched fist cavity (knuckleY ~8.4cm, palm centerZ ~3.15cm)
-    const sideOffset = slot === 'RightHand' ? -0.012 : 0.012;
-    mount.position.set(sideOffset * invScale, 0.076 * invScale, 0.03 * invScale);
+    if (customPalmOffsetMeters) {
+      // Explicit per-rig palm-cavity offset in world meters (for identity-bind AutoHumanoidSkin rigs where -Y points down to fingers!)
+      mount.position.set(
+        customPalmOffsetMeters[0] * invScale,
+        customPalmOffsetMeters[1] * invScale,
+        customPalmOffsetMeters[2] * invScale
+      );
+    } else {
+      // Default Meshy/Mixamo fist cavity (+Y along bone points down into clenched fist: knuckleY ~7.6cm, palmZ ~3.0cm)
+      const sideOffset = slot === 'RightHand' ? -0.012 : 0.012;
+      mount.position.set(sideOffset * invScale, 0.076 * invScale, 0.03 * invScale);
+    }
     // Scale weapons to 0.72x realistic suit-actor proportions while compensating for cm armature scale
     mount.scale.setScalar(invScale * 0.72);
 

@@ -184,7 +184,8 @@ export type ArenaThemeId =
   | 'volcanic_crater'
   | 'forest_ruins'
   | 'neon_district'
-  | 'glacial_citadel';
+  | 'glacial_citadel'
+  | 'eclipse_sanctum';
 
 export interface WaveSpawnEntry {
   enemyId:

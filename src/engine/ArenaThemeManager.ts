@@ -118,6 +118,9 @@ export class ArenaThemeManager {
     } else if (themeId === 'neon_district') {
       const mod = await import('./arenas/neonDistrictArena');
       built = mod.buildNeonDistrictArenaTheme(pbrTextures, arenaRadius);
+    } else if (themeId === 'eclipse_sanctum') {
+      const mod = await import('./arenas/eclipseSanctumArena');
+      built = mod.buildEclipseSanctumArenaTheme(pbrTextures, arenaRadius);
     } else {
       const mod = await import('./arenas/glacialCitadelArena');
       built = mod.buildGlacialCitadelArenaTheme(pbrTextures, arenaRadius);
